@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 14% 7%;
+    --foreground: 240 10% 92%;
+    --card: 240 14% 11%;
+    --card-foreground: 240 10% 92%;
+    --popover: 240 14% 11%;
+    --popover-foreground: 240 10% 92%;
+    --primary: 231 74% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 14% 18%;
+    --secondary-foreground: 240 10% 80%;
+    --muted: 240 14% 15%;
+    --muted-foreground: 240 8% 55%;
+    --accent: 240 14% 18%;
+    --accent-foreground: 240 10% 92%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 14% 20%;
+    --input: 240 14% 13%;
+    --ring: 231 74% 55%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-dmc-bg-dark text-dmc-text-primary;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-dmc-bg-dark; }
+  ::-webkit-scrollbar-thumb { @apply bg-dmc-border rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-dmc-text-muted; }
+}
+
+@layer utilities {
+  .animate-in { animation: fade-in 0.2s ease-out both; }
+  .slide-in-right { animation: slide-in-right 0.2s ease-out both; }
+}
