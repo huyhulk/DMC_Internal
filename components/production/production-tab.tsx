@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { format } from 'date-fns'
 import { useProductionData } from '@/hooks/use-production-data'
 import { OrderInfoCard } from './order-info-card'
 import { ProductLineCard } from './product-line-card'
 import { UnlockDialog } from './unlock-dialog'
-import { cn, apiDateToDisplay, parseDisplayDate } from '@/lib/utils'
+import { cn, apiDateToDisplay, parseDisplayDate, getTodayLocal } from '@/lib/utils'
 import type { SessionUser } from '@/types'
 
 interface Props {
@@ -15,7 +14,7 @@ interface Props {
 }
 
 export function ProductionTab({ user }: Props) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = getTodayLocal()  // Local date (not UTC) — correct at midnight in VN
   const {
     state,
     visibleRows,

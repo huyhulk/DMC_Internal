@@ -1,15 +1,38 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import { isWorkspaceAllowed, getUserWorkspaces } from '@/lib/utils'
 import logger from '@/lib/logger'
-import type { InitData, Order, NormItem, ProductionReportRow } from '@/types'
+import type { InitData, Order, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
 
-type NormRow = Database['public']['Tables']['Norm']['Row']
-type DataRow = Database['public']['Tables']['DATA']['Row']
-type MaterialRow = Database['public']['Tables']['Material']['Row']
+// Actual column names in Supabase table "data" use quoted uppercase identifiers
+type DataRow = Database['public']['Tables']['data']['Row']
 type ProductionRow = Database['public']['Tables']['Production']['Row']
+
+// Columns that exist in the "data" table (uppercase, no deadlinetime, no created_at)
+const DATA_SELECT = 'PCODE,INITIALDATE,CUSTOMER,WORKSHOP,DESCRIPTION,QUANTITY,DEADLINEDATE,STATUS'
+
+function mapDataRowToOrder(row: DataRow): Order {
+  // DEADLINEDATE is "TIMESTAMP WITHOUT TIME ZONE" → "2026-04-13T11:00:00"
+  // Split into date "2026-04-13" and time "11:00" for clean display
+  const deadlineRaw = row.DEADLINEDATE ?? ''
+  const deadlineDate = deadlineRaw ? deadlineRaw.substring(0, 10) : ''
+  const deadlineTime = deadlineRaw.includes('T') ? deadlineRaw.substring(11, 16) : ''
+
+  return {
+    pcode: row.PCODE,
+    initialdate: row.INITIALDATE ?? '',
+    workshop: row.WORKSHOP ?? '',
+    customer: row.CUSTOMER ?? '',
+    quantity: row.QUANTITY != null ? String(row.QUANTITY) : '',
+    description: row.DESCRIPTION ?? '',
+    deadlinedate: deadlineDate,
+    deadlinetime: deadlineTime,
+    status: row.STATUS ?? '',
+  }
+}
 
 export async function getInitData(
   selectedDate: string,
@@ -21,45 +44,36 @@ export async function getInitData(
     const supabase = await createClient()
     const userWorkspaces = getUserWorkspaces(workspace)
 
-    const [normsRes, dataRes, materialsRes, productionRes] = await Promise.all([
-      supabase.from('Norm').select('*'),
-      supabase.from('DATA').select('*').eq('initialdate', selectedDate),
-      supabase.from('Material').select('*'),
-      supabase.from('Production').select('pcode').eq('pdate', selectedDate),
+    // Norm + Material are cached (static data) — data + Production are per-request
+    const [norms, materials, dataRes, productionRes] = await Promise.all([
+      getCachedNorms(),
+      getCachedMaterials(),
+      supabase
+        .from('data')
+        .select(DATA_SELECT)
+        .eq('INITIALDATE', selectedDate),
+      supabase
+        .from('Production')
+        .select('pcode')
+        .eq('pdate', selectedDate),
     ])
 
-    const norms: NormItem[] = ((normsRes.data ?? []) as NormRow[]).map((n) => ({
-      products: n.products,
-      norm: n.norm ?? 0,
-      nwforce: n.nwforce ?? 0,
-      workshop: n.workshop ?? '',
-      pspeed: n.pspeed ?? 0,
-    }))
-
     const validWorkshops = new Set(norms.map((n) => n.workshop).filter(Boolean))
+    // When Norm table has data: only show orders whose workshop has defined products.
+    // When Norm table is empty: show all orders (fallback so UI is not blank).
+    const hasNormData = validWorkshops.size > 0
+
+    if (!hasNormData) {
+      logger.warn('Norm table is empty — showing all workshops without norm validation')
+    }
 
     const orders: Order[] = ((dataRes.data ?? []) as DataRow[])
       .filter((row) => {
-        const ws = row.workshop ?? ''
+        const ws = row.WORKSHOP ?? ''
         const allowed = isWorkspaceAllowed(ws, role, userWorkspaces)
-        return allowed && validWorkshops.has(ws)
+        return allowed && (!hasNormData || validWorkshops.has(ws))
       })
-      .map((row) => ({
-        pcode: row.pcode,
-        initialdate: row.initialdate ?? '',
-        workshop: row.workshop ?? '',
-        customer: row.customer ?? '',
-        quantity: row.quantity ?? '',
-        description: row.description ?? '',
-        deadlinedate: row.deadlinedate ?? '',
-        deadlinetime: row.deadlinetime ?? '',
-        status: row.status ?? '',
-      }))
-
-    const materials = ((materialsRes.data ?? []) as MaterialRow[]).map((m) => ({
-      product: m.product,
-      material: m.material,
-    }))
+      .map(mapDataRowToOrder)
 
     const prodRows = (productionRes.data ?? []) as Pick<ProductionRow, 'pcode'>[]
     const submittedPcodes = [
@@ -67,7 +81,13 @@ export async function getInitData(
     ]
 
     logger.info(
-      { orders: orders.length, norms: norms.length, submitted: submittedPcodes.length },
+      {
+        date: selectedDate,
+        ordersFound: orders.length,
+        normsFound: norms.length,
+        submittedPcodes: submittedPcodes.length,
+        workshopsAvailable: [...new Set(orders.map((o) => o.workshop))],
+      },
       'getInitData success'
     )
 
@@ -87,9 +107,9 @@ export async function searchOrderByPcode(
   try {
     const supabase = await createClient()
     const { data, error } = await supabase
-      .from('DATA')
-      .select('*')
-      .ilike('pcode', pcode.trim())
+      .from('data')
+      .select(DATA_SELECT)
+      .ilike('PCODE', pcode.trim())
       .limit(1)
       .single()
 
@@ -97,21 +117,7 @@ export async function searchOrderByPcode(
       return { success: false, message: `Không tìm thấy mã ${pcode}` }
     }
 
-    const row = data as DataRow
-    return {
-      success: true,
-      order: {
-        pcode: row.pcode,
-        initialdate: row.initialdate ?? '',
-        workshop: row.workshop ?? '',
-        customer: row.customer ?? '',
-        quantity: row.quantity ?? '',
-        description: row.description ?? '',
-        deadlinedate: row.deadlinedate ?? '',
-        deadlinetime: row.deadlinetime ?? '',
-        status: row.status ?? '',
-      },
-    }
+    return { success: true, order: mapDataRowToOrder(data as DataRow) }
   } catch (err) {
     logger.error({ err }, 'searchOrderByPcode error')
     return { success: false, message: String(err) }
@@ -157,29 +163,30 @@ export async function getProductionReportData(
   try {
     const supabase = await createClient()
 
-    const [prodRes, dataRes, normRes] = await Promise.all([
+    // Norm data is cached; Production + data are per-request
+    const [prodRes, dataRes, normRows] = await Promise.all([
       supabase
         .from('Production')
-        .select('*')
+        .select('pdate,pcode,products,poutput,eoutput,routput,realnorm,starttime,endtime')
         .gte('pdate', startDate)
         .lte('pdate', endDate)
         .order('pdate', { ascending: true }),
-      supabase.from('DATA').select('pcode,workshop'),
-      supabase.from('Norm').select('products,workshop,norm,pspeed'),
+      supabase.from('data').select('PCODE,WORKSHOP'),
+      getCachedNorms(),
     ])
 
-    const dataRows = (dataRes.data ?? []) as Pick<DataRow, 'pcode' | 'workshop'>[]
-    const normRows = (normRes.data ?? []) as Pick<NormRow, 'products' | 'workshop' | 'norm' | 'pspeed'>[]
-    const prodRows = (prodRes.data ?? []) as ProductionRow[]
+    const dataRows = (dataRes.data ?? []) as Pick<DataRow, 'PCODE' | 'WORKSHOP'>[]
+    const prodRows = (prodRes.data ?? []) as Pick<
+      ProductionRow,
+      'pdate' | 'pcode' | 'products' | 'poutput' | 'eoutput' | 'routput' | 'realnorm' | 'starttime' | 'endtime'
+    >[]
 
-    const pcodeToWs = new Map(
-      dataRows.map((d) => [d.pcode, d.workshop ?? ''])
-    )
+    const pcodeToWs = new Map(dataRows.map((d) => [d.PCODE, d.WORKSHOP ?? '']))
 
     const normMap = new Map(
       normRows.map((n) => [
         `${n.products}|||${n.workshop}`,
-        { norm: n.norm ?? 0, pspeed: n.pspeed ?? 0 },
+        { norm: n.norm, pspeed: n.pspeed },
       ])
     )
 

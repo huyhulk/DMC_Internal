@@ -33,42 +33,37 @@ export interface Database {
           updated_at?: string
         }
       }
-      DATA: {
+      data: {
         Row: {
           id: number
-          pcode: string
-          initialdate: string | null
-          workshop: string | null
-          customer: string | null
-          quantity: string | null
-          description: string | null
-          deadlinedate: string | null
-          deadlinetime: string | null
-          status: string | null
-          created_at: string
-          updated_at: string
+          PCODE: string
+          INITIALDATE: string | null         // PostgreSQL DATE → "YYYY-MM-DD"
+          CUSTOMER: string | null
+          WORKSHOP: string | null
+          DESCRIPTION: string | null
+          QUANTITY: number | null
+          DEADLINEDATE: string | null        // PostgreSQL TIMESTAMP WITHOUT TZ → "YYYY-MM-DDTHH:mm:ss"
+          STATUS: string | null
         }
         Insert: {
-          pcode: string
-          initialdate?: string | null
-          workshop?: string | null
-          customer?: string | null
-          quantity?: string | null
-          description?: string | null
-          deadlinedate?: string | null
-          deadlinetime?: string | null
-          status?: string | null
+          PCODE: string
+          INITIALDATE?: string | null
+          CUSTOMER?: string | null
+          WORKSHOP?: string | null
+          DESCRIPTION?: string | null
+          QUANTITY?: number | null
+          DEADLINEDATE?: string | null
+          STATUS?: string | null
         }
         Update: {
-          pcode?: string
-          initialdate?: string | null
-          workshop?: string | null
-          customer?: string | null
-          quantity?: string | null
-          description?: string | null
-          deadlinedate?: string | null
-          deadlinetime?: string | null
-          status?: string | null
+          PCODE?: string
+          INITIALDATE?: string | null
+          CUSTOMER?: string | null
+          WORKSHOP?: string | null
+          DESCRIPTION?: string | null
+          QUANTITY?: number | null
+          DEADLINEDATE?: string | null
+          STATUS?: string | null
         }
       }
       Norm: {

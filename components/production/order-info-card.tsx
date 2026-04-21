@@ -1,6 +1,6 @@
 'use client'
 
-import { cn } from '@/lib/utils'
+import { cn, apiDateToDisplay } from '@/lib/utils'
 import type { Order } from '@/types'
 
 interface Props {
@@ -11,7 +11,11 @@ interface Props {
 export function OrderInfoCard({ order, className }: Props) {
   if (!order) return null
 
-  const deadline = [order.deadlinedate, order.deadlinetime].filter(Boolean).join(' ')
+  // deadlinedate = "2026-04-13", deadlinetime = "11:00" (parsed from TIMESTAMP in DB)
+  const deadline = [
+    order.deadlinedate ? apiDateToDisplay(order.deadlinedate) : '',
+    order.deadlinetime,
+  ].filter(Boolean).join(' ')
   const statusColor =
     order.status?.toLowerCase() === 'đã giao'
       ? 'text-green-400 bg-green-900/20 border-green-700/30'

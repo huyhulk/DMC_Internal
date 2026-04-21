@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { getInitData, searchOrderByPcode, recordProductionAction } from '@/lib/actions/data'
-import { calcRealNorm, getUserWorkspaces } from '@/lib/utils'
+import { calcRealNorm, getUserWorkspaces, getTodayLocal } from '@/lib/utils'
 import type { InitData, Order, NormItem, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
 export interface ProductionState {
@@ -40,7 +40,7 @@ function makeInitialLines(today: string): ProductLine[] {
 }
 
 export function useProductionData(user: SessionUser) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = getTodayLocal()  // Local date (not UTC) — correct at midnight in VN
   const userWorkspaces = getUserWorkspaces(user.workspace)
 
   const [state, setState] = useState<ProductionState>({

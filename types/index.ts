@@ -25,7 +25,7 @@ export interface Order {
   quantity: string
   description: string
   deadlinedate: string
-  deadlinetime: string
+  deadlinetime?: string  // extracted from DEADLINEDATE timestamp (HH:mm part)
   status: string
 }
 

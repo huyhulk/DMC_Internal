@@ -6,16 +6,43 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Returns today's date as "YYYY-MM-DD" using the browser/server's LOCAL clock.
+ * Use this instead of new Date().toISOString().split('T')[0] which always
+ * returns the UTC date and causes off-by-one errors after midnight in UTC+7.
+ */
+export function getTodayLocal(): string {
+  return format(new Date(), 'yyyy-MM-dd')
+}
+
+/**
+ * Formats a date value to display string.
+ * Handles both "YYYY-MM-DD" (DATE) and "YYYY-MM-DDTHH:mm:ss" (TIMESTAMP) inputs.
+ * Parses date-only strings as local dates (avoids UTC midnight offset issues).
+ */
 export function formatDate(date: string | Date | null, fmt = 'dd/MM/yyyy'): string {
   if (!date) return ''
   try {
-    const d = typeof date === 'string' ? new Date(date) : date
+    let d: Date
+    if (typeof date === 'string') {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        // Pure date string "YYYY-MM-DD" → parse as LOCAL date (no UTC shift)
+        d = parse(date, 'yyyy-MM-dd', new Date())
+      } else {
+        d = new Date(date)
+      }
+    } else {
+      d = date
+    }
     return isValid(d) ? format(d, fmt) : ''
   } catch {
     return ''
   }
 }
 
+/**
+ * Converts display date "DD/MM/YYYY" → "YYYY-MM-DD" for API/DB queries.
+ */
 export function parseDisplayDate(displayDate: string): string {
   if (!displayDate) return ''
   try {
@@ -32,14 +59,12 @@ export function parseDisplayDate(displayDate: string): string {
   }
 }
 
+/**
+ * Converts "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm:ss" API date → "DD/MM/YYYY" for display.
+ */
 export function apiDateToDisplay(apiDate: string): string {
   if (!apiDate) return ''
-  try {
-    const d = new Date(apiDate)
-    return isValid(d) ? format(d, 'dd/MM/yyyy') : apiDate
-  } catch {
-    return apiDate
-  }
+  return formatDate(apiDate, 'dd/MM/yyyy')
 }
 
 export function calcDurationHours(start: string, end: string): number {

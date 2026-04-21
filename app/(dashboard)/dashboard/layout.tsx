@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/actions/auth'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 
-export const dynamic = 'force-dynamic'
+// No force-dynamic needed: cookies() inside getSessionUser makes this dynamic automatically
 
 export default async function DashboardLayout({
   children,

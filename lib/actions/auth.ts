@@ -1,12 +1,38 @@
 'use server'
 
+import { cache } from 'react'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { loginSchema, changePasswordSchema } from '@/lib/validations/auth'
-import { getUserWorkspaces } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { SessionUser } from '@/types'
+
+// Deduplicate session fetch within the same request (layout + page both call this)
+const fetchSessionUser = cache(async (): Promise<SessionUser | null> => {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('username,role,workspace')
+    .eq('id', user.id)
+    .single()
+
+  if (!profileData) return null
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const profile = profileData as any as { username: string; role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'; workspace: string }
+
+  return {
+    id: user.id,
+    username: profile.username,
+    role: profile.role,
+    workspace: profile.workspace ?? '',
+    email: user.email ?? '',
+  }
+})
 
 export async function loginAction(formData: FormData) {
   const raw = {
@@ -43,28 +69,7 @@ export async function logoutAction() {
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('username, role, workspace')
-    .eq('id', user.id)
-    .single()
-
-  if (!profileData) return null
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const profile = profileData as any as { username: string; role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'; workspace: string }
-
-  return {
-    id: user.id,
-    username: profile.username,
-    role: profile.role,
-    workspace: profile.workspace ?? '',
-    email: user.email ?? '',
-  }
+  return fetchSessionUser()
 }
 
 export async function changePasswordAction(formData: FormData) {
