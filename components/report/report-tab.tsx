@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { ProductionReport } from './production-report'
+import { ReportDashboard } from './report-dashboard'
 import { TrendingUp, Wrench, Users2, ShieldCheck, Construction } from 'lucide-react'
 
 const REPORT_ITEMS = [
@@ -18,7 +18,7 @@ function ReportTabInner() {
 
   return (
     <div className="h-full overflow-hidden bg-[#f5f5f7]">
-      {activeSub === 'production' && <ProductionReport />}
+      {activeSub === 'production' && <ReportDashboard />}
       {activeSub !== 'production' && (
         <PlaceholderReport
           code={activeSub}
