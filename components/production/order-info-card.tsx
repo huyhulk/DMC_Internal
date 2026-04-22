@@ -1,6 +1,7 @@
 'use client'
 
 import { cn, apiDateToDisplay } from '@/lib/utils'
+import { Calendar, Building2, Package, Clock, Tag } from 'lucide-react'
 import type { Order } from '@/types'
 
 interface Props {
@@ -8,55 +9,94 @@ interface Props {
   className?: string
 }
 
+const STATUS_STYLE: Record<string, string> = {
+  'đã giao':  'text-[#2f9e44] bg-[#2f9e44]/10 border-[#2f9e44]/20',
+  'đang sx':  'text-[#b37700] bg-[#ff9500]/10 border-[#ff9500]/20',
+  'đã sx':    'text-[#1971c2] bg-[#1971c2]/10 border-[#1971c2]/20',
+}
+
 export function OrderInfoCard({ order, className }: Props) {
   if (!order) return null
 
-  // deadlinedate = "2026-04-13", deadlinetime = "11:00" (parsed from TIMESTAMP in DB)
-  const deadline = [
+  const deadlineDisplay = [
     order.deadlinedate ? apiDateToDisplay(order.deadlinedate) : '',
     order.deadlinetime,
   ].filter(Boolean).join(' ')
-  const statusColor =
-    order.status?.toLowerCase() === 'đã giao'
-      ? 'text-green-400 bg-green-900/20 border-green-700/30'
-      : order.status?.toLowerCase() === 'đang sx'
-      ? 'text-yellow-400 bg-yellow-900/20 border-yellow-700/30'
-      : 'text-dmc-text-secondary bg-dmc-bg-input border-dmc-border'
+
+  const statusKey = order.status?.toLowerCase() ?? ''
+  const statusStyle = STATUS_STYLE[statusKey] ??
+    'text-[#6e6e73] bg-[#6e6e73]/08 border-[#d2d2d7]/60'
 
   return (
-    <div
-      className={cn(
-        'rounded-xl border border-dmc-primary/30 bg-dmc-primary/5 p-4 animate-in',
-        className
-      )}
-    >
+    <div className={cn(
+      'rounded-2xl border border-[#d2d2d7]/60 bg-white',
+      'shadow-[0_1px_3px_rgba(0,0,0,0.06)] p-4 animate-in',
+      className
+    )}>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <InfoItem label="Khách hàng" value={order.customer} icon="🏢" />
-        <InfoItem label="Số lượng" value={order.quantity} icon="📦" />
-        <InfoItem label="Deadline" value={deadline} icon="⏰" />
+
+        <InfoItem
+          icon={<Building2 size={12} />}
+          label="Khách hàng"
+          value={order.customer}
+        />
+
+        <InfoItem
+          icon={<Package size={12} />}
+          label="Số lượng"
+          value={order.quantity}
+        />
+
+        <InfoItem
+          icon={<Calendar size={12} />}
+          label="Deadline"
+          value={deadlineDisplay}
+        />
+
+        {/* Status */}
         <div className="space-y-1">
-          <p className="text-xs font-semibold text-dmc-text-muted">📋 Trạng thái</p>
-          <span className={cn('inline-block text-xs font-semibold px-2 py-0.5 rounded border', statusColor)}>
+          <p className="text-[11px] font-medium text-[#6e6e73] flex items-center gap-1">
+            <Tag size={11} />
+            Trạng thái
+          </p>
+          <span className={cn(
+            'inline-flex items-center text-[11px] font-semibold',
+            'px-2 py-0.5 rounded-full border',
+            statusStyle
+          )}>
             {order.status || '—'}
           </span>
         </div>
       </div>
+
       {order.description && (
-        <p className="mt-3 text-xs text-dmc-text-secondary border-t border-dmc-border pt-2">
-          📝 {order.description}
+        <p className="mt-3 pt-3 text-[12px] text-[#6e6e73]
+                      border-t border-[#d2d2d7]/50 leading-relaxed">
+          {order.description}
         </p>
       )}
     </div>
   )
 }
 
-function InfoItem({ label, value, icon }: { label: string; value: string; icon: string }) {
+function InfoItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+}) {
   return (
     <div className="space-y-1">
-      <p className="text-xs font-semibold text-dmc-text-muted">
-        {icon} {label}
+      <p className="text-[11px] font-medium text-[#6e6e73] flex items-center gap-1">
+        {icon}
+        {label}
       </p>
-      <p className="text-sm font-medium text-dmc-text-primary">{value || '—'}</p>
+      <p className="text-[13px] font-medium text-[#1d1d1f] leading-snug">
+        {value || '—'}
+      </p>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { normalizeWorkshop, workshopCode } from '@/lib/utils'
 import type { NormItem } from '@/types'
 import type { Database } from '@/types/database'
 
@@ -26,7 +27,7 @@ export const getCachedNorms = unstable_cache(
       products: n.products,
       norm: n.norm ?? 0,
       nwforce: n.nwforce ?? 0,
-      workshop: n.workshop ?? '',
+      workshop: normalizeWorkshop(n.workshop ?? ''),
       pspeed: n.pspeed ?? 0,
     }))
   },
@@ -55,7 +56,7 @@ export const getCachedNormMap = unstable_cache(
   async (): Promise<Map<string, { norm: number; pspeed: number }>> => {
     const norms = await getCachedNorms()
     return new Map(
-      norms.map((n) => [`${n.products}|||${n.workshop}`, { norm: n.norm, pspeed: n.pspeed }])
+      norms.map((n) => [`${n.products}|||${workshopCode(n.workshop)}`, { norm: n.norm, pspeed: n.pspeed }])
     )
   },
   ['norm-map-v1'],

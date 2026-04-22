@@ -1,17 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   AreaChart,
   BarChart,
   DonutChart,
   BarList,
-  Card,
-  Metric,
-  Text,
-  Title,
-  Badge,
-  Grid,
 } from '@tremor/react'
 import {
   useReactTable,
@@ -22,43 +16,142 @@ import {
   createColumnHelper,
   type SortingState,
 } from '@tanstack/react-table'
-import { format, subDays } from 'date-fns'
+import { format, startOfMonth, startOfYear, endOfMonth, parse, getYear } from 'date-fns'
 import * as XLSX from 'xlsx'
-import { useReportData } from '@/hooks/use-report-data'
+import { Search, Download } from 'lucide-react'
+import { useReportData, type ReportType } from '@/hooks/use-report-data'
 import { cn } from '@/lib/utils'
-import type { ProductionReportRow } from '@/types'
+import type { ProductionReportRow, FactoryKey } from '@/types'
+import { WORKSHOP_LABELS } from '@/types'
 
+/* ── Column definitions ──────────────────────────────────────────── */
 const colHelper = createColumnHelper<ProductionReportRow>()
-
 const columns = [
-  colHelper.accessor('pdate',    { header: 'Ngày SX',    cell: (i) => i.getValue() }),
-  colHelper.accessor('pcode',    { header: 'Mã LSX',     cell: (i) => i.getValue() }),
-  colHelper.accessor('workshop', { header: 'Xưởng',      cell: (i) => i.getValue() }),
-  colHelper.accessor('product',  { header: 'Sản phẩm',   cell: (i) => i.getValue() }),
-  colHelper.accessor('poutput',  { header: 'Sản lượng',  cell: (i) => <span className="text-green-400 font-semibold">{i.getValue()}</span> }),
-  colHelper.accessor('eoutput',  { header: 'Lỗi',        cell: (i) => <span className="text-red-400">{i.getValue()}</span> }),
-  colHelper.accessor('routput',  { header: 'Tái chế',    cell: (i) => <span className="text-yellow-400">{i.getValue()}</span> }),
-  colHelper.accessor('realnorm', { header: 'Định mức TT',cell: (i) => i.getValue().toFixed(2) }),
-  colHelper.accessor('norm',     { header: 'Định mức',   cell: (i) => i.getValue() }),
-  colHelper.accessor('starttime',{ header: 'Bắt đầu',    cell: (i) => i.getValue() }),
-  colHelper.accessor('endtime',  { header: 'Kết thúc',   cell: (i) => i.getValue() }),
+  colHelper.accessor('pdate',    { header: 'Ngày SX',     cell: (i) => i.getValue() }),
+  colHelper.accessor('pcode',    { header: 'Mã LSX',      cell: (i) => i.getValue() }),
+  colHelper.accessor('workshop', { header: 'Xưởng',       cell: (i) => WORKSHOP_LABELS[i.getValue() as FactoryKey] ?? i.getValue() }),
+  colHelper.accessor('product',  { header: 'Sản phẩm',    cell: (i) => i.getValue() }),
+  colHelper.accessor('poutput',  { header: 'Sản lượng',   cell: (i) => <span className="text-[#2f9e44] font-semibold">{i.getValue()}</span> }),
+  colHelper.accessor('eoutput',  { header: 'Lỗi',         cell: (i) => <span className="text-[#ff3b30]">{i.getValue()}</span> }),
+  colHelper.accessor('routput',  { header: 'Tái chế',     cell: (i) => <span className="text-[#b37700]">{i.getValue()}</span> }),
+  colHelper.accessor('realnorm', { header: 'ĐM thực tế',  cell: (i) => i.getValue().toFixed(2) }),
+  colHelper.accessor('norm',     { header: 'ĐM chuẩn',    cell: (i) => i.getValue() }),
+  colHelper.accessor('starttime',{ header: 'Bắt đầu',     cell: (i) => i.getValue() }),
+  colHelper.accessor('endtime',  { header: 'Kết thúc',    cell: (i) => i.getValue() }),
 ]
 
+/* ── Report type config ──────────────────────────────────────────── */
+const REPORT_TYPES: { code: ReportType; label: string }[] = [
+  { code: 'hour',  label: 'Giờ' },
+  { code: 'day',   label: 'Ngày' },
+  { code: 'month', label: 'Tháng' },
+  { code: 'year',  label: 'Năm' },
+]
+
+const CHART_TITLE: Record<ReportType, string> = {
+  hour:  'Sản lượng theo giờ',
+  day:   'Sản lượng theo ngày',
+  month: 'Sản lượng theo tháng',
+  year:  'Sản lượng theo năm',
+}
+
+/* ── Default values per type ─────────────────────────────────────── */
+function defaultValues(type: ReportType): { from: string; to: string } {
+  const now = new Date()
+  switch (type) {
+    case 'hour':
+      return { from: '07:30', to: format(now, 'HH:mm') }
+    case 'day':
+      return {
+        from: format(startOfMonth(now), 'yyyy-MM-dd'),
+        to:   format(now, 'yyyy-MM-dd'),
+      }
+    case 'month':
+      return {
+        from: format(startOfYear(now), 'yyyy-MM'),
+        to:   format(now, 'yyyy-MM'),
+      }
+    case 'year':
+      return {
+        from: String(getYear(now) - 1),
+        to:   String(getYear(now)),
+      }
+  }
+}
+
+/* ── Build UTC ISO range from local filter values ────────────────── */
+function buildISORange(type: ReportType, from: string, to: string): { startISO: string; endISO: string } {
+  const today = format(new Date(), 'yyyy-MM-dd')
+  switch (type) {
+    case 'hour':
+      return {
+        startISO: new Date(`${today}T${from}:00`).toISOString(),
+        endISO:   new Date(`${today}T${to}:00`).toISOString(),
+      }
+    case 'day':
+      return {
+        startISO: new Date(`${from}T00:00:00`).toISOString(),
+        endISO:   new Date(`${to}T23:59:59`).toISOString(),
+      }
+    case 'month': {
+      const lastDay = format(endOfMonth(parse(`${to}-01`, 'yyyy-MM-dd', new Date())), 'dd')
+      return {
+        startISO: new Date(`${from}-01T00:00:00`).toISOString(),
+        endISO:   new Date(`${to}-${lastDay}T23:59:59`).toISOString(),
+      }
+    }
+    case 'year':
+      return {
+        startISO: new Date(`${from}-01-01T00:00:00`).toISOString(),
+        endISO:   new Date(`${to}-12-31T23:59:59`).toISOString(),
+      }
+  }
+}
+
+/* ── Shared input style ──────────────────────────────────────────── */
+const filterInputCls =
+  'h-9 px-3 rounded-xl bg-[#f2f2f7] border border-[#d2d2d7]/70 ' +
+  'text-[13px] font-medium text-[#1d1d1f] ' +
+  'focus:outline-none focus:ring-1 focus:ring-dmc-primary/40 focus:border-dmc-primary/50 ' +
+  'transition-all duration-150'
+
+/* ── Main component ──────────────────────────────────────────────── */
 export function ProductionReport() {
   const { state, loadReport, kpis, chartByDate, chartByProduct, chartByWorkshop, normComparisonData } =
     useReportData()
 
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const defaultStart = format(subDays(new Date(), 29), 'yyyy-MM-dd')
-
-  const [startDate, setStartDate] = useState(defaultStart)
-  const [endDate, setEndDate] = useState(today)
+  const [reportType, setReportType] = useState<ReportType>('hour')
+  const [fromVal,    setFromVal]    = useState(() => defaultValues('hour').from)
+  const [toVal,      setToVal]      = useState(() => defaultValues('hour').to)
   const [globalFilter, setGlobalFilter] = useState('')
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [sorting,      setSorting]      = useState<SortingState>([])
 
+  // Auto-load on mount with default hour range
   useEffect(() => {
-    loadReport(defaultStart, today)
-  }, [])
+    const { from, to } = defaultValues('hour')
+    const { startISO, endISO } = buildISORange('hour', from, to)
+    loadReport('hour', startISO, endISO)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleTypeChange(type: ReportType) {
+    setReportType(type)
+    const { from, to } = defaultValues(type)
+    setFromVal(from)
+    setToVal(to)
+  }
+
+  function handleSearch() {
+    const { startISO, endISO } = buildISORange(reportType, fromVal, toVal)
+    loadReport(reportType, startISO, endISO)
+  }
+
+  function handleExportCSV() {
+    const ws = XLSX.utils.json_to_sheet(state.data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'SanXuat')
+    const { startISO, endISO } = buildISORange(reportType, fromVal, toVal)
+    XLSX.writeFile(wb, `BaoCaoSanXuat_${startISO.substring(0, 10)}_${endISO.substring(0, 10)}.xlsx`)
+  }
 
   const table = useReactTable({
     data: state.data,
@@ -71,97 +164,138 @@ export function ProductionReport() {
     getFilteredRowModel: getFilteredRowModel(),
   })
 
-  const kpi = kpis()
-  const dateData = chartByDate()
+  const kpi         = kpis()
+  const dateData    = chartByDate()
   const productData = chartByProduct()
   const workshopData = chartByWorkshop()
-  const normData = normComparisonData()
+  const normData    = normComparisonData()
 
-  function handleExportCSV() {
-    const ws = XLSX.utils.json_to_sheet(state.data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'SanXuat')
-    XLSX.writeFile(wb, `BaoCaoSanXuat_${startDate}_${endDate}.xlsx`)
-  }
-
-  const workshopDonut = workshopData.map((d) => ({ name: d.workshop, value: d.value }))
+  const workshopDonut  = workshopData.map((d) => ({ name: d.workshop, value: d.value }))
   const productBarList = productData.map((d) => ({ name: d.product, value: d.output }))
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="p-4 space-y-5">
-        {/* ── Filter Bar ── */}
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-dmc-text-secondary">Từ ngày</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="h-9 px-3 rounded-lg bg-dmc-bg-input border border-dmc-border text-dmc-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-dmc-primary/50"
-            />
+    <div className="h-full overflow-y-auto bg-[#f5f5f7]">
+      <div className="p-4 space-y-4">
+
+        {/* ── Filter Card ── */}
+        <div className="rounded-2xl bg-white border border-[#d2d2d7]/60 p-4
+                        shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <div className="flex flex-wrap items-end gap-4">
+
+            {/* Loại báo cáo — segmented control */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-[0.06em]">
+                Loại báo cáo
+              </label>
+              <div className="flex items-center gap-[3px] bg-[#f2f2f7] rounded-[10px] p-[3px]">
+                {REPORT_TYPES.map(({ code, label }) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => handleTypeChange(code)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-[8px] text-[12px] whitespace-nowrap',
+                      'transition-all duration-150 select-none',
+                      reportType === code
+                        ? 'bg-white text-dmc-primary font-semibold shadow-sm shadow-black/[0.08]'
+                        : 'font-medium text-[#6e6e73] hover:text-[#1d1d1f]'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Từ */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-[0.06em]">Từ</label>
+              <FilterInput type={reportType} value={fromVal} onChange={setFromVal} />
+            </div>
+
+            {/* Đến */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-[0.06em]">Đến</label>
+              <FilterInput type={reportType} value={toVal} onChange={setToVal} />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSearch}
+                disabled={state.loading}
+                className="h-9 px-4 rounded-xl bg-dmc-primary hover:bg-dmc-primary-dark
+                           text-white text-[13px] font-semibold
+                           flex items-center gap-1.5 transition-all duration-150
+                           disabled:opacity-50 active:scale-[0.98]
+                           shadow-sm shadow-dmc-primary/20"
+              >
+                {state.loading
+                  ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  : <Search size={13} strokeWidth={2.5} />}
+                <span>{state.loading ? 'Đang tải…' : 'Xem báo cáo'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                disabled={state.data.length === 0}
+                className="h-9 px-4 rounded-xl border border-[#d2d2d7]/70
+                           text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-[#f2f2f7]
+                           text-[13px] font-medium
+                           flex items-center gap-1.5 transition-all duration-150
+                           disabled:opacity-40 active:scale-[0.98]"
+              >
+                <Download size={13} strokeWidth={2} />
+                <span>Xuất Excel</span>
+              </button>
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-dmc-text-secondary">Đến ngày</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="h-9 px-3 rounded-lg bg-dmc-bg-input border border-dmc-border text-dmc-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-dmc-primary/50"
-            />
-          </div>
-          <button
-            onClick={() => loadReport(startDate, endDate)}
-            disabled={state.loading}
-            className="h-9 px-5 rounded-lg bg-dmc-primary hover:bg-dmc-primary-dark text-white font-semibold text-sm transition-all disabled:opacity-60 flex items-center gap-2"
-          >
-            {state.loading ? (
-              <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Đang tải...</>
-            ) : '🔍 Xem báo cáo'}
-          </button>
-          <button
-            onClick={handleExportCSV}
-            disabled={state.data.length === 0}
-            className="h-9 px-5 rounded-lg border border-dmc-border text-dmc-text-secondary hover:text-dmc-text-primary hover:border-dmc-text-muted text-sm transition-all disabled:opacity-40"
-          >
-            📥 Xuất Excel
-          </button>
         </div>
 
         {/* ── KPI Cards ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <KpiCard title="Tổng sản lượng" value={kpi.totalOutput.toLocaleString()} color="green" icon="✅" />
-          <KpiCard title="Tổng lỗi" value={kpi.totalError.toLocaleString()} color="red" icon="❌" />
-          <KpiCard title="Tái chế" value={kpi.totalRecycle.toLocaleString()} color="yellow" icon="♻️" />
-          <KpiCard title="Tỷ lệ lỗi" value={`${kpi.errorRate}%`} color={Number(kpi.errorRate) > 5 ? 'red' : 'green'} icon="📊" />
-          <KpiCard title="ĐM trung bình" value={kpi.avgNorm} color="blue" icon="⚡" />
+          <KpiCard title="Tổng sản lượng" value={kpi.totalOutput.toLocaleString()} variant="green" />
+          <KpiCard title="Tổng lỗi"       value={kpi.totalError.toLocaleString()}   variant="red" />
+          <KpiCard title="Tái chế"        value={kpi.totalRecycle.toLocaleString()} variant="amber" />
+          <KpiCard
+            title="Tỷ lệ lỗi"
+            value={`${kpi.errorRate}%`}
+            variant={Number(kpi.errorRate) > 5 ? 'red' : 'green'}
+          />
+          <KpiCard title="ĐM trung bình"  value={kpi.avgNorm}                       variant="blue" />
         </div>
 
         {/* ── Charts Row 1 ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Area chart - by date */}
-          <div className="lg:col-span-2 bg-dmc-bg-card border border-dmc-border rounded-xl p-4">
-            <h3 className="text-sm font-bold text-dmc-text-primary mb-3">📈 Sản lượng theo ngày</h3>
-            <AreaChart
-              className="h-52"
-              data={dateData}
-              index="date"
-              categories={['output', 'error', 'recycle']}
-              colors={['emerald', 'rose', 'amber']}
-              valueFormatter={(n) => n.toLocaleString()}
-              showLegend
-              showGridLines={false}
-              curveType="natural"
-              connectNulls
-            />
+          <div className="lg:col-span-2 bg-white border border-[#d2d2d7]/60 rounded-2xl p-4
+                          shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+            <p className="text-[13px] font-semibold text-[#1d1d1f] mb-3">
+              {CHART_TITLE[state.reportType]}
+            </p>
+            {dateData.length > 0 ? (
+              <AreaChart
+                className="h-52"
+                data={dateData}
+                index="date"
+                categories={['output', 'error', 'recycle']}
+                colors={['emerald', 'rose', 'amber']}
+                valueFormatter={(n) => n.toLocaleString()}
+                showLegend
+                showGridLines={false}
+                curveType="natural"
+                connectNulls
+              />
+            ) : <EmptyChart />}
           </div>
 
-          {/* Donut - by workshop */}
-          <div className="bg-dmc-bg-card border border-dmc-border rounded-xl p-4">
-            <h3 className="text-sm font-bold text-dmc-text-primary mb-3">🏭 Theo xưởng</h3>
+          <div className="bg-white border border-[#d2d2d7]/60 rounded-2xl p-4
+                          shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+            <p className="text-[13px] font-semibold text-[#1d1d1f] mb-3">Theo xưởng</p>
             {workshopDonut.length > 0 ? (
               <DonutChart
-                className="h-40"
+                className="h-44"
                 data={workshopDonut}
                 category="value"
                 index="name"
@@ -169,17 +303,15 @@ export function ProductionReport() {
                 colors={['indigo', 'cyan', 'amber', 'emerald', 'rose']}
                 showAnimation
               />
-            ) : (
-              <EmptyChart />
-            )}
+            ) : <EmptyChart />}
           </div>
         </div>
 
         {/* ── Charts Row 2 ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Bar chart - by product */}
-          <div className="bg-dmc-bg-card border border-dmc-border rounded-xl p-4">
-            <h3 className="text-sm font-bold text-dmc-text-primary mb-3">📦 Top 10 sản phẩm</h3>
+          <div className="bg-white border border-[#d2d2d7]/60 rounded-2xl p-4
+                          shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+            <p className="text-[13px] font-semibold text-[#1d1d1f] mb-3">Top 10 sản phẩm</p>
             {productBarList.length > 0 ? (
               <BarList
                 data={productBarList}
@@ -187,14 +319,12 @@ export function ProductionReport() {
                 valueFormatter={(n: number) => n.toLocaleString()}
                 color="indigo"
               />
-            ) : (
-              <EmptyChart />
-            )}
+            ) : <EmptyChart />}
           </div>
 
-          {/* Bar chart - norm comparison */}
-          <div className="bg-dmc-bg-card border border-dmc-border rounded-xl p-4">
-            <h3 className="text-sm font-bold text-dmc-text-primary mb-3">⚡ So sánh định mức</h3>
+          <div className="bg-white border border-[#d2d2d7]/60 rounded-2xl p-4
+                          shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+            <p className="text-[13px] font-semibold text-[#1d1d1f] mb-3">So sánh định mức</p>
             {normData.length > 0 ? (
               <BarChart
                 className="h-52"
@@ -206,38 +336,44 @@ export function ProductionReport() {
                 showLegend
                 showGridLines={false}
               />
-            ) : (
-              <EmptyChart />
-            )}
+            ) : <EmptyChart />}
           </div>
         </div>
 
         {/* ── Data Table ── */}
-        <div className="bg-dmc-bg-card border border-dmc-border rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between p-4 border-b border-dmc-border">
-            <h3 className="text-sm font-bold text-dmc-text-primary">
-              📋 Chi tiết ({table.getRowCount()} dòng)
-            </h3>
+        <div className="bg-white border border-[#d2d2d7]/60 rounded-2xl overflow-hidden
+                        shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <div className="flex items-center justify-between px-4 py-3
+                          border-b border-[#d2d2d7]/50">
+            <p className="text-[13px] font-semibold text-[#1d1d1f]">
+              Chi tiết
+              <span className="ml-1.5 text-[11px] font-normal text-[#6e6e73]">
+                ({table.getRowCount()} dòng)
+              </span>
+            </p>
             <input
               value={globalFilter}
               onChange={(e) => setGlobalFilter(e.target.value)}
-              placeholder="Tìm kiếm..."
-              className="h-8 w-48 px-3 rounded-lg bg-dmc-bg-input border border-dmc-border text-dmc-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-dmc-primary/50"
+              placeholder="Tìm kiếm…"
+              className="h-8 w-44 px-3 rounded-xl bg-[#f2f2f7] border border-[#d2d2d7]/70
+                         text-[12px] text-[#1d1d1f] placeholder:text-[#aeaeb2]
+                         focus:outline-none focus:ring-1 focus:ring-dmc-primary/40
+                         focus:border-dmc-primary/50 transition-all"
             />
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-[12px]">
               <thead>
                 {table.getHeaderGroups().map((hg) => (
-                  <tr key={hg.id} className="border-b border-dmc-border bg-dmc-bg-input">
+                  <tr key={hg.id} className="border-b border-[#d2d2d7]/50 bg-[#f2f2f7]">
                     {hg.headers.map((header) => (
                       <th
                         key={header.id}
                         onClick={header.column.getToggleSortingHandler()}
                         className={cn(
-                          'px-3 py-2.5 text-left font-semibold text-dmc-text-secondary whitespace-nowrap',
-                          header.column.getCanSort() && 'cursor-pointer hover:text-dmc-text-primary'
+                          'px-3 py-2.5 text-left font-semibold text-[#6e6e73] whitespace-nowrap',
+                          header.column.getCanSort() && 'cursor-pointer hover:text-[#1d1d1f] select-none'
                         )}
                       >
                         {flexRender(header.column.columnDef.header, header.getContext())}
@@ -251,18 +387,21 @@ export function ProductionReport() {
               <tbody>
                 {table.getRowModel().rows.length === 0 ? (
                   <tr>
-                    <td colSpan={columns.length} className="px-3 py-8 text-center text-dmc-text-muted">
-                      Không có dữ liệu
+                    <td colSpan={columns.length}
+                        className="px-3 py-10 text-center text-[#aeaeb2]">
+                      {state.loading ? 'Đang tải dữ liệu…' : 'Không có dữ liệu trong khoảng thời gian này'}
                     </td>
                   </tr>
                 ) : (
                   table.getRowModel().rows.map((row) => (
                     <tr
                       key={row.id}
-                      className="border-b border-dmc-border/50 hover:bg-white/5 transition-colors"
+                      className="border-b border-[#d2d2d7]/40 last:border-0
+                                 hover:bg-[#f2f2f7]/70 transition-colors"
                     >
                       {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-3 py-2 whitespace-nowrap text-dmc-text-primary">
+                        <td key={cell.id}
+                            className="px-3 py-2 whitespace-nowrap text-[#1d1d1f]">
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       ))}
@@ -273,37 +412,75 @@ export function ProductionReport() {
             </table>
           </div>
         </div>
+
       </div>
     </div>
   )
 }
 
-function KpiCard({
-  title, value, color, icon,
+/* ── Sub-components ──────────────────────────────────────────────── */
+
+function FilterInput({
+  type, value, onChange,
 }: {
+  type: ReportType
+  value: string
+  onChange: (v: string) => void
+}) {
+  if (type === 'hour')
+    return (
+      <input type="time" value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={filterInputCls} />
+    )
+  if (type === 'day')
+    return (
+      <input type="date" value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={filterInputCls} />
+    )
+  if (type === 'month')
+    return (
+      <input type="month" value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={filterInputCls} />
+    )
+  // year
+  return (
+    <input type="number" value={value} min={2020} max={2099}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(filterInputCls, 'w-24')} />
+  )
+}
+
+const KPI_VARIANT = {
+  green: { text: 'text-[#2f9e44]', bg: 'bg-[#34c759]/8', border: 'border-[#2f9e44]/20' },
+  red:   { text: 'text-[#ff3b30]', bg: 'bg-[#ff3b30]/8', border: 'border-[#ff3b30]/20' },
+  amber: { text: 'text-[#b37700]', bg: 'bg-[#ff9500]/8', border: 'border-[#ff9500]/20' },
+  blue:  { text: 'text-[#3b5bdb]', bg: 'bg-[#3b5bdb]/8', border: 'border-[#3b5bdb]/20' },
+} as const
+
+function KpiCard({ title, value, variant }: {
   title: string
   value: string
-  color: 'green' | 'red' | 'yellow' | 'blue'
-  icon: string
+  variant: keyof typeof KPI_VARIANT
 }) {
-  const colorMap = {
-    green:  { text: 'text-green-400',  bg: 'bg-green-900/20',  border: 'border-green-700/30' },
-    red:    { text: 'text-red-400',    bg: 'bg-red-900/20',    border: 'border-red-700/30' },
-    yellow: { text: 'text-yellow-400', bg: 'bg-yellow-900/20', border: 'border-yellow-700/30' },
-    blue:   { text: 'text-blue-400',   bg: 'bg-blue-900/20',   border: 'border-blue-700/30' },
-  }
-  const c = colorMap[color]
+  const c = KPI_VARIANT[variant]
   return (
-    <div className={cn('rounded-xl border p-4 space-y-1 transition-transform hover:scale-[1.02]', c.bg, c.border)}>
-      <p className="text-xs text-dmc-text-muted">{icon} {title}</p>
-      <p className={cn('text-xl font-bold', c.text)}>{value}</p>
+    <div className={cn(
+      'rounded-2xl border p-4 space-y-1.5 transition-transform hover:scale-[1.01]',
+      'shadow-[0_1px_3px_rgba(0,0,0,0.05)]',
+      c.bg, c.border
+    )}>
+      <p className="text-[11px] font-medium text-[#6e6e73]">{title}</p>
+      <p className={cn('text-[22px] font-bold tracking-tight', c.text)}>{value}</p>
     </div>
   )
 }
 
 function EmptyChart() {
   return (
-    <div className="h-40 flex items-center justify-center text-dmc-text-muted text-sm">
+    <div className="h-44 flex items-center justify-center text-[#aeaeb2] text-[13px]">
       Chưa có dữ liệu
     </div>
   )

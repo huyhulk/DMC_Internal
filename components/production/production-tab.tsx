@@ -2,60 +2,58 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import {
+  Lock, Unlock, Search, Save,
+  ChevronRight, AlertTriangle,
+} from 'lucide-react'
 import { useProductionData } from '@/hooks/use-production-data'
 import { OrderInfoCard } from './order-info-card'
 import { ProductLineCard } from './product-line-card'
 import { UnlockDialog } from './unlock-dialog'
-import { cn, apiDateToDisplay, parseDisplayDate, getTodayLocal } from '@/lib/utils'
-import type { SessionUser } from '@/types'
+import { cn, getTodayLocal } from '@/lib/utils'
+import type { SessionUser, FactoryKey } from '@/types'
+import { WORKSHOP_LABELS } from '@/types'
 
-interface Props {
-  user: SessionUser
-}
+interface Props { user: SessionUser }
+
+const inputCls =
+  'w-full h-10 px-3 rounded-xl text-[13px] font-medium ' +
+  'text-dmc-text-primary placeholder:text-dmc-text-muted ' +
+  'bg-white border border-dmc-border ' +
+  'focus:outline-none focus:ring-1 focus:ring-dmc-primary/40 focus:border-dmc-primary/50 ' +
+  'disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 ' +
+  'shadow-[0_1px_2px_rgba(0,0,0,0.05)]'
 
 export function ProductionTab({ user }: Props) {
-  const today = getTodayLocal()  // Local date (not UTC) — correct at midnight in VN
+  const today = getTodayLocal()
   const {
-    state,
-    visibleRows,
-    loadData,
-    selectWorkshop,
-    selectPcode,
-    unlockDate,
-    unlockPcode,
-    updateLine,
-    searchByPcode,
-    submitProduction,
-    getWorkshopOptions,
-    getProductOptions,
-    getPcodeOptions,
-    getNormHint,
+    state, visibleRows,
+    loadData, selectWorkshop, selectPcode,
+    unlockDate, unlockPcode, updateLine,
+    searchByPcode, submitProduction,
+    getWorkshopOptions, getProductOptions,
+    getPcodeOptions, getNormHint,
   } = useProductionData(user)
 
-  const [searchQuery, setSearchQuery] = useState('')
-  const [unlockDateOpen, setUnlockDateOpen] = useState(false)
+  const [searchQuery,     setSearchQuery]     = useState('')
+  const [unlockDateOpen,  setUnlockDateOpen]  = useState(false)
   const [unlockPcodeOpen, setUnlockPcodeOpen] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [confirmOpen,     setConfirmOpen]     = useState(false)
+  const [submitting,      setSubmitting]      = useState(false)
 
-  useEffect(() => {
-    loadData(today)
-  }, [today, loadData])
+  useEffect(() => { loadData(today) }, [today, loadData])
 
-  const wsOptions = getWorkshopOptions()
-  const pcodeOptions = getPcodeOptions()
-  const isOther = state.selectedWorkshop.startsWith('Việc khác')
+  const wsOptions     = getWorkshopOptions()
+  const pcodeOptions  = getPcodeOptions()
+  const isOther       = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const hasLockedPcodes = Object.values(state.pcodeStatuses).some((s) => s.locked)
-  const status = state.pcodeStatuses[state.selectedPcode]
-  const canSubmit = Boolean(state.selectedPcode && !state.loading)
+  const canSubmit     = Boolean(state.selectedPcode && !state.loading)
 
   async function handleSearch() {
     if (!searchQuery.trim()) return
     const order = await searchByPcode(searchQuery.trim())
-    if (order) {
-      await loadData(order.initialdate)
-    }
+    if (order) await loadData(order.initialdate)
   }
 
   async function handleSubmit() {
@@ -66,78 +64,86 @@ export function ProductionTab({ user }: Props) {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* ── SECTION 1: Fixed header info ── */}
-      <div className="shrink-0 px-4 py-3 border-b border-dmc-border space-y-3">
-        <SectionTitle>📅 THÔNG TIN LỆNH SẢN XUẤT</SectionTitle>
+    <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
+
+      {/* ── SECTION 1: Header controls ── */}
+      <div className="shrink-0 px-4 pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3
+                      bg-white/80 backdrop-blur-sm">
+
+        <SectionLabel>Thông tin lệnh sản xuất</SectionLabel>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* PDATE */}
-          <FieldGroup label="📋 Ngày lập phiếu" extra={
-            state.dateLocked
-              ? <LockBtn onClick={() => setUnlockDateOpen(true)} label="🔒" className="text-yellow-400" />
-              : <span className="text-xs text-yellow-400">🔓 Đã mở</span>
-          }>
+
+          {/* Date */}
+          <FieldGroup
+            label="Ngày lập phiếu"
+            extra={state.dateLocked
+              ? <LockChip locked onClick={() => setUnlockDateOpen(true)} />
+              : <LockChip locked={false} />}
+          >
             <input
               type="date"
               value={state.selectedDate}
               disabled={state.dateLocked}
               onChange={(e) => loadData(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg bg-dmc-bg-input border border-dmc-border text-dmc-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-dmc-primary/50 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
+              className={inputCls}
             />
           </FieldGroup>
 
-          {/* Search PCODE */}
-          <FieldGroup label="🔍 Tìm mã LSX">
+          {/* Search */}
+          <FieldGroup label="Tìm mã LSX">
             <div className="flex gap-2">
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Nhập mã LSX..."
-                className="flex-1 h-10 px-3 rounded-lg bg-dmc-bg-input border border-dmc-border text-dmc-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-dmc-primary/50 min-w-0"
+                placeholder="Nhập mã LSX…"
+                className={cn(inputCls, 'flex-1 min-w-0')}
               />
               <button
                 onClick={handleSearch}
-                className="h-10 px-4 rounded-lg bg-dmc-primary hover:bg-dmc-primary-dark text-white text-sm font-semibold shrink-0 transition-all"
+                className="h-10 px-3.5 rounded-xl bg-dmc-primary hover:bg-dmc-primary-dark
+                           text-white shrink-0 active:scale-95 transition-all duration-150
+                           flex items-center justify-center shadow-sm"
               >
-                Tìm
+                <Search size={15} strokeWidth={2.5} />
               </button>
             </div>
           </FieldGroup>
 
           {/* Workshop */}
-          <FieldGroup label="🏭 Xưởng">
+          <FieldGroup label="Xưởng">
             <select
               value={state.selectedWorkshop}
               onChange={(e) => selectWorkshop(e.target.value)}
               disabled={state.loading || wsOptions.length === 0}
-              className="w-full h-10 px-3 rounded-lg bg-dmc-bg-input border border-dmc-border text-dmc-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-dmc-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={cn(inputCls, 'cursor-pointer')}
             >
-              <option value="">-- Chọn xưởng --</option>
+              <option value="">— Chọn xưởng —</option>
               {wsOptions.map((ws) => (
-                <option key={ws} value={ws}>{ws}</option>
+                <option key={ws} value={ws}>
+                  {ws.startsWith('Việc khác')
+                    ? ws
+                    : (WORKSHOP_LABELS[ws as FactoryKey] ?? ws)}
+                </option>
               ))}
             </select>
           </FieldGroup>
 
           {/* PCODE */}
-          <FieldGroup label="📦 Mã LSX" extra={
-            hasLockedPcodes
-              ? <LockBtn
-                  onClick={() => setUnlockPcodeOpen(true)}
-                  label={state.pcodeUnlocked ? '🔓' : '🔒'}
-                  className={state.pcodeUnlocked ? 'text-yellow-400' : 'text-red-400'}
-                />
-              : undefined
-          }>
+          <FieldGroup
+            label="Mã LSX"
+            extra={hasLockedPcodes
+              ? <LockChip locked={!state.pcodeUnlocked} onClick={() => setUnlockPcodeOpen(true)} />
+              : undefined}
+          >
             <select
               value={state.selectedPcode}
               onChange={(e) => selectPcode(e.target.value)}
               disabled={state.loading || pcodeOptions.length === 0}
-              className="w-full h-10 px-3 rounded-lg bg-dmc-bg-input border border-dmc-border text-dmc-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-dmc-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={cn(inputCls, 'cursor-pointer')}
             >
-              <option value="">-- Chọn mã LSX --</option>
+              <option value="">— Chọn mã LSX —</option>
               {pcodeOptions.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}
@@ -145,15 +151,12 @@ export function ProductionTab({ user }: Props) {
           </FieldGroup>
         </div>
 
-        {/* Order Info Card */}
-        {state.orderInfo && (
-          <OrderInfoCard order={state.orderInfo} />
-        )}
+        {state.orderInfo && <OrderInfoCard order={state.orderInfo} />}
       </div>
 
-      {/* ── SECTION 2: Scrollable product lines ── */}
+      {/* ── SECTION 2: Product lines (scrollable) ── */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        <SectionTitle>📦 SẢN PHẨM & THỜI GIAN SẢN XUẤT</SectionTitle>
+        <SectionLabel>Sản phẩm &amp; thời gian sản xuất</SectionLabel>
 
         {state.selectedWorkshop ? (
           Array.from({ length: visibleRows }).map((_, i) => (
@@ -172,26 +175,33 @@ export function ProductionTab({ user }: Props) {
         )}
 
         {state.loading && (
-          <div className="flex justify-center py-8">
-            <div className="w-8 h-8 border-2 border-dmc-primary border-t-transparent rounded-full animate-spin" />
+          <div className="flex justify-center py-12">
+            <div className="w-7 h-7 border-2 border-dmc-primary/30 border-t-dmc-primary rounded-full animate-spin" />
           </div>
         )}
       </div>
 
-      {/* ── SECTION 3: Fixed footer submit ── */}
-      <div className="shrink-0 bg-dmc-bg-card border-t border-dmc-border px-4 py-3 flex items-center justify-between">
+      {/* ── SECTION 3: Footer submit ── */}
+      <div className="shrink-0 border-t border-[#d2d2d7]/60 bg-white/90 backdrop-blur-sm
+                      px-4 py-3 flex items-center justify-between gap-3">
         {state.unlockLog.length > 0 && (
-          <p className="text-xs text-yellow-400 hidden sm:block">
-            ⚠️ {state.unlockLog.join(' | ')}
+          <p className="text-[12px] text-[#b37700] hidden sm:flex items-center gap-1.5">
+            <AlertTriangle size={12} />
+            {state.unlockLog.join(' · ')}
           </p>
         )}
         <div className="ml-auto">
           <button
             onClick={() => setConfirmOpen(true)}
             disabled={!canSubmit}
-            className="h-11 px-8 rounded-xl bg-dmc-success hover:opacity-90 text-white font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+            className="h-10 px-6 rounded-xl bg-dmc-success hover:opacity-90
+                       text-white text-[13px] font-semibold
+                       active:scale-[0.98] transition-all duration-150
+                       disabled:opacity-35 disabled:cursor-not-allowed
+                       flex items-center gap-2 shadow-md shadow-[#34c759]/20"
           >
-            💾 LƯU DỮ LIỆU SẢN XUẤT
+            <Save size={14} strokeWidth={2.5} />
+            Lưu dữ liệu
           </button>
         </div>
       </div>
@@ -204,7 +214,6 @@ export function ProductionTab({ user }: Props) {
         onConfirm={unlockDate}
         onClose={() => setUnlockDateOpen(false)}
       />
-
       <UnlockDialog
         open={unlockPcodeOpen}
         title="Mở khóa LSX"
@@ -213,30 +222,49 @@ export function ProductionTab({ user }: Props) {
         onClose={() => setUnlockPcodeOpen(false)}
       />
 
-      {/* Confirm Submit Dialog */}
+      {/* Confirm submit modal */}
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmOpen(false)} />
-          <div className="relative w-full max-w-md bg-dmc-bg-card border border-dmc-border rounded-2xl p-6 shadow-2xl animate-in">
-            <h3 className="text-base font-semibold text-dmc-text-primary mb-2">✅ Xác nhận lưu dữ liệu</h3>
-            <p className="text-sm text-dmc-text-secondary mb-1">
-              Mã LSX: <span className="font-bold text-dmc-primary">
-                {state.pcodeStatuses[state.selectedPcode]?.pcode ?? state.selectedPcode}
-              </span>
-            </p>
-            <p className="text-sm text-dmc-text-secondary mb-4">Xưởng: {state.selectedWorkshop}</p>
-            <div className="flex gap-3">
+          <div
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+            onClick={() => setConfirmOpen(false)}
+          />
+          <div className="relative w-full max-w-sm
+                          bg-white border border-[#d2d2d7]/60
+                          rounded-[20px] p-6 shadow-apple-lg scale-in">
+            <h3 className="text-[16px] font-semibold text-[#1d1d1f] mb-4 tracking-[-0.01em]">
+              Xác nhận lưu dữ liệu
+            </h3>
+
+            <div className="space-y-2 mb-5">
+              <Row label="Mã LSX" value={
+                state.pcodeStatuses[state.selectedPcode]?.pcode ?? state.selectedPcode
+              } accent />
+              <Row label="Xưởng" value={state.selectedWorkshop} />
+            </div>
+
+            <div className="flex gap-2.5">
               <button
                 onClick={() => setConfirmOpen(false)}
-                className="flex-1 h-10 rounded-lg border border-dmc-border text-dmc-text-muted text-sm"
-              >Hủy</button>
+                className="flex-1 h-10 rounded-xl border border-[#d2d2d7]/70
+                           text-[#6e6e73] text-[13px] font-medium
+                           hover:bg-[#f2f2f7] active:scale-[0.98]
+                           transition-all duration-150"
+              >
+                Hủy
+              </button>
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex-1 h-10 rounded-lg bg-dmc-success text-white font-semibold text-sm disabled:opacity-60 flex items-center justify-center gap-2"
+                className="flex-1 h-10 rounded-xl bg-dmc-success
+                           text-white text-[13px] font-semibold
+                           active:scale-[0.98] transition-all duration-150
+                           disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {submitting && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                {submitting ? 'Đang lưu...' : 'Xác nhận'}
+                {submitting
+                  ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  : <Save size={13} strokeWidth={2.5} />}
+                {submitting ? 'Đang lưu…' : 'Xác nhận'}
               </button>
             </div>
           </div>
@@ -246,28 +274,32 @@ export function ProductionTab({ user }: Props) {
   )
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+/* ── Sub-components ─────────────────────────────── */
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs font-bold text-dmc-primary">{children}</span>
-      <div className="flex-1 h-px bg-dmc-primary/30" />
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] font-semibold text-[#aeaeb2] uppercase tracking-[0.07em]">
+        {children}
+      </span>
+      <div className="flex-1 h-px bg-[#d2d2d7]/50" />
     </div>
   )
 }
 
 function FieldGroup({
-  label,
-  children,
-  extra,
+  label, children, extra,
 }: {
   label: string
   children: React.ReactNode
   extra?: React.ReactNode
 }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <div className="flex items-center gap-2">
-        <label className="text-xs font-semibold text-dmc-text-secondary">{label}</label>
+        <label className="text-[11px] font-medium text-[#6e6e73] tracking-[0.02em]">
+          {label}
+        </label>
         {extra}
       </div>
       {children}
@@ -275,23 +307,49 @@ function FieldGroup({
   )
 }
 
-function LockBtn({ onClick, label, className }: { onClick: () => void; label: string; className?: string }) {
+function LockChip({ locked, onClick }: { locked: boolean; onClick?: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cn('text-xs hover:opacity-80 transition-opacity', className)}
+      className={cn(
+        'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold',
+        'transition-all duration-150 active:scale-95',
+        locked
+          ? 'text-[#b37700] bg-[#ff9500]/10 hover:bg-[#ff9500]/20'
+          : 'text-[#2f9e44] bg-[#34c759]/10'
+      )}
     >
-      {label}
+      {locked
+        ? <><Lock size={9} strokeWidth={2.5} /> Khóa</>
+        : <><Unlock size={9} strokeWidth={2.5} /> Mở</>}
     </button>
+  )
+}
+
+function Row({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="flex items-center justify-between py-1.5
+                    border-b border-[#d2d2d7]/50 last:border-0">
+      <span className="text-[12px] text-[#6e6e73]">{label}</span>
+      <span className={cn(
+        'text-[13px] font-semibold',
+        accent ? 'text-dmc-primary' : 'text-[#1d1d1f]'
+      )}>
+        {value}
+      </span>
+    </div>
   )
 }
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-dmc-text-muted">
-      <span className="text-4xl mb-3">🏭</span>
-      <p className="text-sm">Chọn ngày và xưởng để bắt đầu nhập dữ liệu</p>
+    <div className="flex flex-col items-center justify-center py-20 text-[#aeaeb2] gap-3">
+      <div className="w-12 h-12 rounded-2xl bg-[#f2f2f7] flex items-center justify-center
+                      border border-[#d2d2d7]/50">
+        <ChevronRight size={20} className="text-[#aeaeb2]" />
+      </div>
+      <p className="text-[13px]">Chọn ngày và xưởng để bắt đầu nhập dữ liệu</p>
     </div>
   )
 }

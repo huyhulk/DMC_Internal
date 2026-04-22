@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { getInitData, searchOrderByPcode, recordProductionAction } from '@/lib/actions/data'
-import { calcRealNorm, getUserWorkspaces, getTodayLocal } from '@/lib/utils'
+import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { InitData, Order, NormItem, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
 export interface ProductionState {
@@ -62,7 +62,7 @@ export function useProductionData(user: SessionUser) {
   const loadData = useCallback(
     async (date: string) => {
       setState((s) => ({ ...s, loading: true, selectedWorkshop: '', selectedPcode: '', orderInfo: null }))
-      const result = await getInitData(date, user.id, user.role, user.workspace)
+      const result = await getInitData(date)
       if (!result.success || !result.data) {
         toast.error(result.error ?? 'Lỗi tải dữ liệu')
         setState((s) => ({ ...s, loading: false }))
@@ -77,7 +77,7 @@ export function useProductionData(user: SessionUser) {
         unlockLog: [],
       }))
     },
-    [user.id, user.role, user.workspace]
+    []
   )
 
   const selectWorkshop = useCallback(
@@ -192,7 +192,7 @@ export function useProductionData(user: SessionUser) {
         if (field === 'product' && value && !String(value).startsWith('--')) {
           const ws = s.selectedWorkshop
           const norm = s.initData?.norms.find(
-            (n) => n.products === value && n.workshop === ws
+            (n) => n.products === value && workshopCode(n.workshop) === workshopCode(ws)
           )
           if (norm) {
             lines[idx].workforce = norm.nwforce
@@ -205,7 +205,7 @@ export function useProductionData(user: SessionUser) {
         if (['poutput', 'starttime', 'endtime', 'workforce'].includes(field)) {
           const line = lines[idx]
           const norm = s.initData?.norms.find(
-            (n) => n.products === line.product && n.workshop === s.selectedWorkshop
+            (n) => n.products === line.product && workshopCode(n.workshop) === workshopCode(s.selectedWorkshop)
           )
           if (norm) {
             lines[idx].realnorm = calcRealNorm({
@@ -306,11 +306,11 @@ export function useProductionData(user: SessionUser) {
     const wsList = [...wsSet].sort()
 
     const otherWsList =
-      user.role === 'ADMIN' || user.role === 'MANAGER'
+      user.role === 'ADMIN'
         ? wsList.map((ws) => `Việc khác - ${ws}`)
         : userWorkspaces.length > 0
         ? userWorkspaces.map((ws) => `Việc khác - ${ws}`)
-        : []
+        : wsList.map((ws) => `Việc khác - ${ws}`)
 
     return [...wsList, ...otherWsList]
   }, [state.initData, user.role, userWorkspaces])
@@ -318,9 +318,10 @@ export function useProductionData(user: SessionUser) {
   const getProductOptions = useCallback(
     (workshop: string) => {
       if (!state.initData) return []
+      const code = workshopCode(workshop)
       const prodSet = new Set(
         state.initData.norms
-          .filter((n) => n.workshop === workshop)
+          .filter((n) => workshopCode(n.workshop) === code)
           .map((n) => n.products)
       )
       return [...prodSet]
@@ -335,9 +336,10 @@ export function useProductionData(user: SessionUser) {
   const getNormHint = useCallback(
     (product: string) => {
       if (!state.initData || !product) return null
+      const code = workshopCode(state.selectedWorkshop)
       return (
         state.initData.norms.find(
-          (n) => n.products === product && n.workshop === state.selectedWorkshop
+          (n) => n.products === product && workshopCode(n.workshop) === code
         ) ?? null
       )
     },

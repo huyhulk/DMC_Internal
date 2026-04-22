@@ -1,12 +1,19 @@
 export type UserRole = 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'
 
-export type TabId = 'production' | 'maintenance' | 'coordination' | 'report'
+export type TabId = 'production' | 'maintenance' | 'coordination' | 'report' | 'admin'
 
 export const ROLE_TABS: Record<UserRole, TabId[]> = {
-  ADMIN:      ['production', 'maintenance', 'coordination', 'report'],
+  ADMIN:      ['production', 'maintenance', 'coordination', 'report', 'admin'],
   MANAGER:    ['production', 'maintenance', 'coordination', 'report'],
-  SUPERVISOR: ['production', 'maintenance', 'report'],
+  SUPERVISOR: ['production', 'coordination', 'report'],
   USER:       ['production'],
+}
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN:      'Admin',
+  MANAGER:    'Quản lý',
+  SUPERVISOR: 'Tổ trưởng',
+  USER:       'Công nhân',
 }
 
 export interface SessionUser {
@@ -78,6 +85,7 @@ export interface ProductionReportRow {
   pspeed: number
   starttime: string
   endtime: string
+  created_at?: string
 }
 
 export interface ProductLine {
@@ -96,4 +104,31 @@ export interface PcodeStatus {
   pcode: string
   locked: boolean
   reason: 'submitted' | 'delivered' | ''
+}
+
+export const FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
+export type FactoryKey = typeof FACTORIES[number]
+
+// Display labels for each factory — used in dropdowns, charts, badges
+export const WORKSHOP_LABELS: Record<FactoryKey, string> = {
+  DMC1: 'DMC1 — Tôn & Phụ kiện',
+  DMC3: 'DMC3 — Tôn Panel & Phụ kiện',
+  DMC4: 'DMC4 — Xà gồ, phụ kiện',
+  DMC5: 'DMC5 — Tôn, PU & Phụ kiện',
+}
+
+export interface HumanResource {
+  id: number
+  name: string
+  factory: string | null
+  machine: string | null
+  position: string | null
+  phone: string | null
+}
+
+export interface HRDayData {
+  factory: FactoryKey
+  totalem: number
+  absentIds: number[]
+  isAutoFilled: boolean
 }

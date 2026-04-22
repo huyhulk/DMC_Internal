@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
-import { isWorkspaceAllowed, getUserWorkspaces } from '@/lib/utils'
+import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, Order, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
@@ -24,7 +24,7 @@ function mapDataRowToOrder(row: DataRow): Order {
   return {
     pcode: row.PCODE,
     initialdate: row.INITIALDATE ?? '',
-    workshop: row.WORKSHOP ?? '',
+    workshop: normalizeWorkshop(row.WORKSHOP ?? ''),
     customer: row.CUSTOMER ?? '',
     quantity: row.QUANTITY != null ? String(row.QUANTITY) : '',
     description: row.DESCRIPTION ?? '',
@@ -35,14 +35,21 @@ function mapDataRowToOrder(row: DataRow): Order {
 }
 
 export async function getInitData(
-  selectedDate: string,
-  userId: string,
-  role: string,
-  workspace: string
+  selectedDate: string
 ): Promise<{ success: boolean; data?: InitData; error?: string }> {
   try {
     const supabase = await createClient()
-    const userWorkspaces = getUserWorkspaces(workspace)
+
+    // Fetch session server-side — never trust client-passed role/workspace
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.' }
+
+    const { data: profileData } = await supabase
+      .from('profiles').select('role,workspace').eq('id', user.id).single()
+    if (!profileData) return { success: false, error: 'Không tìm thấy thông tin người dùng.' }
+
+    const { role, workspace: rawWorkspace } = profileData as { role: string; workspace: string }
+    const userWorkspaces = getUserWorkspaces(rawWorkspace ?? '')
 
     // Norm + Material are cached (static data) — data + Production are per-request
     const [norms, materials, dataRes, productionRes] = await Promise.all([
@@ -58,7 +65,8 @@ export async function getInitData(
         .eq('pdate', selectedDate),
     ])
 
-    const validWorkshops = new Set(norms.map((n) => n.workshop).filter(Boolean))
+    // Always use pure DMC code so "DMC1 - ..." and "DMC1" both resolve to "DMC1"
+    const validWorkshops = new Set(norms.map((n) => workshopCode(n.workshop)).filter(Boolean))
     // When Norm table has data: only show orders whose workshop has defined products.
     // When Norm table is empty: show all orders (fallback so UI is not blank).
     const hasNormData = validWorkshops.size > 0
@@ -69,9 +77,10 @@ export async function getInitData(
 
     const orders: Order[] = ((dataRes.data ?? []) as DataRow[])
       .filter((row) => {
-        const ws = row.WORKSHOP ?? ''
+        const ws = normalizeWorkshop(row.WORKSHOP ?? '') // "DMC1 - Tôn & Phụ kiện"
+        const code = workshopCode(ws)                    // "DMC1"
         const allowed = isWorkspaceAllowed(ws, role, userWorkspaces)
-        return allowed && (!hasNormData || validWorkshops.has(ws))
+        return allowed && (!hasNormData || validWorkshops.has(code))
       })
       .map(mapDataRowToOrder)
 
@@ -83,6 +92,10 @@ export async function getInitData(
     logger.info(
       {
         date: selectedDate,
+        userId: user.id,
+        role,
+        workspaceFromDB: rawWorkspace,
+        userWorkspaces,
         ordersFound: orders.length,
         normsFound: norms.length,
         submittedPcodes: submittedPcodes.length,
@@ -117,7 +130,23 @@ export async function searchOrderByPcode(
       return { success: false, message: `Không tìm thấy mã ${pcode}` }
     }
 
-    return { success: true, order: mapDataRowToOrder(data as DataRow) }
+    const order = mapDataRowToOrder(data as DataRow)
+
+    // Verify the current user has access to this order's workshop
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: profileData } = await supabase
+        .from('profiles').select('role,workspace').eq('id', user.id).single()
+      if (profileData) {
+        const p = profileData as { role: string; workspace: string }
+        const ws = getUserWorkspaces(p.workspace ?? '')
+        if (!isWorkspaceAllowed(order.workshop, p.role, ws)) {
+          return { success: false, message: `Không có quyền truy cập mã ${pcode} (xưởng ${workshopCode(order.workshop)}).` }
+        }
+      }
+    }
+
+    return { success: true, order }
   } catch (err) {
     logger.error({ err }, 'searchOrderByPcode error')
     return { success: false, message: String(err) }
@@ -141,6 +170,54 @@ export async function recordProductionAction(rows: Array<{
 }>): Promise<{ success: boolean; message: string }> {
   try {
     const supabase = await createClient()
+
+    // ── 1. Verify session (server-side, cannot be spoofed by client) ─────────
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return { success: false, message: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.' }
+    }
+
+    const { data: profileData } = await supabase
+      .from('profiles').select('role,workspace').eq('id', user.id).single()
+    if (!profileData) {
+      return { success: false, message: 'Không tìm thấy thông tin người dùng.' }
+    }
+    const profile = profileData as { role: string; workspace: string }
+    const userWorkspaces = getUserWorkspaces(profile.workspace ?? '')
+
+    // ── 2. Workshop permission check — only ADMIN is unrestricted ───────────
+    // MANAGER/SUPERVISOR/USER are all workspace-scoped.
+    if (profile.role !== 'ADMIN') {
+      logger.info(
+        { userId: user.id, role: profile.role, workspaceFromDB: profile.workspace, userWorkspaces },
+        'recordProduction: permission check'
+      )
+
+      // Empty workspace = full access (admin explicitly left it blank to mean "all").
+      // This is logged above so misconfigurations are visible in server logs.
+      if (userWorkspaces.length > 0) {
+        const uniquePcodes = [...new Set(rows.map((r) => r.pcode).filter(Boolean))]
+
+        const { data: orderData } = await supabase
+          .from('data').select('PCODE,WORKSHOP').in('PCODE', uniquePcodes)
+
+        for (const row of (orderData ?? []) as Array<{ PCODE: string; WORKSHOP: string | null }>) {
+          const ws = normalizeWorkshop(row.WORKSHOP ?? '')
+          if (!isWorkspaceAllowed(ws, profile.role, userWorkspaces)) {
+            logger.warn(
+              { userId: user.id, pcode: row.PCODE, workshop: workshopCode(ws), userWorkspaces },
+              'recordProduction: unauthorized workshop — blocked'
+            )
+            return {
+              success: false,
+              message: `Không có quyền nhập sản xuất cho xưởng ${workshopCode(ws)}. Bạn chỉ được phép nhập cho: ${userWorkspaces.join(', ')}.`,
+            }
+          }
+        }
+      }
+    }
+
+    // ── 3. Insert ─────────────────────────────────────────────────────────────
     const { error } = await supabase.from('Production').insert(rows)
 
     if (error) {
@@ -148,7 +225,7 @@ export async function recordProductionAction(rows: Array<{
       return { success: false, message: `Lỗi: ${error.message}` }
     }
 
-    logger.info({ count: rows.length }, 'Production recorded')
+    logger.info({ count: rows.length, userId: user.id }, 'Production recorded')
     return { success: true, message: `Đã lưu ${rows.length} dòng sản xuất thành công!` }
   } catch (err) {
     logger.error({ err }, 'recordProductionAction error')
@@ -156,21 +233,21 @@ export async function recordProductionAction(rows: Array<{
   }
 }
 
+// Filter by created_at (UTC ISO string) — covers Giờ/Ngày/Tháng/Năm modes
 export async function getProductionReportData(
-  startDate: string,
-  endDate: string
+  startISO: string,
+  endISO: string,
 ): Promise<{ success: boolean; data?: ProductionReportRow[]; error?: string }> {
   try {
     const supabase = await createClient()
 
-    // Norm data is cached; Production + data are per-request
     const [prodRes, dataRes, normRows] = await Promise.all([
       supabase
         .from('Production')
-        .select('pdate,pcode,products,poutput,eoutput,routput,realnorm,starttime,endtime')
-        .gte('pdate', startDate)
-        .lte('pdate', endDate)
-        .order('pdate', { ascending: true }),
+        .select('pdate,pcode,products,poutput,eoutput,routput,realnorm,starttime,endtime,created_at')
+        .gte('created_at', startISO)
+        .lte('created_at', endISO)
+        .order('created_at', { ascending: true }),
       supabase.from('data').select('PCODE,WORKSHOP'),
       getCachedNorms(),
     ])
@@ -178,14 +255,15 @@ export async function getProductionReportData(
     const dataRows = (dataRes.data ?? []) as Pick<DataRow, 'PCODE' | 'WORKSHOP'>[]
     const prodRows = (prodRes.data ?? []) as Pick<
       ProductionRow,
-      'pdate' | 'pcode' | 'products' | 'poutput' | 'eoutput' | 'routput' | 'realnorm' | 'starttime' | 'endtime'
+      'pdate' | 'pcode' | 'products' | 'poutput' | 'eoutput' | 'routput' | 'realnorm' | 'starttime' | 'endtime' | 'created_at'
     >[]
 
-    const pcodeToWs = new Map(dataRows.map((d) => [d.PCODE, d.WORKSHOP ?? '']))
+    const pcodeToWs = new Map(dataRows.map((d) => [d.PCODE, normalizeWorkshop(d.WORKSHOP ?? '')]))
 
+    // Key by workshopCode so both "DMC1" and "DMC1 - ..." norms resolve to same key
     const normMap = new Map(
       normRows.map((n) => [
-        `${n.products}|||${n.workshop}`,
+        `${n.products}|||${workshopCode(n.workshop)}`,
         { norm: n.norm, pspeed: n.pspeed },
       ])
     )
@@ -194,7 +272,7 @@ export async function getProductionReportData(
       .filter((r) => r.products)
       .map((r) => {
         const ws = pcodeToWs.get(r.pcode ?? '') ?? ''
-        const normInfo = normMap.get(`${r.products}|||${ws}`) ?? { norm: 0, pspeed: 0 }
+        const normInfo = normMap.get(`${r.products}|||${workshopCode(ws)}`) ?? { norm: 0, pspeed: 0 }
         return {
           pdate: r.pdate ?? '',
           pcode: r.pcode ?? '',
@@ -208,6 +286,7 @@ export async function getProductionReportData(
           pspeed: normInfo.pspeed,
           starttime: r.starttime ?? '',
           endtime: r.endtime ?? '',
+          created_at: r.created_at ?? '',
         }
       })
 

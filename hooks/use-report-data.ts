@@ -2,61 +2,85 @@
 
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { subDays, format } from 'date-fns'
 import { getProductionReportData } from '@/lib/actions/data'
 import type { ProductionReportRow } from '@/types'
+
+export type ReportType = 'hour' | 'day' | 'month' | 'year'
 
 export interface ReportState {
   loading: boolean
   data: ProductionReportRow[]
-  startDate: string
-  endDate: string
+  startISO: string
+  endISO: string
+  reportType: ReportType
 }
 
 export function useReportData() {
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const defaultStart = format(subDays(new Date(), 29), 'yyyy-MM-dd')
-
   const [state, setState] = useState<ReportState>({
     loading: false,
     data: [],
-    startDate: defaultStart,
-    endDate: today,
+    startISO: '',
+    endISO: '',
+    reportType: 'hour',
   })
 
-  const loadReport = useCallback(async (start: string, end: string) => {
+  const loadReport = useCallback(async (
+    type: ReportType,
+    startISO: string,
+    endISO: string,
+  ) => {
     setState((s) => ({ ...s, loading: true }))
-    const result = await getProductionReportData(start, end)
+    const result = await getProductionReportData(startISO, endISO)
     if (!result.success) {
       toast.error(result.error ?? 'Lỗi tải báo cáo')
       setState((s) => ({ ...s, loading: false }))
       return
     }
-    setState({ loading: false, data: result.data ?? [], startDate: start, endDate: end })
+    setState({ loading: false, data: result.data ?? [], startISO, endISO, reportType: type })
   }, [])
 
   const kpis = useCallback(() => {
     const { data } = state
-    const totalOutput = data.reduce((s, r) => s + r.poutput, 0)
-    const totalError = data.reduce((s, r) => s + r.eoutput, 0)
+    const totalOutput  = data.reduce((s, r) => s + r.poutput, 0)
+    const totalError   = data.reduce((s, r) => s + r.eoutput, 0)
     const totalRecycle = data.reduce((s, r) => s + r.routput, 0)
-    const errorRate = totalOutput > 0 ? ((totalError / totalOutput) * 100).toFixed(1) : '0'
-    const avgNorm = data.length > 0
+    const errorRate    = totalOutput > 0 ? ((totalError / totalOutput) * 100).toFixed(1) : '0'
+    const avgNorm      = data.length > 0
       ? (data.reduce((s, r) => s + r.realnorm, 0) / data.length).toFixed(2)
       : '0'
     return { totalOutput, totalError, totalRecycle, errorRate, avgNorm, totalRows: data.length }
   }, [state])
 
+  // Groups chart data by key depending on reportType
   const chartByDate = useCallback(() => {
     const map = new Map<string, { output: number; error: number; recycle: number }>()
+
     state.data.forEach((r) => {
-      const prev = map.get(r.pdate) ?? { output: 0, error: 0, recycle: 0 }
-      map.set(r.pdate, {
-        output: prev.output + r.poutput,
-        error: prev.error + r.eoutput,
+      let key: string
+      switch (state.reportType) {
+        case 'hour': {
+          // Use starttime "HH:mm" → "HHh" grouping; fallback to created_at hour
+          const src = r.starttime || (r.created_at ? r.created_at.substring(11, 16) : '')
+          key = src ? `${src.substring(0, 2)}h` : '?h'
+          break
+        }
+        case 'month':
+          key = r.pdate ? r.pdate.substring(0, 7) : '?'   // "yyyy-MM"
+          break
+        case 'year':
+          key = r.pdate ? r.pdate.substring(0, 4) : '?'   // "yyyy"
+          break
+        default: // 'day'
+          key = r.pdate || '?'
+      }
+      const prev = map.get(key) ?? { output: 0, error: 0, recycle: 0 }
+      map.set(key, {
+        output:  prev.output  + r.poutput,
+        error:   prev.error   + r.eoutput,
         recycle: prev.recycle + r.routput,
       })
     })
+
     return [...map.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, v]) => ({ date, ...v }))
@@ -68,7 +92,7 @@ export function useReportData() {
       const prev = map.get(r.product) ?? { output: 0, error: 0 }
       map.set(r.product, {
         output: prev.output + r.poutput,
-        error: prev.error + r.eoutput,
+        error:  prev.error  + r.eoutput,
       })
     })
     return [...map.entries()]
@@ -91,14 +115,14 @@ export function useReportData() {
       if (!r.product) return
       const prev = map.get(r.product) ?? { product: r.product, norm: r.norm, realnorm: 0, count: 0 }
       map.set(r.product, {
-        product: r.product,
-        norm: r.norm,
+        product:  r.product,
+        norm:     r.norm,
         realnorm: prev.realnorm + r.realnorm,
-        count: prev.count + 1,
+        count:    prev.count + 1,
       })
     })
     return [...map.values()].map((d) => ({
-      product: d.product,
+      product:   d.product,
       'Định mức': d.norm,
       'Thực tế': d.count > 0 ? Math.round((d.realnorm / d.count) * 100) / 100 : 0,
     }))

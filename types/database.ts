@@ -156,7 +156,56 @@ export interface Database {
           log?: string | null
         }
       }
-    }
+      human_resource: {
+        Row: {
+          id: number
+          name: string
+          factory: string | null
+          machine: string | null
+          position: string | null
+          phone: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          name: string
+          factory?: string | null
+          machine?: string | null
+          position?: string | null
+          phone?: string | null
+        }
+        Update: {
+          name?: string
+          factory?: string | null
+          machine?: string | null
+          position?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+      }
+      hr_daily: {
+        Row: {
+          id: number
+          factory: string
+          pdate: string
+          totalem: number | null
+          absent_ids: number[] | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          factory: string
+          pdate: string
+          totalem?: number | null
+          absent_ids?: number[] | null
+        }
+        Update: {
+          totalem?: number | null
+          absent_ids?: number[] | null
+          updated_at?: string | null
+        }
+      }
+    }   // end Tables
     Views: Record<string, never>
     Functions: Record<string, never>
     Enums: {

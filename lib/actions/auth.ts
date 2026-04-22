@@ -3,7 +3,7 @@
 import { cache } from 'react'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { loginSchema, changePasswordSchema } from '@/lib/validations/auth'
 import logger from '@/lib/logger'
 import type { SessionUser } from '@/types'
@@ -84,9 +84,22 @@ export async function changePasswordAction(formData: FormData) {
     return { error: parsed.error.errors[0].message }
   }
 
-  const { newPassword } = parsed.data
+  const { oldPassword, newPassword } = parsed.data
 
   const supabase = await createClient()
+
+  // Get current user email from session
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user?.email) return { error: 'Phiên đăng nhập hết hạn' }
+
+  // Verify old password by attempting sign in
+  const { error: verifyErr } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: oldPassword,
+  })
+  if (verifyErr) return { error: 'Mật khẩu cũ không đúng!' }
+
+  // Now safe to update
   const { error } = await supabase.auth.updateUser({ password: newPassword })
 
   if (error) {
@@ -97,27 +110,3 @@ export async function changePasswordAction(formData: FormData) {
   return { success: true }
 }
 
-export async function createUserAction(params: {
-  username: string
-  password: string
-  role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'
-  workspace: string
-}) {
-  const { username, password, role, workspace } = params
-  const email = `${username.toLowerCase()}@dmc.local`
-
-  const supabase = await createServiceClient()
-  const { data, error } = await supabase.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { username, role, workspace },
-  })
-
-  if (error) {
-    logger.error({ error: error.message }, 'Create user failed')
-    return { error: error.message }
-  }
-
-  return { success: true, userId: data.user.id }
-}

@@ -94,16 +94,70 @@ export function calcRealNorm(params: {
   return Math.round(achievedRate * 100) / 100
 }
 
+// Bidirectional mapping: data.WORKSHOP (long, read-only) ↔ internal DMC codes
+// data.WORKSHOP is the source of truth and MUST NOT be modified.
+// normalizeWorkshop  → converts long name to DMC code when READING from data table
+// workshopToDataFilter → returns ilike prefix when QUERYING data table by DMC code
+// data.WORKSHOP is source of truth — NEVER modify it.
+// PX1 and PX2 both belong to DMC1 but keep distinct display labels.
+const WORKSHOP_MAP: Array<{ prefix: string; code: string }> = [
+  { prefix: 'Phân xưởng 1', code: 'DMC1' },
+  { prefix: 'Phân xưởng 2', code: 'DMC1' },
+  { prefix: 'Phân xưởng 3', code: 'DMC3' },
+  { prefix: 'Phân xưởng 4', code: 'DMC4' },
+  { prefix: 'Phân xưởng 5', code: 'DMC5' },
+]
+
+// Replaces "Phân xưởng N" prefix with DMC code, preserving the description suffix.
+// "Phân xưởng 1 - Tôn & Phụ kiện"    → "DMC1 - Tôn & Phụ kiện"
+// "Phân xưởng 2 - Tôn Pu & Phụ kiện" → "DMC1 - Tôn Pu & Phụ kiện"
+// Already-coded values ("DMC1") pass through unchanged.
+export function normalizeWorkshop(ws: string): string {
+  if (!ws) return ws
+  const trimmed = ws.trim()
+  const lower = trimmed.toLowerCase()
+  for (const { prefix, code } of WORKSHOP_MAP) {
+    if (lower.startsWith(prefix.toLowerCase())) {
+      const rest = trimmed.slice(prefix.length) // " - Tôn & Phụ kiện"
+      return `${code}${rest}`
+    }
+  }
+  return trimmed
+}
+
+// Extracts the DMC code from a workshop display label.
+// "DMC1 - Tôn & Phụ kiện" → "DMC1"
+// "DMC1"                   → "DMC1"
+export function workshopCode(ws: string): string {
+  return ws.split(/\s*[-—]\s*/)[0].trim().toUpperCase()
+}
+
+// Returns ilike patterns for querying data.WORKSHOP by DMC code.
+// DMC1 → ['Phân xưởng 1%', 'Phân xưởng 2%']
+export function workshopToDataFilters(code: string): string[] {
+  return WORKSHOP_MAP
+    .filter((m) => m.code === code.toUpperCase())
+    .map((m) => `${m.prefix}%`)
+}
+
+// workspaces: parsed list from getUserWorkspaces().
+// ADMIN/MANAGER → always allowed.
+// Empty list → getUserWorkspaces returned [] for '' OR 'ALL' → allow all.
+// Non-empty list → must match workshop code.
+// Only ADMIN bypasses workspace restrictions. MANAGER/SUPERVISOR/USER are all
+// workspace-scoped — their workspace field in profiles determines what they can access.
+// Empty workspaces list (from '' or 'ALL' in DB) → full access (no filter).
 export function isWorkspaceAllowed(
   workshop: string,
   role: string,
   workspaces: string[]
 ): boolean {
-  if (role === 'ADMIN' || role === 'MANAGER' || workspaces.length === 0) return true
-  return workspaces.includes(workshop)
+  if (role === 'ADMIN' || workspaces.length === 0) return true
+  const code = workshopCode(workshop) // "DMC1 - Tôn & Phụ kiện" → "DMC1"
+  return workspaces.some((w) => w.toUpperCase() === code)
 }
 
 export function getUserWorkspaces(workspace: string): string[] {
-  if (!workspace || workspace.toUpperCase() === 'ALL') return []
-  return workspace.split(',').map((w) => w.trim()).filter(Boolean)
+  if (!workspace || workspace.trim().toUpperCase() === 'ALL') return []
+  return workspace.split(',').map((w) => w.trim().toUpperCase()).filter(Boolean)
 }

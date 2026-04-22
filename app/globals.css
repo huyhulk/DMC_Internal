@@ -4,42 +4,178 @@
 
 @layer base {
   :root {
-    --background: 240 14% 7%;
-    --foreground: 240 10% 92%;
-    --card: 240 14% 11%;
-    --card-foreground: 240 10% 92%;
-    --popover: 240 14% 11%;
-    --popover-foreground: 240 10% 92%;
-    --primary: 231 74% 55%;
+    --background: 240 9% 96%;
+    --foreground: 240 3% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 3% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 3% 11%;
+    --primary: 231 68% 55%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 14% 18%;
-    --secondary-foreground: 240 10% 80%;
-    --muted: 240 14% 15%;
-    --muted-foreground: 240 8% 55%;
-    --accent: 240 14% 18%;
-    --accent-foreground: 240 10% 92%;
-    --destructive: 0 72% 55%;
+    --secondary: 240 6% 95%;
+    --secondary-foreground: 240 3% 40%;
+    --muted: 240 6% 95%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 240 6% 95%;
+    --accent-foreground: 240 3% 11%;
+    --destructive: 4 90% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 14% 20%;
-    --input: 240 14% 13%;
-    --ring: 231 74% 55%;
-    --radius: 0.5rem;
+    --border: 240 6% 84%;
+    --input: 240 6% 95%;
+    --ring: 231 68% 55%;
+    --radius: 0.75rem;
   }
 }
 
 @layer base {
   * { @apply border-border; }
+
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+                 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     @apply bg-dmc-bg-dark text-dmc-text-primary;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-size: 14px;
+    line-height: 1.5;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    letter-spacing: -0.01em;
   }
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { @apply bg-dmc-bg-dark; }
-  ::-webkit-scrollbar-thumb { @apply bg-dmc-border rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-dmc-text-muted; }
+
+  /* Light mode subtle scrollbar */
+  ::-webkit-scrollbar        { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track  { background: transparent; }
+  ::-webkit-scrollbar-thumb  { background: rgba(0,0,0,0.15); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+
+  /* Date/time/month input calendar picker */
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator {
+    filter: opacity(0.5);
+    cursor: pointer;
+  }
+
+  /* Number input spin buttons — visible, full-height, no overflow */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: inner-spin-button;
+    opacity: 0.45;
+    cursor: pointer;
+    margin-right: 1px;
+  }
+  input[type="number"]:hover::-webkit-inner-spin-button,
+  input[type="number"]:focus::-webkit-inner-spin-button,
+  input[type="number"]:hover::-webkit-outer-spin-button,
+  input[type="number"]:focus::-webkit-outer-spin-button {
+    opacity: 0.85;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgba(59, 91, 219, 0.5);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
 }
 
 @layer utilities {
-  .animate-in { animation: fade-in 0.2s ease-out both; }
-  .slide-in-right { animation: slide-in-right 0.2s ease-out both; }
+  /* ── Entrance animations ── */
+  .animate-in   { animation: fade-in  0.15s ease-out both; }
+  .scale-in     { animation: scale-in 0.15s ease-out both; }
+  .slide-up     { animation: slide-up 0.2s  ease-out both; }
+
+  /* ── Glassmorphism surfaces (light mode) ── */
+  .glass {
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 16px;
+  }
+
+  /* ── Apple-style input ── */
+  .apple-input {
+    @apply w-full h-10 px-3 rounded-xl text-sm
+           text-dmc-text-primary placeholder:text-dmc-text-muted
+           border border-dmc-border bg-dmc-bg-input
+           focus:outline-none focus:ring-2 focus:ring-dmc-primary/30 focus:border-dmc-primary/50
+           disabled:opacity-40 disabled:cursor-not-allowed
+           transition-all duration-150;
+  }
+
+  /* ── Segmented control (light mode) ── */
+  .segmented-control {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 14px;
+    padding: 3px;
+  }
+
+  .segmented-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.18s ease;
+    color: rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .segmented-item:hover {
+    color: rgba(0, 0, 0, 0.75);
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  .segmented-item.active {
+    background: #3b5bdb;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(59, 91, 219, 0.25);
+  }
+
+  /* ── Press feedback ── */
+  .pressable {
+    @apply active:scale-[0.97] transition-transform duration-75;
+  }
+
+  /* ── Hide scrollbar ── */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
 }

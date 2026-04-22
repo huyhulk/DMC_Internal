@@ -1,13 +1,22 @@
 import type { Metadata } from 'next'
+import { getSessionUser } from '@/lib/actions/auth'
+import { CoordinationTab } from '@/components/coordination/coordination-tab'
 
 export const metadata: Metadata = { title: 'Phối Hợp | DMC Production' }
 
-export default function CoordinationPage() {
+export default async function CoordinationPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sub?: string }>
+}) {
+  const [user, params] = await Promise.all([getSessionUser(), searchParams])
+  if (!user) return null
+
+  const activeSub = params.sub ?? 'hr'
+
   return (
-    <div className="h-full flex flex-col items-center justify-center text-dmc-text-muted">
-      <span className="text-5xl mb-4">🤝</span>
-      <p className="text-lg font-semibold text-dmc-text-primary">Module Phối Hợp</p>
-      <p className="text-sm mt-1">Đang phát triển...</p>
+    <div className="h-full overflow-hidden">
+      <CoordinationTab activeSub={activeSub} user={user} />
     </div>
   )
 }
