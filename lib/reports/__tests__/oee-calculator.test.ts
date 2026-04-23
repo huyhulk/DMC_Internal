@@ -5,8 +5,8 @@ import {
   calcQ,
   calcOEE,
   weightedAvg,
-  classifyShift,
 } from '../oee-calculator'
+import { classifyShift } from '@/lib/shifts'
 
 describe('durationHours', () => {
   it('tính đúng 2 giờ từ 7:30 đến 9:30', () => {
@@ -112,6 +112,6 @@ describe('classifyShift', () => {
   it('12:30 → ca_chieu_1', () => { expect(classifyShift('12:30')).toBe('ca_chieu_1') })
   it('14:30 → ca_chieu_2', () => { expect(classifyShift('14:30')).toBe('ca_chieu_2') })
   it('06:00 → khac', () => { expect(classifyShift('06:00')).toBe('khac') })
-  it('17:00 → khac', () => { expect(classifyShift('17:00')).toBe('khac') })
+  it('17:00 → ca_tang_ca', () => { expect(classifyShift('17:00')).toBe('ca_tang_ca') })
   it('chuỗi rỗng → khac', () => { expect(classifyShift('')).toBe('khac') })
 })

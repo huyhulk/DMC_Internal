@@ -54,21 +54,4 @@ export function weightedAvg(records: Array<{ value: number; weight: number }>): 
   return records.reduce((s, r) => s + r.value * r.weight, 0) / totalWeight
 }
 
-/**
- * Phân loại ca sản xuất dựa trên starttime (HH:mm)
- * Ca sáng 1: 7:30–9:30, Ca sáng 2: 9:30–11:30
- * Ca chiều 1: 12:30–14:30, Ca chiều 2: 14:30–16:30
- */
-export function classifyShift(
-  starttime: string,
-): 'ca_sang_1' | 'ca_sang_2' | 'ca_chieu_1' | 'ca_chieu_2' | 'khac' {
-  if (!starttime) return 'khac'
-  const [h, m] = starttime.split(':').map(Number)
-  if (isNaN(h) || isNaN(m)) return 'khac'
-  const totalMin = h * 60 + m
-  if (totalMin >= 450 && totalMin < 570) return 'ca_sang_1'   // 7:30–9:30
-  if (totalMin >= 570 && totalMin < 690) return 'ca_sang_2'   // 9:30–11:30
-  if (totalMin >= 750 && totalMin < 870) return 'ca_chieu_1'  // 12:30–14:30
-  if (totalMin >= 870 && totalMin < 990) return 'ca_chieu_2'  // 14:30–16:30
-  return 'khac'
-}
+// classifyShift đã chuyển sang lib/shifts.ts — import từ đó để dùng.

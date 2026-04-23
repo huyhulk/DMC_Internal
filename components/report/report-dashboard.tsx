@@ -24,7 +24,6 @@ interface SectionState {
 const INIT: SectionState = { loading: false, data: null, error: null }
 
 const GROUP_BY_OPTS: { value: GroupBy; label: string }[] = [
-  { value: 'shift', label: 'Ca' },
   { value: 'day',   label: 'Ngày' },
   { value: 'week',  label: 'Tuần' },
   { value: 'month', label: 'Tháng' },

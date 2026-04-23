@@ -3,18 +3,89 @@
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
   ResponsiveContainer, CartesianGrid, Cell,
+  LineChart, Line, ReferenceLine,
 } from 'recharts'
 import { OEEGaugeChart, OEERadarChart } from '../charts/oee-chart'
 import type { OEEWorkshop, WorkshopCode } from '@/lib/reports/report-types'
-import { WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/lib/reports/report-types'
+import { WORKSHOP_CODES, WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/lib/reports/report-types'
+
+type OEETrendDetail = Array<{ period: string; A: number; P: number; Q: number; OEE: number; poutput: number }>
+type OEETrendComparison = Array<{ period: string; [key: string]: number | string }>
 
 interface OEEData {
-  workshop?:  OEEWorkshop
-  workshops?: OEEWorkshop[]
-  ranking?:   Array<OEEWorkshop & { rank: number }>
+  workshop?:      OEEWorkshop
+  workshops?:     OEEWorkshop[]
+  ranking?:       Array<OEEWorkshop & { rank: number }>
+  trendByPeriod?: OEETrendDetail | OEETrendComparison
 }
 
 const pct = (v: number) => `${Math.round(v * 1000) / 10}%`
+const toP = (v: number) => Math.round(v * 1000) / 10  // 0-1 → 0.0–100.0 percentage
+
+const OEE_BENCHMARK = 65  // % — ngưỡng chuẩn chung
+
+// ── OEE Trend chart (detail: A/P/Q/OEE lines) ────────────────────────────
+
+function OEETrendDetailChart({ trend }: { trend: OEETrendDetail }) {
+  if (trend.length === 0) return null
+  const chartData = trend.map((pt) => ({
+    period: pt.period,
+    A:   toP(pt.A),
+    P:   toP(pt.P),
+    Q:   toP(pt.Q),
+    OEE: toP(pt.OEE),
+  }))
+  return (
+    <div>
+      <p className="text-[12px] font-semibold text-[#6e6e73] mb-2 uppercase tracking-wide">Xu hướng OEE theo kỳ</p>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={chartData} margin={{ left: 0, right: 16 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+          <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10 }} />
+          <Tooltip formatter={(v: number) => `${v}%`} />
+          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+          <ReferenceLine y={OEE_BENCHMARK} stroke="#ff3b30" strokeDasharray="4 3"
+            label={{ value: `${OEE_BENCHMARK}%`, position: 'right', fontSize: 10, fill: '#ff3b30' }} />
+          <Line type="monotone" dataKey="A"   stroke="#3b82f6" dot={false} strokeWidth={1.5} />
+          <Line type="monotone" dataKey="P"   stroke="#f97316" dot={false} strokeWidth={1.5} />
+          <Line type="monotone" dataKey="Q"   stroke="#10b981" dot={false} strokeWidth={1.5} />
+          <Line type="monotone" dataKey="OEE" stroke="#8b5cf6" dot={false} strokeWidth={2}   />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ── OEE Trend chart (comparison: 4 workshop OEE lines) ───────────────────
+
+function OEETrendComparisonChart({ trend }: { trend: OEETrendComparison }) {
+  if (trend.length === 0) return null
+  const chartData = trend.map((pt) => {
+    const entry: Record<string, number | string> = { period: pt.period }
+    for (const ws of WORKSHOP_CODES) entry[ws] = toP((pt[ws] as number) ?? 0)
+    return entry
+  })
+  return (
+    <div>
+      <p className="text-[12px] font-semibold text-[#6e6e73] mb-2 uppercase tracking-wide">Xu hướng OEE 4 xưởng</p>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={chartData} margin={{ left: 0, right: 16 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+          <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10 }} />
+          <Tooltip formatter={(v: number) => `${v}%`} />
+          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+          <ReferenceLine y={OEE_BENCHMARK} stroke="#ff3b30" strokeDasharray="4 3"
+            label={{ value: `${OEE_BENCHMARK}%`, position: 'right', fontSize: 10, fill: '#ff3b30' }} />
+          {WORKSHOP_CODES.map((ws) => (
+            <Line key={ws} type="monotone" dataKey={ws} stroke={WORKSHOP_COLORS[ws]} dot={false} strokeWidth={1.5} />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
 
 // ── Detail mode ──────────────────────────────────────────────────────────
 
@@ -22,9 +93,15 @@ export function OEEDetail({ data }: { data: OEEData }) {
   const ws = data.workshop
   if (!ws) return <EmptyState />
 
+  const trend = data.trendByPeriod as OEETrendDetail | undefined
+
   return (
     <div className="space-y-6">
       <OEEGaugeChart data={ws} />
+
+      {trend && trend.length > 0 && (
+        <OEETrendDetailChart trend={trend} />
+      )}
 
       {ws.lines && ws.lines.length > 0 && (
         <div>
@@ -67,6 +144,8 @@ export function OEEDetail({ data }: { data: OEEData }) {
 export function OEEComparison({ data }: { data: OEEData }) {
   const workshops = data.workshops ?? []
   if (workshops.length === 0) return <EmptyState />
+
+  const trend = data.trendByPeriod as OEETrendComparison | undefined
 
   const barData = workshops.map((w) => ({
     name: w.workshop,
@@ -132,6 +211,10 @@ export function OEEComparison({ data }: { data: OEEData }) {
             </table>
           </div>
         </div>
+      )}
+
+      {trend && trend.length > 0 && (
+        <OEETrendComparisonChart trend={trend} />
       )}
     </div>
   )

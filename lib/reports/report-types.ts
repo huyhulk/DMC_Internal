@@ -1,5 +1,5 @@
 export type ReportMode = 'detail' | 'comparison'
-export type GroupBy = 'shift' | 'day' | 'week' | 'month' | 'year'
+export type GroupBy = 'day' | 'week' | 'month' | 'year'
 export type RankingMetric = 'oee' | 'quality' | 'output' | 'progress'
 
 export const WORKSHOP_CODES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
@@ -20,14 +20,15 @@ export const WORKSHOP_LABEL: Record<WorkshopCode, string> = {
   DMC5: 'DMC5 — Tôn & PU',
 }
 
-// 4 khung giờ ca sản xuất
-export type ShiftSlot = 'ca_sang_1' | 'ca_sang_2' | 'ca_chieu_1' | 'ca_chieu_2' | 'khac'
+// 5 khung giờ ca sản xuất (bao gồm tăng ca)
+export type ShiftSlot = 'ca_sang_1' | 'ca_sang_2' | 'ca_chieu_1' | 'ca_chieu_2' | 'ca_tang_ca' | 'khac'
 
 export const SHIFT_LABELS: Record<ShiftSlot, string> = {
   ca_sang_1:  '7:30–9:30',
   ca_sang_2:  '9:30–11:30',
   ca_chieu_1: '12:30–14:30',
   ca_chieu_2: '14:30–16:30',
+  ca_tang_ca: 'Tăng ca (16:30–22:00)',
   khac:       'Ngoài ca',
 }
 
@@ -70,16 +71,18 @@ export interface OEEWorkshop extends OEEMetrics {
 export type OrderStatusCode = 'completed' | 'in_progress' | 'overdue' | 'due_soon'
 
 export interface OrderStatus {
-  pcode:        string
-  workshop:     WorkshopCode
-  description:  string
-  customer:     string
-  quantity:     string
-  initialdate:  string
-  deadlinedate: string
-  deadlinetime: string
-  status:       OrderStatusCode
+  pcode:         string
+  workshop:      WorkshopCode
+  description:   string
+  customer:      string
+  quantity:      string
+  initialdate:   string
+  deadlinedate:  string
+  deadlinetime:  string
+  status:        OrderStatusCode
   hasProduction: boolean
+  totalOutput:   number
+  completionPct: number
 }
 
 export interface ProgressSummary {

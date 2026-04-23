@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import type { WorkshopCode, ReportMode, GroupBy } from '@/lib/reports/report-types'
 import { WORKSHOP_CODES } from '@/lib/reports/report-types'
 
+const VALID_GROUP_BY: GroupBy[] = ['day', 'week', 'month', 'year']
+
 export async function requireAuth() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -20,6 +22,9 @@ export function parseReportParams(searchParams: URLSearchParams) {
   if (!['detail', 'comparison'].includes(mode)) errors.push('mode phải là detail hoặc comparison')
   if (mode === 'detail' && (!workshopId || !WORKSHOP_CODES.includes(workshopId))) {
     errors.push('workshopId bắt buộc khi mode=detail, phải là DMC1/DMC3/DMC4/DMC5')
+  }
+  if (!VALID_GROUP_BY.includes(groupBy as GroupBy)) {
+    errors.push(`groupBy không hợp lệ: "${groupBy}". Dùng: ${VALID_GROUP_BY.join(', ')}`)
   }
   if (from > to) errors.push('from phải nhỏ hơn hoặc bằng to')
 
