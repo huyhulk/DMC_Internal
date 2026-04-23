@@ -1,5 +1,6 @@
 export type ReportMode = 'detail' | 'comparison'
-export type GroupBy = 'day' | 'week' | 'month' | 'year'
+export type GroupBy = 'day' | 'week' | 'month' | 'year' | 'hour'
+export type FilterBy = 'deadline' | 'initialdate' | 'completed_date'
 export type RankingMetric = 'oee' | 'quality' | 'output' | 'progress'
 
 export const WORKSHOP_CODES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const

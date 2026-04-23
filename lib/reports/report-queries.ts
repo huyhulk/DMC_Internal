@@ -5,10 +5,19 @@ import {
 } from './oee-calculator'
 import { classifyShift, toPeriodKey } from '@/lib/shifts'
 import type {
-  WorkshopCode, GroupBy, ProdRow, OEELine, OEEWorkshop,
+  WorkshopCode, GroupBy, FilterBy, ProdRow, OEELine, OEEWorkshop,
   OrderStatus, ProgressSummary, HeatmapCell,
 } from './report-types'
 import { WORKSHOP_CODES, SHIFT_LABELS } from './report-types'
+
+// Hour-aware period key: combines pdate + starttime HH when groupBy='hour'
+function getPeriodKey(r: ProdRow, groupBy: GroupBy): string {
+  if (groupBy === 'hour') {
+    const h = r.starttime ? r.starttime.substring(0, 2) : '??'
+    return `${r.pdate} ${h}:00`
+  }
+  return toPeriodKey(r.pdate, groupBy)
+}
 
 // ── fetchProdRows ─────────────────────────────────────────────────────────
 // RPC path (migration 005): 1 query — JOIN Production+DATA+Norm trong SQL.
@@ -120,6 +129,7 @@ export async function queryProgress(
   workshopId: WorkshopCode | null,
   from: string,
   to: string,
+  filterBy: FilterBy = 'deadline',
 ): Promise<{ orders?: OrderStatus[]; summary?: ProgressSummary; summaries?: ProgressSummary[] }> {
   const supabase = await createClient()
   const now = new Date()
@@ -130,12 +140,29 @@ export async function queryProgress(
     DEADLINEDATE: string | null; STATUS: string | null
   }
 
+  const emptyResult = () => workshopId
+    ? { orders: [], summary: { workshop: workshopId, total: 0, completed: 0, overdue: 0, dueSoon: 0, progressPct: 0 } }
+    : { summaries: WORKSHOP_CODES.map((ws) => ({ workshop: ws, total: 0, completed: 0, overdue: 0, dueSoon: 0, progressPct: 0 })) }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let dataQuery: any = supabase
     .from('data')
     .select('PCODE,WORKSHOP,DESCRIPTION,CUSTOMER,QUANTITY,INITIALDATE,DEADLINEDATE,STATUS')
-    .gte('INITIALDATE', from)
-    .lte('INITIALDATE', to)
+
+  if (filterBy === 'completed_date') {
+    // Show orders that had any production activity within the date range
+    const { data: prodRows } = await supabase
+      .from('Production').select('pcode')
+      .gte('pdate', from).lte('pdate', to) as { data: { pcode: string | null }[] | null }
+    const activePcodes = [...new Set((prodRows ?? []).map((r) => r.pcode).filter(Boolean))] as string[]
+    if (activePcodes.length === 0) return emptyResult()
+    dataQuery = dataQuery.in('PCODE', activePcodes)
+  } else if (filterBy === 'initialdate') {
+    dataQuery = dataQuery.gte('INITIALDATE', from).lte('INITIALDATE', to)
+  } else {
+    // default: deadline
+    dataQuery = dataQuery.gte('DEADLINEDATE', from).lte('DEADLINEDATE', to)
+  }
 
   if (workshopId) {
     const filters = workshopToDataFilters(workshopId)
@@ -144,11 +171,7 @@ export async function queryProgress(
   }
 
   const { data: dataRows } = await dataQuery as { data: DataSelect[] | null }
-  if (!dataRows || dataRows.length === 0) {
-    return workshopId
-      ? { orders: [], summary: { workshop: workshopId, total: 0, completed: 0, overdue: 0, dueSoon: 0, progressPct: 0 } }
-      : { summaries: WORKSHOP_CODES.map((ws) => ({ workshop: ws, total: 0, completed: 0, overdue: 0, dueSoon: 0, progressPct: 0 })) }
-  }
+  if (!dataRows || dataRows.length === 0) return emptyResult()
 
   const allPcodes = dataRows.map((r) => r.PCODE).filter(Boolean)
   const { data: prodRows } = await supabase
@@ -246,10 +269,10 @@ export async function queryOutput(
     return entry
   })
 
-  // Theo kỳ (ngày/tuần/tháng/năm)
+  // Theo kỳ (ngày/tuần/tháng/năm/giờ)
   const periodAcc = new Map<string, Map<string, number>>()
   for (const r of rows) {
-    const period = toPeriodKey(r.pdate, groupBy)
+    const period = getPeriodKey(r, groupBy)
     const key    = workshopId ? r.product : r.workshop
     if (!periodAcc.has(period)) periodAcc.set(period, new Map(seriesKeys.map((k) => [k, 0])))
     if (seriesKeys.includes(key)) {
@@ -306,7 +329,7 @@ export async function queryQuality(
   // Xu hướng theo kỳ
   const periodAcc = new Map<string, Map<string, Acc>>()
   for (const r of rows) {
-    const period = toPeriodKey(r.pdate, groupBy)
+    const period = getPeriodKey(r, groupBy)
     const key    = workshopId ? r.product : r.workshop
     if (!periodAcc.has(period)) periodAcc.set(period, makeAcc())
     if (seriesKeys.includes(key)) {
