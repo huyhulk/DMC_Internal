@@ -1,15 +1,37 @@
 import { createClient } from '@/lib/supabase/server'
-import { workshopToDataFilters, workshopCode } from '@/lib/utils'
+import { workshopToDataFilters, workshopCode, normalizeWorkshop } from '@/lib/utils'
 import {
-  calcA, calcP, calcQ, calcOEE, weightedAvg, durationHours, classifyShift,
+  calcA, calcP, calcQ, calcOEE, weightedAvg, durationHours,
 } from './oee-calculator'
+import { classifyShift, toPeriodKey } from '@/lib/shifts'
 import type {
   WorkshopCode, GroupBy, ProdRow, OEELine, OEEWorkshop,
   OrderStatus, ProgressSummary, HeatmapCell,
 } from './report-types'
 import { WORKSHOP_CODES, SHIFT_LABELS } from './report-types'
 
-// Lấy Production rows cho 1 xưởng (hoặc tất cả) + join norm/workshop
+// ── fetchProdRows ─────────────────────────────────────────────────────────
+// RPC path (migration 005): 1 query — JOIN Production+DATA+Norm trong SQL.
+// Legacy path (fallback): 3 queries — hoạt động khi chưa chạy migration 005.
+
+type RpcRow = {
+  pcode: string | null; pdate: string | null; workshop: string | null; product: string | null
+  poutput: number | null; eoutput: number | null; routput: number | null
+  workforce: number | null; starttime: string | null; endtime: string | null
+  realnorm: number | null; norm: number | null; pspeed: number | null
+}
+
+function mapRpcRow(r: RpcRow): ProdRow {
+  const ws = (r.workshop ?? '') as WorkshopCode
+  const validWs: WorkshopCode = WORKSHOP_CODES.includes(ws) ? ws : 'DMC1'
+  return {
+    pcode: r.pcode ?? '', pdate: r.pdate ?? '', workshop: validWs, product: r.product ?? '',
+    poutput: r.poutput ?? 0, eoutput: r.eoutput ?? 0, routput: r.routput ?? 0,
+    workforce: r.workforce ?? 0, starttime: r.starttime ?? '', endtime: r.endtime ?? '',
+    realnorm: r.realnorm ?? 0, norm: r.norm ?? 0, pspeed: r.pspeed ?? 0,
+  }
+}
+
 async function fetchProdRows(
   workshopId: WorkshopCode | null,
   from: string,
@@ -17,17 +39,34 @@ async function fetchProdRows(
 ): Promise<ProdRow[]> {
   const supabase = await createClient()
 
-  // Bước 1: Lấy pcode thuộc xưởng đích
+  // RPC path — requires migration 005
+  const { data: rpcData, error: rpcErr } = await supabase
+    .rpc('rpc_fetch_prod_rows', { p_from: from, p_to: to, p_workshop_code: workshopId ?? null })
+
+  if (!rpcErr && Array.isArray(rpcData)) {
+    return (rpcData as RpcRow[]).map(mapRpcRow)
+  }
+
+  // Legacy fallback (3 queries)
+  return _fetchProdRowsLegacy(supabase, workshopId, from, to)
+}
+
+async function _fetchProdRowsLegacy(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  workshopId: WorkshopCode | null,
+  from: string,
+  to: string,
+): Promise<ProdRow[]> {
   let workshopPcodes: string[] | null = null
   if (workshopId) {
     const filters = workshopToDataFilters(workshopId)
     const orStr = filters.map((f) => `WORKSHOP.ilike.${f}`).join(',')
     const { data } = await supabase.from('data').select('PCODE').or(orStr)
-    workshopPcodes = ((data ?? []) as { PCODE: string }[]).map((r) => r.PCODE)
+    workshopPcodes = ((data ?? []) as { PCODE: string }[]).map((r: { PCODE: string }) => r.PCODE)
     if (workshopPcodes.length === 0) return []
   }
 
-  // Bước 2: Lấy production records theo ngày
   type ProdSelect = {
     pcode: string | null; pdate: string | null; products: string | null
     poutput: number | null; eoutput: number | null; routput: number | null
@@ -38,59 +77,39 @@ async function fetchProdRows(
   let query: any = supabase
     .from('Production')
     .select('pcode,pdate,products,poutput,eoutput,routput,workforce,starttime,endtime,realnorm')
-    .gte('pdate', from)
-    .lte('pdate', to)
-
+    .gte('pdate', from).lte('pdate', to)
   if (workshopPcodes) query = query.in('pcode', workshopPcodes)
 
   const { data: prodData } = await query as { data: ProdSelect[] | null }
   if (!prodData || prodData.length === 0) return []
 
-  // Bước 3: Map pcode → workshop
   const uniquePcodes = [...new Set(prodData.map((r) => r.pcode).filter(Boolean))] as string[]
   const { data: orderData } = await supabase
-    .from('data')
-    .select('PCODE,WORKSHOP')
-    .in('PCODE', uniquePcodes) as { data: { PCODE: string; WORKSHOP: string | null }[] | null }
-
+    .from('data').select('PCODE,WORKSHOP').in('PCODE', uniquePcodes) as {
+      data: { PCODE: string; WORKSHOP: string | null }[] | null
+    }
   const pcodeToWs = new Map<string, string>(
-    (orderData ?? []).map((r) => [r.PCODE, r.WORKSHOP ?? ''])
+    (orderData ?? []).map((r: { PCODE: string; WORKSHOP: string | null }) => [r.PCODE, r.WORKSHOP ?? ''])
   )
 
-  // Bước 4: Lấy norm + pspeed
-  const { data: normData } = await supabase
-    .from('Norm')
-    .select('products,norm,pspeed,workshop') as {
-      data: { products: string; norm: number | null; pspeed: number | null; workshop: string | null }[] | null
-    }
-
+  const { data: normData } = await supabase.from('Norm').select('products,norm,pspeed,workshop') as {
+    data: { products: string; norm: number | null; pspeed: number | null; workshop: string | null }[] | null
+  }
   const normMap = new Map<string, { norm: number; pspeed: number }>()
   for (const n of normData ?? []) {
-    const key = `${n.products}|||${workshopCode(n.workshop ?? '')}`
-    normMap.set(key, { norm: n.norm ?? 0, pspeed: n.pspeed ?? 0 })
+    normMap.set(`${n.products}|||${workshopCode(n.workshop ?? '')}`, { norm: n.norm ?? 0, pspeed: n.pspeed ?? 0 })
   }
 
-  // Bước 5: Kết hợp thành ProdRow
   return prodData.map((r) => {
     const rawWs = pcodeToWs.get(r.pcode ?? '') ?? ''
-    const ws = workshopCode(rawWs) as WorkshopCode
+    const ws = workshopCode(normalizeWorkshop(rawWs)) as WorkshopCode
     const validWs: WorkshopCode = WORKSHOP_CODES.includes(ws) ? ws : 'DMC1'
-    const normKey = `${r.products}|||${validWs}`
-    const normInfo = normMap.get(normKey) ?? { norm: 0, pspeed: 0 }
+    const normInfo = normMap.get(`${r.products}|||${validWs}`) ?? { norm: 0, pspeed: 0 }
     return {
-      pcode:     r.pcode ?? '',
-      pdate:     r.pdate ?? '',
-      workshop:  validWs,
-      product:   r.products ?? '',
-      poutput:   r.poutput ?? 0,
-      eoutput:   r.eoutput ?? 0,
-      routput:   r.routput ?? 0,
-      workforce: r.workforce ?? 0,
-      starttime: r.starttime ?? '',
-      endtime:   r.endtime ?? '',
-      realnorm:  r.realnorm ?? 0,
-      norm:      normInfo.norm,
-      pspeed:    normInfo.pspeed,
+      pcode: r.pcode ?? '', pdate: r.pdate ?? '', workshop: validWs, product: r.products ?? '',
+      poutput: r.poutput ?? 0, eoutput: r.eoutput ?? 0, routput: r.routput ?? 0,
+      workforce: r.workforce ?? 0, starttime: r.starttime ?? '', endtime: r.endtime ?? '',
+      realnorm: r.realnorm ?? 0, norm: normInfo.norm, pspeed: normInfo.pspeed,
     }
   })
 }
@@ -134,35 +153,47 @@ export async function queryProgress(
   const allPcodes = dataRows.map((r) => r.PCODE).filter(Boolean)
   const { data: prodRows } = await supabase
     .from('Production')
-    .select('pcode')
-    .in('pcode', allPcodes) as { data: { pcode: string | null }[] | null }
+    .select('pcode,poutput')
+    .in('pcode', allPcodes) as { data: { pcode: string | null; poutput: number | null }[] | null }
 
-  const submittedSet = new Set((prodRows ?? []).map((r) => r.pcode).filter(Boolean))
+  // Sum poutput per pcode (một lệnh có thể có nhiều records)
+  const pcodeSumMap = new Map<string, number>()
+  for (const r of prodRows ?? []) {
+    if (!r.pcode) continue
+    pcodeSumMap.set(r.pcode, (pcodeSumMap.get(r.pcode) ?? 0) + (r.poutput ?? 0))
+  }
 
   const orders: OrderStatus[] = dataRows.map((r) => {
-    const ws = workshopCode(r.WORKSHOP ?? '') as WorkshopCode
+    const ws = workshopCode(normalizeWorkshop(r.WORKSHOP ?? '')) as WorkshopCode
     const validWs: WorkshopCode = WORKSHOP_CODES.includes(ws) ? ws : 'DMC1'
-    const hasProduction = submittedSet.has(r.PCODE)
+    const totalOutput   = pcodeSumMap.get(r.PCODE) ?? 0
+    const hasProduction = totalOutput > 0
+    const qty           = r.QUANTITY ?? 0
+    // Hoàn thành khi tổng sản lượng thực tế >= số lượng đặt hàng
+    const isCompleted   = hasProduction && (qty <= 0 || totalOutput >= qty)
+    const completionPct = qty > 0 ? Math.min(100, Math.round((totalOutput / qty) * 100)) : (hasProduction ? 100 : 0)
     const dl = r.DEADLINEDATE ? new Date(r.DEADLINEDATE) : null
 
-    let status: OrderStatus['status'] = hasProduction ? 'completed' : 'in_progress'
-    if (!hasProduction && dl) {
+    let status: OrderStatus['status'] = isCompleted ? 'completed' : 'in_progress'
+    if (!isCompleted && dl) {
       if (dl < now) status = 'overdue'
       else if (dl.getTime() - now.getTime() < 86_400_000) status = 'due_soon'
     }
 
     const dlStr = r.DEADLINEDATE ?? ''
     return {
-      pcode:        r.PCODE,
-      workshop:     validWs,
-      description:  r.DESCRIPTION ?? '',
-      customer:     r.CUSTOMER ?? '',
-      quantity:     r.QUANTITY != null ? String(r.QUANTITY) : '',
-      initialdate:  r.INITIALDATE ?? '',
-      deadlinedate: dlStr.substring(0, 10),
-      deadlinetime: dlStr.includes('T') ? dlStr.substring(11, 16) : '',
+      pcode:         r.PCODE,
+      workshop:      validWs,
+      description:   r.DESCRIPTION ?? '',
+      customer:      r.CUSTOMER ?? '',
+      quantity:      qty > 0 ? String(qty) : '',
+      initialdate:   r.INITIALDATE ?? '',
+      deadlinedate:  dlStr.substring(0, 10),
+      deadlinetime:  dlStr.includes('T') ? dlStr.substring(11, 16) : '',
       status,
       hasProduction,
+      totalOutput,
+      completionPct,
     }
   })
 
@@ -307,6 +338,7 @@ export async function queryOEE(
   workshopId: WorkshopCode | null,
   from: string,
   to: string,
+  groupBy: GroupBy = 'day',
 ) {
   const rows = await fetchProdRows(workshopId, from, to)
 
@@ -325,6 +357,23 @@ export async function queryOEE(
     return { poutput, A: w('A'), P: w('P'), Q: w('Q'), OEE: w('OEE') }
   }
 
+  // Group by period and compute weighted OEE metrics
+  const periodRollup = (
+    recs: typeof withMetrics,
+    filterWs?: WorkshopCode,
+  ): Array<{ period: string; A: number; P: number; Q: number; OEE: number; poutput: number }> => {
+    const map = new Map<string, typeof withMetrics>()
+    for (const r of recs) {
+      if (filterWs && r.workshop !== filterWs) continue
+      const p = toPeriodKey(r.pdate, groupBy)
+      if (!map.has(p)) map.set(p, [])
+      map.get(p)!.push(r)
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([period, pts]) => ({ period, ...rollup(pts) }))
+  }
+
   if (workshopId) {
     const lineMap = new Map<string, typeof withMetrics>()
     for (const r of withMetrics) {
@@ -337,6 +386,7 @@ export async function queryOEE(
     }))
     return {
       workshop: { workshop: workshopId, ...rollup(withMetrics), lines },
+      trendByPeriod: periodRollup(withMetrics),
     }
   }
 
@@ -348,7 +398,22 @@ export async function queryOEE(
     .sort((a, b) => b.OEE - a.OEE)
     .map((ws, i) => ({ ...ws, rank: i + 1 }))
 
-  return { workshops, ranking }
+  // Comparison trend: per period, OEE per workshop
+  const allPeriods = new Set<string>()
+  const wsOeeByPeriod = new Map<WorkshopCode, Map<string, number>>()
+  for (const ws of WORKSHOP_CODES) {
+    const pts = periodRollup(withMetrics, ws)
+    const m = new Map<string, number>()
+    for (const pt of pts) { allPeriods.add(pt.period); m.set(pt.period, pt.OEE) }
+    wsOeeByPeriod.set(ws, m)
+  }
+  const trendByPeriod = [...allPeriods].sort().map((period) => {
+    const entry: Record<string, number | string> = { period }
+    for (const ws of WORKSHOP_CODES) entry[ws] = wsOeeByPeriod.get(ws)?.get(period) ?? 0
+    return entry
+  })
+
+  return { workshops, ranking, trendByPeriod }
 }
 
 // ── 5. Xếp hạng ─────────────────────────────────────────────────────────
@@ -394,19 +459,4 @@ export async function queryRanking(metric: string, from: string, to: string) {
   }))
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────
-
-function toPeriodKey(pdate: string, groupBy: GroupBy): string {
-  if (!pdate) return '?'
-  switch (groupBy) {
-    case 'week': {
-      const d    = new Date(pdate)
-      const jan1 = new Date(d.getFullYear(), 0, 1)
-      const week = Math.ceil(((d.getTime() - jan1.getTime()) / 86_400_000 + jan1.getDay() + 1) / 7)
-      return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`
-    }
-    case 'month': return pdate.substring(0, 7)
-    case 'year':  return pdate.substring(0, 4)
-    default:      return pdate.substring(0, 10) // day or shift
-  }
-}
+// toPeriodKey đã chuyển sang lib/shifts.ts (ISO 8601 week).

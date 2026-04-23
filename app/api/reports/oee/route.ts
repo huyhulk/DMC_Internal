@@ -9,6 +9,6 @@ export async function GET(req: NextRequest) {
   const { mode, workshopId, from, to, groupBy, errors } = parseReportParams(req.nextUrl.searchParams)
   if (errors.length > 0) return errResponse(errors.join('; '))
 
-  const data = await queryOEE(workshopId, from, to)
+  const data = await queryOEE(workshopId, from, to, groupBy)
   return okResponse(data, { mode, from, to, groupBy })
 }

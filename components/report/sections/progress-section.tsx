@@ -1,7 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import type { OrderStatus, ProgressSummary, ReportMode, WorkshopCode } from '@/lib/reports/report-types'
+import type { OrderStatus, OrderStatusCode, ProgressSummary, ReportMode, WorkshopCode } from '@/lib/reports/report-types'
 import { WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/lib/reports/report-types'
 import { cn } from '@/lib/utils'
 
@@ -24,6 +25,19 @@ export function ProgressDetail({ orders, summary }: {
   orders: OrderStatus[]
   summary: ProgressSummary
 }) {
+  const [activeFilter, setActiveFilter] = useState<OrderStatusCode | null>(null)
+
+  const kpiItems: { label: string; value: number; color: string; activeColor: string; filter: OrderStatusCode | null }[] = [
+    { label: 'Tổng LSX',   value: summary.total,     color: 'text-[#1d1d1f]',  activeColor: 'bg-[#1d1d1f]/8 border-[#1d1d1f]/20',   filter: null },
+    { label: 'Hoàn thành', value: summary.completed, color: 'text-[#2f9e44]',  activeColor: 'bg-[#34c759]/15 border-[#2f9e44]/30',  filter: 'completed' },
+    { label: 'Trễ hạn',    value: summary.overdue,   color: 'text-[#ff3b30]',  activeColor: 'bg-[#ff3b30]/10 border-[#ff3b30]/30',  filter: 'overdue' },
+    { label: 'Sắp hạn',    value: summary.dueSoon,   color: 'text-[#b37700]',  activeColor: 'bg-[#ff9500]/10 border-[#ff9500]/30',  filter: 'due_soon' },
+  ]
+
+  const visibleOrders = activeFilter
+    ? orders.filter((o) => o.status === activeFilter)
+    : orders
+
   return (
     <div className="space-y-4">
       {/* Summary bar */}
@@ -39,19 +53,28 @@ export function ProgressDetail({ orders, summary }: {
         </span>
       </div>
 
-      {/* KPI badges */}
-      <div className="flex gap-3 flex-wrap">
-        {[
-          { label: 'Tổng LSX', value: summary.total, color: 'text-[#1d1d1f]' },
-          { label: 'Hoàn thành', value: summary.completed, color: 'text-[#2f9e44]' },
-          { label: 'Trễ hạn', value: summary.overdue, color: 'text-[#ff3b30]' },
-          { label: 'Sắp hạn', value: summary.dueSoon, color: 'text-[#b37700]' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="flex flex-col items-center min-w-[60px]">
-            <span className={cn('text-[20px] font-bold', color)}>{value}</span>
-            <span className="text-[11px] text-[#6e6e73]">{label}</span>
-          </div>
-        ))}
+      {/* KPI filter buttons */}
+      <div className="flex gap-2 flex-wrap">
+        {kpiItems.map(({ label, value, color, activeColor, filter }) => {
+          const isActive = activeFilter === filter
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setActiveFilter(isActive ? null : filter)}
+              className={cn(
+                'flex flex-col items-center min-w-[72px] px-3 py-2 rounded-xl border transition-all',
+                'cursor-pointer select-none active:scale-[0.97]',
+                isActive
+                  ? cn('shadow-sm', activeColor)
+                  : 'bg-[#f2f2f7] border-transparent hover:border-[#d2d2d7]'
+              )}
+            >
+              <span className={cn('text-[20px] font-bold', color)}>{value}</span>
+              <span className="text-[11px] text-[#6e6e73]">{label}</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Orders table */}
@@ -59,15 +82,15 @@ export function ProgressDetail({ orders, summary }: {
         <table className="w-full text-[12px]">
           <thead className="bg-[#f2f2f7]">
             <tr>
-              {['Mã LSX', 'Mô tả', 'KH', 'Ngày SX', 'Deadline', 'Trạng thái'].map((h) => (
+              {['Mã LSX', 'Mô tả', 'KH', 'Ngày SX', 'Deadline', 'SL thực / ĐH', 'Trạng thái'].map((h) => (
                 <th key={h} className="px-3 py-2 text-left text-[#6e6e73] font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {orders.length === 0 ? (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-[#aeaeb2]">Không có dữ liệu</td></tr>
-            ) : orders.map((o) => (
+            {visibleOrders.length === 0 ? (
+              <tr><td colSpan={7} className="px-3 py-8 text-center text-[#aeaeb2]">Không có dữ liệu</td></tr>
+            ) : visibleOrders.map((o) => (
               <tr key={o.pcode} className="border-t border-[#d2d2d7]/40 hover:bg-[#f2f2f7]/60">
                 <td className="px-3 py-2 font-mono font-semibold text-[#3b5bdb]">{o.pcode}</td>
                 <td className="px-3 py-2 max-w-[200px] truncate">{o.description}</td>
@@ -75,6 +98,17 @@ export function ProgressDetail({ orders, summary }: {
                 <td className="px-3 py-2 whitespace-nowrap">{o.initialdate}</td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   {o.deadlinedate}{o.deadlinetime ? ` ${o.deadlinetime}` : ''}
+                </td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    <span className={cn('font-medium', o.status === 'completed' ? 'text-[#2f9e44]' : 'text-[#1d1d1f]')}>
+                      {(o.totalOutput ?? 0).toLocaleString()}
+                      {o.quantity ? `/${o.quantity}` : ''}
+                    </span>
+                    {o.quantity ? (
+                      <span className="text-[10px] text-[#6e6e73]">({o.completionPct ?? 0}%)</span>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="px-3 py-2">
                   <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium border', STATUS_COLOR[o.status])}>
