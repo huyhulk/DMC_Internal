@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { requireAuth, parseReportParams, errResponse, okResponse } from '../_shared'
+import { requireAuth, parseReportParams, errResponse, okResponse, daysBetween } from '../_shared'
 import { queryOutput } from '@/lib/reports/report-queries'
 
 export async function GET(req: NextRequest) {
@@ -8,6 +8,10 @@ export async function GET(req: NextRequest) {
 
   const { mode, workshopId, from, to, groupBy, errors } = parseReportParams(req.nextUrl.searchParams)
   if (errors.length > 0) return errResponse(errors.join('; '))
+
+  if (groupBy === 'hour' && daysBetween(from, to) > 7) {
+    return errResponse('groupBy=hour chỉ áp dụng cho khoảng ≤ 7 ngày')
+  }
 
   const data = await queryOutput(workshopId, from, to, groupBy)
   return okResponse(data, { mode, from, to, groupBy })

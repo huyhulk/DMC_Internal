@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { format, subDays } from 'date-fns'
 import { Search, BarChart2, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ReportMode, WorkshopCode, GroupBy } from '@/lib/reports/report-types'
+import type { ReportMode, WorkshopCode, GroupBy, FilterBy } from '@/lib/reports/report-types'
 import { WORKSHOP_CODES, WORKSHOP_LABEL } from '@/lib/reports/report-types'
 import { ProgressDetail, ProgressComparison } from './sections/progress-section'
 import { OutputSection } from './sections/output-section'
@@ -23,26 +23,40 @@ interface SectionState {
 
 const INIT: SectionState = { loading: false, data: null, error: null }
 
-const GROUP_BY_OPTS: { value: GroupBy; label: string }[] = [
+const GROUP_BY_OPTS: { value: GroupBy; label: string; requiresShortRange?: boolean }[] = [
+  { value: 'hour',  label: 'Giờ',   requiresShortRange: true },
   { value: 'day',   label: 'Ngày' },
   { value: 'week',  label: 'Tuần' },
   { value: 'month', label: 'Tháng' },
   { value: 'year',  label: 'Năm' },
 ]
 
+const FILTER_BY_OPTS: { value: FilterBy; label: string }[] = [
+  { value: 'deadline',       label: 'Theo deadline' },
+  { value: 'initialdate',    label: 'Theo ngày SX' },
+  { value: 'completed_date', label: 'Đã có SX' },
+]
+
+function daysBetween(from: string, to: string) {
+  return Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
+}
+
 // ── Filter bar ────────────────────────────────────────────────────────────
 
 function FilterBar({
-  from, to, groupBy,
-  onFrom, onTo, onGroupBy,
+  from, to, groupBy, filterBy,
+  onFrom, onTo, onGroupBy, onFilterBy,
   onSearch, loading,
 }: {
-  from: string; to: string; groupBy: GroupBy
-  onFrom: (v: string) => void; onTo: (v: string) => void; onGroupBy: (v: GroupBy) => void
+  from: string; to: string; groupBy: GroupBy; filterBy: FilterBy
+  onFrom: (v: string) => void; onTo: (v: string) => void
+  onGroupBy: (v: GroupBy) => void; onFilterBy: (v: FilterBy) => void
   onSearch: () => void; loading: boolean
 }) {
   const inp = 'h-9 px-3 rounded-xl bg-[#f2f2f7] border border-[#d2d2d7]/70 text-[13px] text-[#1d1d1f] ' +
               'focus:outline-none focus:ring-1 focus:ring-dmc-primary/40 transition-all'
+  const days = daysBetween(from, to)
+  const hourBlocked = groupBy === 'hour' && days > 7
 
   return (
     <div className="flex flex-wrap items-end gap-3 p-4 bg-white rounded-2xl border border-[#d2d2d7]/60 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
@@ -57,26 +71,48 @@ function FilterBar({
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Nhóm theo</label>
         <div className="flex gap-[3px] bg-[#f2f2f7] rounded-[10px] p-[3px]">
-          {GROUP_BY_OPTS.map((opt) => (
-            <button key={opt.value} type="button" onClick={() => onGroupBy(opt.value)}
-              className={cn('px-3 py-1.5 rounded-[8px] text-[12px] transition-all select-none',
-                groupBy === opt.value
-                  ? 'bg-white text-dmc-primary font-semibold shadow-sm'
-                  : 'font-medium text-[#6e6e73] hover:text-[#1d1d1f]')}>
-              {opt.label}
-            </button>
-          ))}
+          {GROUP_BY_OPTS.map((opt) => {
+            const disabled = opt.requiresShortRange && days > 7
+            return (
+              <button key={opt.value} type="button"
+                onClick={() => !disabled && onGroupBy(opt.value)}
+                disabled={disabled}
+                title={disabled ? 'Chọn khoảng ≤ 7 ngày để dùng nhóm theo Giờ' : undefined}
+                className={cn('px-3 py-1.5 rounded-[8px] text-[12px] transition-all select-none',
+                  disabled
+                    ? 'text-[#aeaeb2] cursor-not-allowed'
+                    : groupBy === opt.value
+                      ? 'bg-white text-dmc-primary font-semibold shadow-sm'
+                      : 'font-medium text-[#6e6e73] hover:text-[#1d1d1f]')}>
+                {opt.label}
+              </button>
+            )
+          })}
         </div>
       </div>
-      <button type="button" onClick={onSearch} disabled={loading}
-        className="h-9 px-5 rounded-xl bg-dmc-primary text-white text-[13px] font-semibold
-                   flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-[0.98]
-                   shadow-sm shadow-dmc-primary/20 hover:bg-dmc-primary-dark">
-        {loading
-          ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          : <Search size={13} strokeWidth={2.5} />}
-        <span>{loading ? 'Đang tải…' : 'Xem báo cáo'}</span>
-      </button>
+      <div className="space-y-1">
+        <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Lọc LSX theo</label>
+        <select value={filterBy} onChange={(e) => onFilterBy(e.target.value as FilterBy)}
+          className={inp + ' pr-8 cursor-pointer'}>
+          {FILTER_BY_OPTS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-col gap-1">
+        {hourBlocked && (
+          <p className="text-[11px] text-[#ff3b30]">Giờ: chọn khoảng ≤ 7 ngày</p>
+        )}
+        <button type="button" onClick={onSearch} disabled={loading || hourBlocked}
+          className="h-9 px-5 rounded-xl bg-dmc-primary text-white text-[13px] font-semibold
+                     flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-[0.98]
+                     shadow-sm shadow-dmc-primary/20 hover:bg-dmc-primary-dark">
+          {loading
+            ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            : <Search size={13} strokeWidth={2.5} />}
+          <span>{loading ? 'Đang tải…' : 'Xem báo cáo'}</span>
+        </button>
+      </div>
     </div>
   )
 }
@@ -119,6 +155,15 @@ export function ReportDashboard() {
   const [from, setFrom]           = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
   const [to, setTo]               = useState(format(new Date(), 'yyyy-MM-dd'))
   const [groupBy, setGroupBy]     = useState<GroupBy>('day')
+  const [filterBy, setFilterBy]   = useState<FilterBy>(() => {
+    if (typeof window === 'undefined') return 'deadline'
+    return (localStorage.getItem('report_filterBy') as FilterBy) ?? 'deadline'
+  })
+
+  const handleFilterBy = (v: FilterBy) => {
+    setFilterBy(v)
+    localStorage.setItem('report_filterBy', v)
+  }
 
   const [progress, setProgress] = useState<SectionState>(INIT)
   const [output,   setOutput]   = useState<SectionState>(INIT)
@@ -147,11 +192,11 @@ export function ReportDashboard() {
   }, [mode, workshopId, from, to, groupBy])
 
   const loadAll = useCallback(() => {
-    fetchSection('production-progress', setProgress)
+    fetchSection('production-progress', setProgress, { filterBy })
     fetchSection('production-output',   setOutput)
     fetchSection('quality-result',      setQuality)
     fetchSection('oee',                 setOEE)
-  }, [fetchSection])
+  }, [fetchSection, filterBy])
 
   // Auto-load on mount
   useEffect(() => { loadAll() }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -199,8 +244,8 @@ export function ReportDashboard() {
 
         {/* ── Filter bar ── */}
         <FilterBar
-          from={from} to={to} groupBy={groupBy}
-          onFrom={setFrom} onTo={setTo} onGroupBy={setGroupBy}
+          from={from} to={to} groupBy={groupBy} filterBy={filterBy}
+          onFrom={setFrom} onTo={setTo} onGroupBy={setGroupBy} onFilterBy={handleFilterBy}
           onSearch={loadAll} loading={anyLoading}
         />
 

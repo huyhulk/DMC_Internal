@@ -102,5 +102,6 @@ describe('toPeriodKey — chuyển pdate thành period key', () => {
   test('week → ISO W key',    () => expect(toPeriodKey('2026-04-21', 'week')).toBe('2026-W17'))
   test('month → YYYY-MM',     () => expect(toPeriodKey('2026-04-21', 'month')).toBe('2026-04'))
   test('year → YYYY',         () => expect(toPeriodKey('2026-04-21', 'year')).toBe('2026'))
+  test('hour → YYYY-MM-DD (fallback ngày)', () => expect(toPeriodKey('2026-04-21', 'hour')).toBe('2026-04-21'))
   test('empty pdate → "?"',   () => expect(toPeriodKey('', 'day')).toBe('?'))
 })

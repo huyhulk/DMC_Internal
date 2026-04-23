@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import type { WorkshopCode, ReportMode, GroupBy } from '@/lib/reports/report-types'
+import type { WorkshopCode, ReportMode, GroupBy, FilterBy } from '@/lib/reports/report-types'
 import { WORKSHOP_CODES } from '@/lib/reports/report-types'
 
-const VALID_GROUP_BY: GroupBy[] = ['day', 'week', 'month', 'year']
+const VALID_GROUP_BY: GroupBy[] = ['day', 'week', 'month', 'year', 'hour']
+const VALID_FILTER_BY: FilterBy[] = ['deadline', 'initialdate', 'completed_date']
 
 export async function requireAuth() {
   const supabase = await createClient()
@@ -17,14 +18,18 @@ export function parseReportParams(searchParams: URLSearchParams) {
   const from       = searchParams.get('from') ?? dfltDate(-7)
   const to         = searchParams.get('to')   ?? dfltDate(0)
   const groupBy    = (searchParams.get('groupBy') ?? 'day') as GroupBy
+  const filterBy   = (searchParams.get('filterBy') ?? 'deadline') as FilterBy
 
   const errors: string[] = []
   if (!['detail', 'comparison'].includes(mode)) errors.push('mode phải là detail hoặc comparison')
   if (mode === 'detail' && (!workshopId || !WORKSHOP_CODES.includes(workshopId))) {
     errors.push('workshopId bắt buộc khi mode=detail, phải là DMC1/DMC3/DMC4/DMC5')
   }
-  if (!VALID_GROUP_BY.includes(groupBy as GroupBy)) {
+  if (!VALID_GROUP_BY.includes(groupBy)) {
     errors.push(`groupBy không hợp lệ: "${groupBy}". Dùng: ${VALID_GROUP_BY.join(', ')}`)
+  }
+  if (!VALID_FILTER_BY.includes(filterBy)) {
+    errors.push(`filterBy không hợp lệ: "${filterBy}". Dùng: ${VALID_FILTER_BY.join(', ')}`)
   }
   if (from > to) errors.push('from phải nhỏ hơn hoặc bằng to')
 
@@ -34,8 +39,13 @@ export function parseReportParams(searchParams: URLSearchParams) {
     from,
     to,
     groupBy,
+    filterBy,
     errors,
   }
+}
+
+export function daysBetween(from: string, to: string): number {
+  return Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
 }
 
 export function errResponse(msg: string, status = 400) {

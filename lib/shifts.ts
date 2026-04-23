@@ -43,6 +43,7 @@ export function toPeriodKey(pdate: string, groupBy: GroupBy): string {
     case 'week':  return toIsoWeekKey(pdate)
     case 'month': return pdate.substring(0, 7)
     case 'year':  return pdate.substring(0, 4)
+    case 'hour':  return pdate.substring(0, 10) // hour key needs starttime — fall back to day
     default:      return pdate.substring(0, 10) // 'day'
   }
 }
