@@ -36,3 +36,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude context — session state tạm thời
+.claude/session/
+.claude/*.tmp
+.claude/*.bak
