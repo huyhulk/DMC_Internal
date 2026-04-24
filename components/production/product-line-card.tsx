@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import type { NormItem, ProductLine } from '@/types'
 
@@ -70,15 +71,19 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
 
         <FieldGroup label="Bắt đầu">
-          <input type="time" value={line.starttime}
-            onChange={(e) => onChange('starttime', e.target.value)}
-            className={inputCls} />
+          <TimePicker24
+            value={line.starttime}
+            onChange={(v) => onChange('starttime', v)}
+            disabled={disabled}
+          />
         </FieldGroup>
 
         <FieldGroup label="Kết thúc">
-          <input type="time" value={line.endtime}
-            onChange={(e) => onChange('endtime', e.target.value)}
-            className={inputCls} />
+          <TimePicker24
+            value={line.endtime}
+            onChange={(v) => onChange('endtime', v)}
+            disabled={disabled}
+          />
         </FieldGroup>
 
         {/* Workforce — plain number input */}
@@ -125,6 +130,67 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
         {label}
       </label>
       {children}
+    </div>
+  )
+}
+
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+const MINS  = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
+
+function TimePicker24({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string
+  onChange: (v: string) => void
+  disabled?: boolean
+}) {
+  const [selH, setSelH] = useState(value ? value.split(':')[0] : '')
+  const [selM, setSelM] = useState(value ? value.split(':')[1] : '')
+
+  useEffect(() => {
+    if (value) {
+      const [h, m] = value.split(':')
+      setSelH(h ?? '')
+      setSelM(m ?? '')
+    } else {
+      setSelH('')
+      setSelM('')
+    }
+  }, [value])
+
+  function handleH(h: string) {
+    setSelH(h)
+    if (h && selM) onChange(`${h}:${selM}`)
+  }
+
+  function handleM(m: string) {
+    setSelM(m)
+    if (selH && m) onChange(`${selH}:${m}`)
+  }
+
+  return (
+    <div className="flex items-center gap-1 w-full">
+      <select
+        value={selH}
+        onChange={(e) => handleH(e.target.value)}
+        disabled={disabled}
+        className={cn(selectCls, 'flex-1 px-1 text-center')}
+      >
+        <option value="">HH</option>
+        {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+      </select>
+      <span className="text-[13px] font-bold text-[#6e6e73] select-none">:</span>
+      <select
+        value={selM}
+        onChange={(e) => handleM(e.target.value)}
+        disabled={disabled}
+        className={cn(selectCls, 'flex-1 px-1 text-center')}
+      >
+        <option value="">MM</option>
+        {MINS.map((m) => <option key={m} value={m}>{m}</option>)}
+      </select>
     </div>
   )
 }

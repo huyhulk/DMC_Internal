@@ -83,18 +83,18 @@ export function DashboardShell({ user, children }: Props) {
     await logoutAction()
   }
 
-  async function handleChangePassword(oldPass: string, newPass: string) {
+  async function handleChangePassword(oldPass: string, newPass: string): Promise<string | null> {
     const fd = new FormData()
     fd.append('oldPassword', oldPass)
     fd.append('newPassword', newPass)
     fd.append('confirmPassword', newPass)
     const result = await changePasswordAction(fd)
     if (result.error) {
-      toast.error(result.error)
-    } else {
-      toast.success('Đổi mật khẩu thành công!')
-      setShowChangePass(false)
+      return result.error
     }
+    toast.success('Đổi mật khẩu thành công!')
+    setShowChangePass(false)
+    return null
   }
 
   return (

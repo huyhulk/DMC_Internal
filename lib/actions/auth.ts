@@ -81,6 +81,22 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   return fetchSessionUser()
 }
 
+function mapPasswordError(msg: string): string {
+  if (msg.includes('same password') || msg.includes('different from the old')) {
+    return 'Mật khẩu mới phải khác mật khẩu cũ'
+  }
+  if (msg.includes('at least') || msg.includes('too short') || msg.includes('characters')) {
+    return 'Mật khẩu mới quá ngắn (yêu cầu tối thiểu của hệ thống)'
+  }
+  if (msg.includes('rate limit') || msg.includes('too many requests')) {
+    return 'Quá nhiều yêu cầu, vui lòng thử lại sau vài phút'
+  }
+  if (msg.includes('service_role') || msg.includes('invalid key') || msg.includes('JWT')) {
+    return 'Lỗi cấu hình server, vui lòng liên hệ admin'
+  }
+  return `Lỗi hệ thống: ${msg}`
+}
+
 export async function changePasswordAction(formData: FormData) {
   const raw = {
     oldPassword: formData.get('oldPassword') as string,
@@ -97,28 +113,30 @@ export async function changePasswordAction(formData: FormData) {
 
   const supabase = await createSSRClient()
 
-  // Get current user from session
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { error: 'Phiên đăng nhập hết hạn' }
+  if (!user?.email) return { error: 'Phiên đăng nhập hết hạn, vui lòng đăng nhập lại' }
 
-  // Verify old password — signInWithPassword returns error if credentials are wrong
+  // Verify old password
   const { error: verifyErr } = await supabase.auth.signInWithPassword({
     email: user.email,
     password: oldPassword,
   })
-  if (verifyErr) return { error: 'Mật khẩu cũ không đúng!' }
+  if (verifyErr) {
+    logger.warn({ userId: user.id, supabaseError: verifyErr.message }, 'changePassword: wrong old password')
+    return { error: 'Mật khẩu cũ không đúng!' }
+  }
 
-  // Use admin API to update password — avoids AuthSessionMissingError that occurs
-  // when calling auth.updateUser() after signInWithPassword() in the same Server Action
-  const { error } = await getAdminClient().auth.admin.updateUserById(user.id, {
+  // Use admin API — avoids AuthSessionMissingError after signInWithPassword in same Server Action
+  const { error: updateErr } = await getAdminClient().auth.admin.updateUserById(user.id, {
     password: newPassword,
   })
 
-  if (error) {
-    logger.error({ error: error.message }, 'Change password failed')
-    return { error: 'Không thể đổi mật khẩu. Vui lòng thử lại.' }
+  if (updateErr) {
+    logger.error({ userId: user.id, supabaseError: updateErr.message }, 'changePassword: admin updateUserById failed')
+    return { error: mapPasswordError(updateErr.message) }
   }
 
+  logger.info({ userId: user.id }, 'changePassword: success')
   return { success: true }
 }
 

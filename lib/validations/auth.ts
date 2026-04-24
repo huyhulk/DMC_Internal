@@ -8,7 +8,7 @@ export const loginSchema = z.object({
 export const changePasswordSchema = z
   .object({
     oldPassword: z.string().min(1, 'Vui lòng nhập mật khẩu cũ'),
-    newPassword: z.string().min(3, 'Mật khẩu mới phải có ít nhất 3 ký tự'),
+    newPassword: z.string().min(6, 'Mật khẩu mới phải có ít nhất 6 ký tự'),
     confirmPassword: z.string().min(1, 'Vui lòng xác nhận mật khẩu'),
   })
   .refine((d) => d.newPassword === d.confirmPassword, {

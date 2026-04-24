@@ -45,6 +45,45 @@
 
 ## 📜 Entries
 
+## 2026-04-24 (Phiên #3 — Fix đổi mật khẩu + TimePicker 24h)
+**Branch:** main
+**Claude model:** Sonnet 4.6
+**Task:** Debug & fix chức năng đổi mật khẩu; thay time input 12h → 24h
+
+### Đã làm
+- **`lib/actions/auth.ts`**: thêm `mapPasswordError()` map lỗi Supabase → tiếng Việt; thêm log chi tiết `userId` + `supabaseError`; xoá generic error message
+- **`lib/validations/auth.ts`**: tăng min password 3 → 6 ký tự
+- **`components/shared/change-password-dialog.tsx`**: đổi `onSubmit` từ `Promise<void>` → `Promise<string | null>`; error hiển thị inline trong dialog (không chỉ toast); reset field chỉ khi thành công; label nhắc "tối thiểu 6 ký tự"
+- **`components/layout/dashboard-shell.tsx`**: `handleChangePassword` trả về `string | null` thay vì void; lỗi bubble về dialog thay vì toast
+- **`components/production/product-line-card.tsx`**: thay `<input type="time">` bằng `TimePicker24` (2 select HH:MM, 24h, không phụ thuộc browser locale)
+
+### Quyết định kỹ thuật
+- TimePicker24 dùng 2 select thay vì input[type=time] để tránh 12h AM/PM trên Windows Chrome locale US
+- Error password map sang tiếng Việt theo pattern của Supabase error messages
+- Error hiển thị trong dialog inline (red box) thay vì chỉ toast ngoài — user thấy lỗi khi form vẫn còn mở
+
+### Root cause của bug đổi mật khẩu
+`changePasswordAction` catch đúng error từ Supabase nhưng return generic string "Không thể đổi mật khẩu" → không biết lỗi thật. Thêm vào đó dialog không nhận được error để hiển thị (onSubmit là `Promise<void>`).
+
+### Files thay đổi
+- `lib/actions/auth.ts`
+- `lib/validations/auth.ts`
+- `components/shared/change-password-dialog.tsx`
+- `components/layout/dashboard-shell.tsx`
+- `components/production/product-line-card.tsx`
+
+### Status cuối phiên
+- [ ] Code committed? N
+- [ ] PR created? N
+- [x] Tests passing? type-check ✅
+
+### Next time resume
+- DB-002: Thu hẹp RLS UPDATE policy trên `data` (security)
+- SYS-001: Tạo staging Supabase project
+- Verify groupBy=hour cho output/quality API hoạt động đúng
+
+---
+
 ## 2026-04-23 (Phiên #2 — Context setup)
 **Branch:** main
 **Claude model:** Sonnet 4.6
