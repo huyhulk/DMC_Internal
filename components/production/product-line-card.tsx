@@ -163,11 +163,13 @@ function TimePicker24({
   function handleH(h: string) {
     setSelH(h)
     if (h && selM) onChange(`${h}:${selM}`)
+    else onChange('')
   }
 
   function handleM(m: string) {
     setSelM(m)
     if (selH && m) onChange(`${selH}:${m}`)
+    else onChange('')
   }
 
   return (

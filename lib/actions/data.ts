@@ -1,11 +1,19 @@
 'use server'
 
+import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, Order, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
+
+// Bust the unstable_cache for Norm + Material tables.
+// Call this after updating data in the Norm or Material tables in Supabase.
+export async function revalidateNormsAction(): Promise<void> {
+  revalidateTag('norms', {})
+  revalidateTag('materials', {})
+}
 
 // Actual column names in Supabase table "data" use quoted uppercase identifiers
 type DataRow = Database['public']['Tables']['data']['Row']

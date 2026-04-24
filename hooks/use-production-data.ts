@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { getInitData, searchOrderByPcode, recordProductionAction } from '@/lib/actions/data'
+import { getInitData, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { InitData, Order, NormItem, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
@@ -196,6 +196,15 @@ export function useProductionData(user: SessionUser) {
           )
           if (norm) {
             lines[idx].workforce = norm.nwforce
+            // Recalculate realnorm immediately so selecting product last (after
+            // poutput/starttime/endtime are already filled) doesn't leave realnorm = 0.
+            lines[idx].realnorm = calcRealNorm({
+              nwforce: norm.nwforce,
+              workforce: norm.nwforce,
+              poutput: lines[idx].poutput,
+              starttime: lines[idx].starttime,
+              endtime: lines[idx].endtime,
+            })
           }
           if (idx >= visibleRows - 1 && visibleRows < MAX_LINES) {
             setVisibleRows((r) => r + 1)
@@ -356,6 +365,12 @@ export function useProductionData(user: SessionUser) {
     [state.initData, state.selectedWorkshop]
   )
 
+  // Bust the Norm/Material cache then reload — call after updating Norm table in Supabase.
+  const refreshNorms = useCallback(async () => {
+    await revalidateNormsAction()
+    await loadData(state.selectedDate)
+  }, [state.selectedDate, loadData])
+
   return {
     state,
     visibleRows,
@@ -371,5 +386,6 @@ export function useProductionData(user: SessionUser) {
     getProductOptions,
     getPcodeOptions,
     getNormHint,
+    refreshNorms,
   }
 }

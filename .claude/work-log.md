@@ -45,6 +45,71 @@
 
 ## 📜 Entries
 
+## 2026-04-25 (Phiên #5 — UI refactor + bug fix TimePicker24)
+**Branch:** main
+**Claude model:** Sonnet 4.6 + Opus 4.7
+**Task:** Di chuyển nút "Làm mới danh mục" vào header Section 1; fix bug TimePicker24 stale parent
+
+### Đã làm
+- **`components/production/production-tab.tsx`**: Chuyển nút "Làm mới danh mục" vào inline với `SectionLabel` của Section 1 qua prop `action` — luôn visible vì Section 1 là `shrink-0`; xóa `<div className="flex justify-end">` wrapper riêng; xóa `<SectionLabel>Sản phẩm & thời gian sản xuất</SectionLabel>` thừa ở Section 2; thêm optional prop `action?: React.ReactNode` vào `SectionLabel` component
+- **`components/production/product-line-card.tsx`**: Fix bug `TimePicker24` — khi user chọn placeholder "HH" hoặc "MM" sau khi đã có giá trị, `onChange('')` được gọi để reset parent value; trước đây parent bị stale (vẫn giữ "07:30" trong khi UI hiển thị "HH:30")
+
+### Root cause TimePicker24 bug
+`handleH` và `handleM` chỉ gọi `onChange(h + ':' + m)` khi CẢ HAI h và m có giá trị. Nếu user clear về placeholder, `onChange` không được gọi → parent state bị stale → form submit gửi giờ cũ.
+
+### Files thay đổi
+- `components/production/production-tab.tsx`
+- `components/production/product-line-card.tsx`
+
+### Status cuối phiên
+- [ ] Code committed? N
+- [ ] PR created? N
+- [x] Tests passing? type-check ✅
+
+### Next time resume
+- DB-002: Thu hẹp RLS UPDATE policy trên `data` (viết file migration 007, không chạy trực tiếp)
+- Verify groupBy=hour cho output/quality API
+
+---
+
+## 2026-04-24 (Phiên #4 — Fix realnorm=0 + cache stale Norm)
+**Branch:** main
+**Claude model:** Sonnet 4.6
+**Task:** Debug realnorm=0 trong Production data; fix cache stale danh sách sản phẩm
+
+### Đã làm
+- **`lib/actions/data.ts`**: thêm `revalidateNormsAction()` → gọi `revalidateTag('norms', {})` + `revalidateTag('materials', {})`
+- **`hooks/use-production-data.ts`**: fix `updateLine` — khi `field === 'product'`, sau khi set `workforce = norm.nwforce`, nay cũng tính lại `realnorm` ngay nếu `poutput/starttime/endtime` đã có; thêm `refreshNorms()` function expose ra ngoài hook
+- **`components/production/production-tab.tsx`**: thêm nút "Làm mới" (RefreshCw icon) cạnh section label "Sản phẩm & thời gian sản xuất"; click → revalidate cache + reload data
+
+### Root cause realnorm = 0
+`updateLine` có 2 khối if riêng biệt:
+1. Khi `field === 'product'`: set `workforce` nhưng KHÔNG tính `realnorm`
+2. Khi `field in ['poutput','starttime','endtime','workforce']`: mới tính `realnorm`
+
+→ Nếu user chọn sản phẩm SAU khi đã nhập poutput/giờ, `realnorm` mãi = 0.
+Fix: thêm `calcRealNorm` vào khối 1 ngay sau khi set `workforce`.
+
+### Root cause cache stale
+`getCachedNorms()` dùng `unstable_cache` TTL 300s, không có trigger invalidation khi Norm table cập nhật ngoài app.
+Fix: thêm action `revalidateNormsAction` + nút "Làm mới" trên UI.
+
+### Files thay đổi
+- `lib/actions/data.ts`
+- `hooks/use-production-data.ts`
+- `components/production/production-tab.tsx`
+
+### Status cuối phiên
+- [ ] Code committed? N
+- [ ] PR created? N
+- [x] Tests passing? type-check ✅
+
+### Next time resume
+- DB-002: Thu hẹp RLS UPDATE policy trên `data` (security)
+- Verify groupBy=hour cho output/quality API
+
+---
+
 ## 2026-04-24 (Phiên #3 — Fix đổi mật khẩu + TimePicker 24h)
 **Branch:** main
 **Claude model:** Sonnet 4.6

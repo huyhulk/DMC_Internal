@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Lock, Unlock, Search, Save,
-  ChevronRight, AlertTriangle,
+  ChevronRight, AlertTriangle, RefreshCw,
 } from 'lucide-react'
 import { useProductionData } from '@/hooks/use-production-data'
 import { OrderInfoCard } from './order-info-card'
@@ -33,6 +33,7 @@ export function ProductionTab({ user }: Props) {
     searchByPcode, submitProduction,
     getWorkshopOptions, getProductOptions,
     getPcodeOptions, getNormHint,
+    refreshNorms,
   } = useProductionData(user)
 
   const [searchQuery,     setSearchQuery]     = useState('')
@@ -40,6 +41,7 @@ export function ProductionTab({ user }: Props) {
   const [unlockPcodeOpen, setUnlockPcodeOpen] = useState(false)
   const [confirmOpen,     setConfirmOpen]     = useState(false)
   const [submitting,      setSubmitting]      = useState(false)
+  const [refreshing,      setRefreshing]      = useState(false)
 
   useEffect(() => { loadData(today) }, [today, loadData])
 
@@ -56,6 +58,13 @@ export function ProductionTab({ user }: Props) {
     if (order) await loadData(order.initialdate)
   }
 
+  async function handleRefreshNorms() {
+    setRefreshing(true)
+    await refreshNorms()
+    setRefreshing(false)
+    toast.success('Đã làm mới danh mục sản phẩm')
+  }
+
   async function handleSubmit() {
     setSubmitting(true)
     const ok = await submitProduction()
@@ -70,7 +79,21 @@ export function ProductionTab({ user }: Props) {
       <div className="shrink-0 px-4 pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3
                       bg-white/80 backdrop-blur-sm">
 
-        <SectionLabel>Thông tin lệnh sản xuất</SectionLabel>
+        <SectionLabel action={
+          <button
+            onClick={handleRefreshNorms}
+            disabled={refreshing || state.loading}
+            title="Làm mới danh mục sản phẩm từ bảng Norm"
+            className="h-7 px-2.5 rounded-lg border border-[#d2d2d7]/70
+                       text-[11px] font-medium text-[#6e6e73] bg-[#f2f2f7]
+                       hover:bg-[#e5e5ea] active:scale-95
+                       disabled:opacity-40 disabled:cursor-not-allowed
+                       flex items-center gap-1.5 transition-all duration-150"
+          >
+            <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Đang tải…' : 'Làm mới danh mục'}
+          </button>
+        }>Thông tin lệnh sản xuất</SectionLabel>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
@@ -156,8 +179,6 @@ export function ProductionTab({ user }: Props) {
 
       {/* ── SECTION 2: Product lines (scrollable) ── */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        <SectionLabel>Sản phẩm &amp; thời gian sản xuất</SectionLabel>
-
         {state.selectedWorkshop ? (
           Array.from({ length: visibleRows }).map((_, i) => (
             <ProductLineCard
@@ -276,13 +297,14 @@ export function ProductionTab({ user }: Props) {
 
 /* ── Sub-components ─────────────────────────────── */
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-[11px] font-semibold text-[#aeaeb2] uppercase tracking-[0.07em]">
         {children}
       </span>
       <div className="flex-1 h-px bg-[#d2d2d7]/50" />
+      {action}
     </div>
   )
 }
