@@ -218,6 +218,10 @@ export async function recordProductionAction(rows: Array<{
     }
 
     // ── 3. Insert ─────────────────────────────────────────────────────────────
+    if (rows.some((r) => !r.starttime || !r.endtime)) {
+      return { success: false, message: 'Thiếu giờ bắt đầu hoặc kết thúc. Vui lòng kiểm tra lại.' }
+    }
+
     const { error } = await supabase.from('Production').insert(rows)
 
     if (error) {

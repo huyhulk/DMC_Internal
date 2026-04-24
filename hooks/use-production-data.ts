@@ -247,6 +247,11 @@ export function useProductionData(user: SessionUser) {
     const actualPcode = status?.pcode ?? selectedPcode
     const isOther = selectedWorkshop.startsWith('Việc khác')
 
+    if (isOther && (!lines[0].starttime || !lines[0].endtime)) {
+      toast.warning('Vui lòng nhập giờ bắt đầu và kết thúc')
+      return false
+    }
+
     const rowsToSave = isOther
       ? [{
           pdate: selectedDate,
@@ -283,6 +288,11 @@ export function useProductionData(user: SessionUser) {
 
     if (rowsToSave.length === 0) {
       toast.warning('Vui lòng chọn ít nhất 1 sản phẩm')
+      return false
+    }
+
+    if (!isOther && rowsToSave.some((r) => !r.starttime || !r.endtime)) {
+      toast.warning('Vui lòng nhập giờ bắt đầu và kết thúc cho tất cả dòng sản xuất')
       return false
     }
 

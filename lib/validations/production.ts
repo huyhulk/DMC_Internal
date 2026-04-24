@@ -3,8 +3,8 @@ import { z } from 'zod'
 export const productLineSchema = z.object({
   product: z.string().min(1),
   pdate: z.string().min(1),
-  starttime: z.string().optional().default(''),
-  endtime: z.string().optional().default(''),
+  starttime: z.string().min(1, 'Vui lòng nhập giờ bắt đầu'),
+  endtime: z.string().min(1, 'Vui lòng nhập giờ kết thúc'),
   workforce: z.number().min(0).default(0),
   poutput: z.number().min(0).default(0),
   eoutput: z.number().min(0).default(0),
