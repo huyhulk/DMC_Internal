@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Lock, Unlock, Search, Save,
-  ChevronRight, AlertTriangle, RefreshCw,
+  ChevronRight, ChevronDown, AlertTriangle, RefreshCw,
 } from 'lucide-react'
 import { useProductionData } from '@/hooks/use-production-data'
 import { OrderInfoCard } from './order-info-card'
@@ -42,8 +42,18 @@ export function ProductionTab({ user }: Props) {
   const [confirmOpen,     setConfirmOpen]     = useState(false)
   const [submitting,      setSubmitting]      = useState(false)
   const [refreshing,      setRefreshing]      = useState(false)
+  const [ss1Collapsed,    setSs1Collapsed]    = useState(false)
 
   useEffect(() => { loadData(today) }, [today, loadData])
+
+  // Auto-collapse SS1 on mobile when PCODE is selected; re-expand when cleared
+  useEffect(() => {
+    if (state.selectedPcode && typeof window !== 'undefined' && window.innerWidth < 640) {
+      setSs1Collapsed(true)
+    } else if (!state.selectedPcode) {
+      setSs1Collapsed(false)
+    }
+  }, [state.selectedPcode])
 
   const wsOptions     = getWorkshopOptions()
   const pcodeOptions  = getPcodeOptions()
@@ -76,106 +86,155 @@ export function ProductionTab({ user }: Props) {
     <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
 
       {/* ── SECTION 1: Header controls ── */}
-      <div className="shrink-0 px-4 pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3
-                      bg-white/80 backdrop-blur-sm">
+      {ss1Collapsed ? (
+        <button
+          type="button"
+          onClick={() => setSs1Collapsed(false)}
+          className="shrink-0 w-full px-4 py-2.5 border-b border-[#d2d2d7]/60
+                     bg-white/80 backdrop-blur-sm text-left
+                     flex items-center gap-3
+                     active:bg-[#f5f5f7] transition-colors duration-100"
+        >
+          <div className="flex-1 flex items-center gap-1.5 min-w-0">
+            <span className="text-[12px] text-[#6e6e73] shrink-0">{state.selectedDate}</span>
+            {state.selectedWorkshop && (
+              <>
+                <span className="text-[#c7c7cc] shrink-0">·</span>
+                <span className="text-[12px] text-[#1d1d1f] font-medium truncate">
+                  {state.selectedWorkshop.startsWith('Việc khác')
+                    ? state.selectedWorkshop
+                    : (WORKSHOP_LABELS[state.selectedWorkshop as FactoryKey] ?? state.selectedWorkshop)}
+                </span>
+              </>
+            )}
+            {state.selectedPcode && (
+              <>
+                <span className="text-[#c7c7cc] shrink-0">·</span>
+                <span className="text-[12px] text-dmc-primary font-semibold truncate">{state.selectedPcode}</span>
+              </>
+            )}
+          </div>
+          <span className="shrink-0 flex items-center gap-1 text-[11px] text-[#aeaeb2]">
+            Sửa <ChevronDown size={11} />
+          </span>
+        </button>
+      ) : (
+        <div className="shrink-0 px-4 pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3
+                        bg-white/80 backdrop-blur-sm">
 
-        <SectionLabel action={
-          <button
-            onClick={handleRefreshNorms}
-            disabled={refreshing || state.loading}
-            title="Làm mới danh mục sản phẩm từ bảng Norm"
-            className="h-7 px-2.5 rounded-lg border border-[#d2d2d7]/70
-                       text-[11px] font-medium text-[#6e6e73] bg-[#f2f2f7]
-                       hover:bg-[#e5e5ea] active:scale-95
-                       disabled:opacity-40 disabled:cursor-not-allowed
-                       flex items-center gap-1.5 transition-all duration-150"
-          >
-            <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? 'Đang tải…' : 'Làm mới danh mục'}
-          </button>
-        }>Thông tin lệnh sản xuất</SectionLabel>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-
-          {/* Date */}
-          <FieldGroup
-            label="Ngày lập phiếu"
-            extra={state.dateLocked
-              ? <LockChip locked onClick={() => setUnlockDateOpen(true)} />
-              : <LockChip locked={false} />}
-          >
-            <input
-              type="date"
-              value={state.selectedDate}
-              disabled={state.dateLocked}
-              onChange={(e) => loadData(e.target.value)}
-              className={inputCls}
-            />
-          </FieldGroup>
-
-          {/* Search */}
-          <FieldGroup label="Tìm mã LSX">
-            <div className="flex gap-2">
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Nhập mã LSX…"
-                className={cn(inputCls, 'flex-1 min-w-0')}
-              />
+          <SectionLabel action={
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleSearch}
-                className="h-10 px-3.5 rounded-xl bg-dmc-primary hover:bg-dmc-primary-dark
-                           text-white shrink-0 active:scale-95 transition-all duration-150
-                           flex items-center justify-center shadow-sm"
+                onClick={handleRefreshNorms}
+                disabled={refreshing || state.loading}
+                title="Làm mới danh mục sản phẩm từ bảng Norm"
+                className="h-7 px-2.5 rounded-lg border border-[#d2d2d7]/70
+                           text-[11px] font-medium text-[#6e6e73] bg-[#f2f2f7]
+                           hover:bg-[#e5e5ea] active:scale-95
+                           disabled:opacity-40 disabled:cursor-not-allowed
+                           flex items-center gap-1.5 transition-all duration-150"
               >
-                <Search size={15} strokeWidth={2.5} />
+                <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+                {refreshing ? 'Đang tải…' : 'Làm mới danh mục'}
               </button>
+              {state.selectedPcode && (
+                <button
+                  type="button"
+                  onClick={() => setSs1Collapsed(true)}
+                  title="Thu gọn"
+                  className="h-7 w-7 rounded-lg border border-[#d2d2d7]/70
+                             text-[#6e6e73] bg-[#f2f2f7]
+                             hover:bg-[#e5e5ea] active:scale-95
+                             flex items-center justify-center transition-all duration-150"
+                >
+                  <ChevronDown size={12} className="rotate-180" />
+                </button>
+              )}
             </div>
-          </FieldGroup>
+          }>Thông tin lệnh sản xuất</SectionLabel>
 
-          {/* Workshop */}
-          <FieldGroup label="Xưởng">
-            <select
-              value={state.selectedWorkshop}
-              onChange={(e) => selectWorkshop(e.target.value)}
-              disabled={state.loading || wsOptions.length === 0}
-              className={cn(inputCls, 'cursor-pointer')}
-            >
-              <option value="">— Chọn xưởng —</option>
-              {wsOptions.map((ws) => (
-                <option key={ws} value={ws}>
-                  {ws.startsWith('Việc khác')
-                    ? ws
-                    : (WORKSHOP_LABELS[ws as FactoryKey] ?? ws)}
-                </option>
-              ))}
-            </select>
-          </FieldGroup>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
-          {/* PCODE */}
-          <FieldGroup
-            label="Mã LSX"
-            extra={hasLockedPcodes
-              ? <LockChip locked={!state.pcodeUnlocked} onClick={() => setUnlockPcodeOpen(true)} />
-              : undefined}
-          >
-            <select
-              value={state.selectedPcode}
-              onChange={(e) => selectPcode(e.target.value)}
-              disabled={state.loading || pcodeOptions.length === 0}
-              className={cn(inputCls, 'cursor-pointer')}
+            {/* Date */}
+            <FieldGroup
+              label="Ngày lập phiếu"
+              extra={state.dateLocked
+                ? <LockChip locked onClick={() => setUnlockDateOpen(true)} />
+                : <LockChip locked={false} />}
             >
-              <option value="">— Chọn mã LSX —</option>
-              {pcodeOptions.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </FieldGroup>
+              <input
+                type="date"
+                value={state.selectedDate}
+                disabled={state.dateLocked}
+                onChange={(e) => loadData(e.target.value)}
+                className={inputCls}
+              />
+            </FieldGroup>
+
+            {/* Search */}
+            <FieldGroup label="Tìm mã LSX">
+              <div className="flex gap-2">
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  placeholder="Nhập mã LSX…"
+                  className={cn(inputCls, 'flex-1 min-w-0')}
+                />
+                <button
+                  onClick={handleSearch}
+                  className="h-10 px-3.5 rounded-xl bg-dmc-primary hover:bg-dmc-primary-dark
+                             text-white shrink-0 active:scale-95 transition-all duration-150
+                             flex items-center justify-center shadow-sm"
+                >
+                  <Search size={15} strokeWidth={2.5} />
+                </button>
+              </div>
+            </FieldGroup>
+
+            {/* Workshop */}
+            <FieldGroup label="Xưởng">
+              <select
+                value={state.selectedWorkshop}
+                onChange={(e) => selectWorkshop(e.target.value)}
+                disabled={state.loading || wsOptions.length === 0}
+                className={cn(inputCls, 'cursor-pointer')}
+              >
+                <option value="">— Chọn xưởng —</option>
+                {wsOptions.map((ws) => (
+                  <option key={ws} value={ws}>
+                    {ws.startsWith('Việc khác')
+                      ? ws
+                      : (WORKSHOP_LABELS[ws as FactoryKey] ?? ws)}
+                  </option>
+                ))}
+              </select>
+            </FieldGroup>
+
+            {/* PCODE */}
+            <FieldGroup
+              label="Mã LSX"
+              extra={hasLockedPcodes
+                ? <LockChip locked={!state.pcodeUnlocked} onClick={() => setUnlockPcodeOpen(true)} />
+                : undefined}
+            >
+              <select
+                value={state.selectedPcode}
+                onChange={(e) => selectPcode(e.target.value)}
+                disabled={state.loading || pcodeOptions.length === 0}
+                className={cn(inputCls, 'cursor-pointer')}
+              >
+                <option value="">— Chọn mã LSX —</option>
+                {pcodeOptions.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </FieldGroup>
+          </div>
+
+          {state.orderInfo && <OrderInfoCard order={state.orderInfo} />}
         </div>
-
-        {state.orderInfo && <OrderInfoCard order={state.orderInfo} />}
-      </div>
+      )}
 
       {/* ── SECTION 2: Product lines (scrollable) ── */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
