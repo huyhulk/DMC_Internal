@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { format, subDays } from 'date-fns'
+import { format } from 'date-fns'
 import { Search, BarChart2, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ReportMode, WorkshopCode, GroupBy, FilterBy } from '@/lib/reports/report-types'
@@ -152,12 +152,12 @@ const ErrorMsg = ({ msg }: { msg: string }) => (
 export function ReportDashboard() {
   const [mode, setMode]           = useState<ReportMode>('comparison')
   const [workshopId, setWorkshop] = useState<WorkshopCode>('DMC1')
-  const [from, setFrom]           = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
+  const [from, setFrom]           = useState(format(new Date(), 'yyyy-MM-dd'))
   const [to, setTo]               = useState(format(new Date(), 'yyyy-MM-dd'))
   const [groupBy, setGroupBy]     = useState<GroupBy>('day')
   const [filterBy, setFilterBy]   = useState<FilterBy>(() => {
-    if (typeof window === 'undefined') return 'deadline'
-    return (localStorage.getItem('report_filterBy') as FilterBy) ?? 'deadline'
+    if (typeof window === 'undefined') return 'initialdate'
+    return (localStorage.getItem('report_filterBy') as FilterBy) ?? 'initialdate'
   })
 
   const handleFilterBy = (v: FilterBy) => {
