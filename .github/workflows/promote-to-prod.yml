@@ -1,0 +1,49 @@
+name: Promote Staging to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type PRODUCTION to confirm promotion'
+        required: true
+
+# Requires "production" environment configured in GitHub Settings
+# (Settings → Environments → production → add required reviewers)
+environment: production
+
+jobs:
+  promote:
+    name: Merge staging → main & apply migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate confirmation
+        if: github.event.inputs.confirm != 'PRODUCTION'
+        run: |
+          echo "❌ Confirmation failed. Type exactly 'PRODUCTION' to proceed."
+          exit 1
+
+      - name: Checkout staging
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge staging into main
+        run: |
+          git checkout main
+          git merge staging --no-ff -m "chore: promote staging → main [skip ci]"
+          git push origin main
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply migrations to production
+        run: supabase db push --db-url "${{ secrets.PROD_DB_URL }}"
