@@ -45,6 +45,96 @@
 
 ## 📜 Entries
 
+## 2026-04-27 (Phiên #7 — CI lint fix, staging auth, migration repair)
+**Branch:** staging → commit `048f537`
+**Claude model:** Sonnet 4.6
+**Task:** Fix GitHub Actions lint 404, fix staging login, fix supabase db push migration history
+
+### Đã làm
+- **CI Lint fix**: Phát hiện Next.js 16 đã xóa `next lint` command — CLI treat `lint` như project directory → lỗi "Invalid project directory". Fix: đổi script sang `eslint .` + tạo `eslint.config.mjs` (ESLint 9 flat config, bắt buộc với `eslint ^9.25.1`). Downgrade `react-hooks/set-state-in-effect` + `incompatible-library` sang warn (React Compiler rules không áp dụng cho React 18).
+- **Staging login fix**: Debug phát hiện 3 vấn đề — email sai domain (`@test.local` vs `@dmc.local`), username sai (`sup-dmc1` vs `supervisor`), `identities = 0` (INSERT SQL thủ công không tạo `auth.identities`). Fix: xóa 4 users cũ, tạo lại đúng qua `admin.auth.admin.createUser()`. Verify 4/4 login OK.
+- **Migration history repair**: `supabase db push` fail vì staging schema được tạo qua `staging_init.sql` (phiên #6) nhưng `supabase_migrations.schema_migrations` rỗng. Fix: insert 6 migration records trực tiếp qua SQL Editor. `supabase db push` local/sandbox vẫn fail DNS cho `db.*` hostname — cần chạy từ máy hoặc CI.
+
+### Quyết định kỹ thuật
+- `next lint` bị remove trong Next.js 16 → dùng `eslint .` trực tiếp
+- React Compiler ESLint rules (set-state-in-effect) downgrade sang warn vì project dùng React 18, không phải React 19
+- Tạo user Supabase Auth bắt buộc dùng `admin.auth.admin.createUser()`, không dùng INSERT SQL thủ công
+
+### Issues phát hiện
+- `db.PROJECT_REF.supabase.co` không resolve được từ local (có thể project staging bị paused hoặc Supabase free tier limit). REST API vẫn OK. Cần verify từ CI hoặc sau khi restore project.
+
+### Files thay đổi
+- `package.json` — `"lint": "next lint"` → `"lint": "eslint ."`
+- `eslint.config.mjs` — tạo mới
+
+### Context files updated
+- `.claude/work-log.md`
+
+### Status cuối phiên
+- [x] Code committed? Y — `048f537`
+- [ ] PR created? N
+- [x] Tests passing? lint ✅ (0 errors, 14 warnings), type-check ✅
+
+### Next time resume
+1. Verify Vercel staging deploy có banner vàng không (https://dmc-pm-staging.vercel.app)
+2. Test login staging trên browser thực tế (admin / Password123!)
+3. **DB-002** — Viết migration 007 thu hẹp RLS UPDATE policy trên `data` (chỉ ADMIN/service_role)
+4. Verify `supabase db push` sau khi restore staging project (nếu bị paused)
+5. GitHub Environment `production` — tạo trong Settings với required reviewers (cho promote-to-prod.yml)
+
+---
+
+## 2026-04-26 (Phiên #6 — Staging environment setup)
+**Branch:** staging → commit `442de08`
+**Claude model:** Sonnet 4.6
+**Task:** Setup staging environment đầy đủ (SYS-001, SYS-002)
+
+### Đã làm
+- **M1**: Xác nhận `npx supabase@2.95.3` dùng được (CLI không có trong PATH)
+- **W1**: `.env.example` — xóa prod URL hardcoded, thêm `NEXT_PUBLIC_ENV` placeholder
+- **W2**: `.gitignore` — xóa 2 dòng duplicate
+- **M2a**: `supabase init` → tạo `supabase/config.toml` (project_id = dmc-production-manager)
+- **M2b**: `supabase link` staging → BLOCKED (staging project thuộc org khác)
+- **M4+M5**: Tạo `components/shared/environment-banner.tsx` + inject vào `app/layout.tsx`
+- **M6+M7**: Update `ci.yml` trigger PR→staging; tạo `staging-ci.yml`
+- **M8**: Tạo `promote-to-prod.yml` (workflow_dispatch, cần confirm='PRODUCTION')
+- **M3**: Phát hiện schema drift (migration 001 tạo "DATA" uppercase nhưng production dùng `data` lowercase + UPPERCASE columns). Tạo `staging_init.sql` sạch dựa trên `database-schema.md`. Apply 40 statements lên staging DB thành công.
+- **M9**: Tạo `seed_test.sql`, fix bug `CHAR()` → `CHR()`, apply thành công: 100 data records, 50 Production records
+
+### Quyết định kỹ thuật
+- Dùng Python script split SQL + `npx supabase db query -f file --db-url` để apply (CLI không hỗ trợ multi-statement, không có Docker cho db dump)
+- Không dùng migration 001–006 cho staging vì schema drift — dùng `staging_init.sql` riêng
+- Test users cần tạo qua Supabase Dashboard (auth.users cần service_role, không qua regular DB URL)
+
+### Issues phát hiện
+- Migration 001 trong repo có schema sai (drift với production). Cần tạo migration 007 để sync (DB-001 vẫn open)
+- M2b (supabase link staging): staging project `vfzjweyzwjczrxphnvaa` thuộc org khác → cần invite account hiện tại
+
+### Files thay đổi
+- `.env.example`, `.gitignore`
+- `app/layout.tsx`
+- `components/shared/environment-banner.tsx`
+- `supabase/config.toml`
+- `supabase/staging-setup/staging_init.sql`
+- `supabase/staging-setup/seed_test.sql`
+- `.github/workflows/ci.yml`, `staging-ci.yml`, `promote-to-prod.yml`
+
+### Status cuối phiên
+- [x] Code committed? Y — `442de08`
+- [x] Push? Y — `origin/staging`
+- [ ] PR created? N (staging branch tự deploy Vercel)
+- [x] Tests passing? type-check ✅
+
+### Next time resume
+1. **Verify Vercel staging deploy** — mở https://dmc-pm-staging.vercel.app xem banner vàng
+2. **Tạo test users** — Supabase Dashboard staging → Authentication → Add user (4 users: admin/manager/supervisor/user @test.local, role + workspace set trong profiles table)
+3. **M2b fix** — Invite current Supabase account vào org của staging project, rồi `npx supabase link --project-ref vfzjweyzwjczrxphnvaa`
+4. **GitHub Environment** — tạo `production` environment trong GitHub Settings với required reviewers (cần cho promote-to-prod.yml)
+5. **DB-002** — Thu hẹp RLS UPDATE policy trên `data` (viết migration 007)
+6. **SYS-002** — Đưa Apps Script vào repo (apps-script/ folder)
+
+---
+
 ## 2026-04-25 (Phiên #5 — UI refactor + bug fix TimePicker24)
 **Branch:** main
 **Claude model:** Sonnet 4.6 + Opus 4.7
