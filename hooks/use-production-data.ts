@@ -230,7 +230,7 @@ export function useProductionData(user: SessionUser) {
         return { ...s, lines }
       })
     },
-    [state.initData, state.selectedWorkshop, visibleRows]
+    [visibleRows]
   )
 
   const searchByPcode = useCallback(async (query: string) => {

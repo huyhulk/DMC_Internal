@@ -77,7 +77,7 @@ export function HRTab({ user }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [visibleFactories])
 
   useEffect(() => { loadData(date) }, [date, loadData])
 
