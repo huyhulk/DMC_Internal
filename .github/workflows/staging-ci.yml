@@ -60,14 +60,17 @@ jobs:
       # staging_init.sql đã tạo schema thực tế nhưng không đăng ký migration history.
       # Bước này đảm bảo migrations 001-006 được đánh dấu "đã apply" (idempotent)
       # để supabase db push bỏ qua chúng và chỉ chạy migration mới (007+).
+      # Dùng supabase db query (không dùng psql) vì Pooler URL có postgres.ref@host
+      # khiến libpq parse sai host thành Unix socket.
       - name: Ensure migration history for legacy migrations
         run: |
-          psql "${{ secrets.STAGING_DB_URL }}" <<'EOF'
+          cat > /tmp/repair_history.sql << 'SQLEOF'
           CREATE SCHEMA IF NOT EXISTS supabase_migrations;
           CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
-            version text NOT NULL PRIMARY KEY,
-            name    text,
-            hash    text
+            version     text NOT NULL PRIMARY KEY,
+            name        text DEFAULT '',
+            hash        text DEFAULT '',
+            inserted_at timestamptz DEFAULT now()
           );
           INSERT INTO supabase_migrations.schema_migrations (version, name)
           VALUES
@@ -78,7 +81,8 @@ jobs:
             ('005', '005_report_rpcs'),
             ('006', '006_add_overtime_shift')
           ON CONFLICT (version) DO NOTHING;
-          EOF
+          SQLEOF
+          supabase db query --db-url "${{ secrets.STAGING_DB_URL }}" -f /tmp/repair_history.sql
 
       - name: Apply migrations to staging
         run: supabase db push --db-url "${{ secrets.STAGING_DB_URL }}"
