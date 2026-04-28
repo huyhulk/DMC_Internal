@@ -57,5 +57,28 @@ jobs:
         with:
           version: latest
 
+      # staging_init.sql đã tạo schema thực tế nhưng không đăng ký migration history.
+      # Bước này đảm bảo migrations 001-006 được đánh dấu "đã apply" (idempotent)
+      # để supabase db push bỏ qua chúng và chỉ chạy migration mới (007+).
+      - name: Ensure migration history for legacy migrations
+        run: |
+          psql "${{ secrets.STAGING_DB_URL }}" <<'EOF'
+          CREATE SCHEMA IF NOT EXISTS supabase_migrations;
+          CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
+            version text NOT NULL PRIMARY KEY,
+            name    text,
+            hash    text
+          );
+          INSERT INTO supabase_migrations.schema_migrations (version, name)
+          VALUES
+            ('001', '001_initial_schema'),
+            ('002', '002_normalize_workshop_codes'),
+            ('003', '003_production_rls_strict'),
+            ('004', '004_fix_empty_workspace_rls'),
+            ('005', '005_report_rpcs'),
+            ('006', '006_add_overtime_shift')
+          ON CONFLICT (version) DO NOTHING;
+          EOF
+
       - name: Apply migrations to staging
         run: supabase db push --db-url "${{ secrets.STAGING_DB_URL }}"
