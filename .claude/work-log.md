@@ -45,6 +45,50 @@
 
 ## 📜 Entries
 
+## 2026-04-28 (Phiên #8 — Fix supabase db push hoàn toàn)
+**Branch:** staging → commit `435f220`
+**Claude model:** Sonnet 4.6
+**Task:** Triệt để fix lỗi `supabase db push` SQLSTATE 42601
+
+### Đã làm
+- **Root cause analysis**: Xác định 3 lớp vấn đề liên tiếp:
+  1. `staging-ci.yml` dùng long version format (`001_initial_schema`) nhưng CLI đọc filename prefix → version `001` → không match
+  2. `supabase db query` dùng extended query protocol → không chạy được multi-statement SQL → `SQLSTATE 42601`
+  3. `staging_init.sql` từ phiên #6 đã insert long format vào migration history → `supabase db push` báo "Remote migration versions not found in local migrations directory"
+- **Fix staging DB migration history**: Xóa 6 long-format entries, insert lại 6 short-format entries (`001`, `002`, ...) bằng cách chạy từng statement riêng lẻ qua CLI
+- **Fix `staging-ci.yml`**: Tách mỗi INSERT thành 1 file SQL riêng, dùng short version format
+- **Fix `001_initial_schema.sql`**: Align với production schema thực tế (`data` lowercase + `"PCODE"` UPPERCASE, bỏ `deadlinetime`, đổi `quantity` TEXT → NUMERIC, `deadlinedate` DATE → TIMESTAMPTZ)
+- **Test thành công**: `supabase db push` trả `Remote database is up to date.`
+
+### Quyết định kỹ thuật
+- Supabase CLI v2.x dùng extended query protocol cho cả `db query` và `db push` → multi-statement SQL luôn fail với SQLSTATE 42601
+- Version format đúng: `001` (chỉ numeric prefix từ filename), không phải `001_initial_schema`
+- Mỗi INSERT vào migration history phải là 1 statement riêng
+- `STAGING_DB_URL` phải dùng direct connection URL (port 5432, host `db.*.supabase.co`)
+
+### Issues phát hiện
+- Không phát hiện issue mới
+
+### Files thay đổi
+- `.github/workflows/staging-ci.yml`
+- `supabase/migrations/001_initial_schema.sql`
+
+### Context files updated
+- `.claude/work-log.md`
+
+### Status cuối phiên
+- [x] Code committed? Y — `435f220`
+- [ ] PR created? N
+- [x] Tests passing? `supabase db push` → "Remote database is up to date" ✅
+
+### Next time resume
+1. Update GitHub Secret `STAGING_DB_URL` → direct URL: `postgresql://postgres:[NEW_PASS]@db.vfzjweyzwjczrxphnvaa.supabase.co:5432/postgres`
+2. Push `435f220` lên origin/staging để trigger CI và verify workflow chạy đúng
+3. **DB-002** — Viết migration 007 thu hẹp RLS UPDATE policy trên `data`
+4. GitHub Environment `production` — tạo trong Settings với required reviewers
+
+---
+
 ## 2026-04-27 (Phiên #7 — CI lint fix, staging auth, migration repair)
 **Branch:** staging → commit `048f537`
 **Claude model:** Sonnet 4.6
