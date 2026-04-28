@@ -63,7 +63,6 @@ CREATE TABLE IF NOT EXISTS public.overtime_records (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ot_date_ws ON public.overtime_records(ot_date, workshop);
-CREATE INDEX IF NOT EXISTS idx_ot_month ON public.overtime_records(date_trunc('month', ot_date));
 CREATE INDEX IF NOT EXISTS idx_ot_pcode ON public.overtime_records(pcode);
 CREATE INDEX IF NOT EXISTS idx_ot_orig_ws ON public.overtime_records(original_workshop);
 
