@@ -9,7 +9,7 @@ import {
   Factory, Wrench, Users2, BarChart3,
   KeyRound, LogOut, ChevronDown,
   TrendingUp, ShieldCheck, Package2, ShieldAlert,
-  Settings,
+  Settings, Target, Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction, changePasswordAction } from '@/lib/actions/auth'
@@ -29,6 +29,8 @@ const REPORT_ITEMS = [
   { code: 'maintenance',  label: 'Bảo Trì',            icon: Wrench,      href: '/dashboard/report?sub=maintenance' },
   { code: 'coordination', label: 'Điều Phối',          icon: Users2,      href: '/dashboard/report?sub=coordination' },
   { code: 'hr_hse',       label: 'Nhân Sự & An Toàn',  icon: ShieldCheck, href: '/dashboard/report?sub=hr_hse' },
+  { code: 'kpi',          label: 'KPI',                 icon: Target,      href: '/dashboard/report/kpi' },
+  { code: 'overtime',     label: 'Tăng Ca',             icon: Clock,       href: '/dashboard/report/overtime' },
 ] as const
 
 const COORDINATION_ITEMS = [
