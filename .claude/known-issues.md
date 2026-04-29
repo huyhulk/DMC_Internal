@@ -1,23 +1,11 @@
 # Known Issues & Technical Debt — DMC Production Manager
 
-> **Cập nhật:** 2026-04-23
+> **Cập nhật:** 2026-04-29
 > **Format:** Priority + ID + Title + Description + Status
 
 ---
 
 ## 🔴 CRITICAL — Cần fix trước khi production-ready
-
-### SYS-001: Không có staging environment
-- **Description:** Chỉ có 1 Supabase project (production `hzuyucyxyohppxfwresq`). Mọi migration test phải chạy thẳng production → risk rất cao.
-- **Impact:** Không thể test migration, RLS change, RPC change an toàn
-- **Proposed solution:**
-  1. Tạo Supabase project mới `dmc-staging`
-  2. Copy schema + seed data (không copy production data thật)
-  3. Thêm env var `NEXT_PUBLIC_SUPABASE_URL_STAGING`
-  4. Vercel preview deploy → trỏ sang staging
-  5. Production deploy (main branch) → trỏ sang production
-- **Status:** ❌ Not started
-- **Priority:** CRITICAL
 
 ### SYS-002: Apps Script sync code không nằm trong repo
 - **Description:** Logic sync Google Sheet → Supabase là Apps Script, không có version control trong GitHub
@@ -40,17 +28,11 @@
 - **Description:** Table `data` có `id` lowercase nhưng các column khác UPPERCASE có quotes. Dễ gây confusion và bug khi viết SQL mới.
 - **Impact:** Developer mới dễ viết SAI: `SELECT pcode FROM data` → lỗi runtime
 - **Proposed solution:**
-  - Option A: Giữ nguyên, document rõ trong `database-schema.md` (đã làm)
+  - Option A: Giữ nguyên, document rõ trong `database-schema.md` ✅ (đã làm)
   - Option B: Migration rename về all lowercase (breaking change, cần plan kỹ)
-- **Status:** 🟡 Option A áp dụng (documented)
+  - View `v_data` (migration 014) cung cấp alias lowercase nếu cần
+- **Status:** 🟡 Option A áp dụng + v_data view (documented)
 - **Priority:** MEDIUM
-
-### DB-002: RLS policy UPDATE quá rộng
-- **Description:** Migration 001 cho authenticated users UPDATE table `data` → có thể user role USER cũng update được
-- **Impact:** Security risk — user bình thường có thể sửa lệnh sản xuất
-- **Proposed solution:** Thu hẹp policy UPDATE → chỉ ADMIN + MANAGER hoặc service_role (Apps Script)
-- **Status:** ⚠️ Cần verify + fix
-- **Priority:** HIGH
 
 ---
 
@@ -65,15 +47,8 @@
 - **Status:** ✅ Keep as-is
 - **Priority:** N/A (decided)
 
-### TD-002: Không có Supabase CLI config
-- **Description:** Không có `supabase/config.toml` → không thể `supabase start` local
-- **Impact:** Developer mới khó local test DB
-- **Proposed solution:** `supabase init` tạo config, test local với Docker
-- **Status:** ❌ Not started
-- **Priority:** LOW
-
 ### TD-003: Migration history không document ngày tạo
-- **Description:** Các file migration dùng tên `001-006_*` không có timestamp
+- **Description:** Các file migration dùng tên `001-015_*` không có timestamp
 - **Proposed solution:** Migration tiếp theo dùng format `YYYYMMDDHHmmss_description.sql`
 - **Status:** Guideline for next migration
 - **Priority:** LOW
@@ -98,15 +73,35 @@
 
 ## ✅ RECENTLY RESOLVED
 
+### SYS-001: Không có staging environment ✅
+- **Resolved:** 2026-04-26 → 2026-04-28 (phiên #6, #7, #8)
+- **Fix:**
+  - Supabase staging project: `vfzjweyzwjczrxphnvaa` (tạo riêng, KHÔNG phải production)
+  - `.github/workflows/staging-ci.yml` — CI riêng cho branch staging
+  - `.github/workflows/promote-to-prod.yml` — promote workflow với confirm gate
+  - `components/shared/environment-banner.tsx` — banner vàng khi NEXT_PUBLIC_ENV=staging
+  - Staging DB đã apply migration 001-015
+  - staging-ci.yml đơn giản hóa phiên #9: chỉ `supabase db push`, không cần pre-registration
+- **Còn cần (GitHub Settings — không làm được từ code):**
+  - Tạo GitHub Environment `production` với required reviewers (cho promote-to-prod.yml)
+  - Verify `STAGING_DB_URL` secret = direct URL port 5432
+
+### DB-002: RLS policy UPDATE quá rộng ✅
+- **Resolved:** 2026-04-28 (migration 007)
+- **Fix:** `007_tighten_rls_data_update.sql` — ADMIN/MANAGER unrestricted, SUPERVISOR chỉ update workshop của mình, USER không update được
+- **Branch:** staging (chưa merge main)
+
+### TD-002: Không có Supabase CLI config ✅
+- **Resolved:** 2026-04-26 (phiên #6)
+- **Fix:** `supabase/config.toml` tạo qua `supabase init`; `supabase/seed.sql` tạo để local dev
+
 ### RPT-001: OEE không có trend theo thời gian ✅
 - **Resolved:** 2026-04-23
 - **Fix:** Phase 2 — OEE trend chart với groupBy period, commit `1862011`
-- **PR:** feature/phase2-oee-trend-overtime-shift → develop
 
 ### RPT-002: Tiến độ SX filter theo INITIALDATE ✅
 - **Resolved:** 2026-04-23
 - **Fix:** Phase 2 — thêm param `filterBy=deadline|initialdate`, commit `adc1533`
-- **PR:** feature/phase2-filterby-groupby-hour → develop
 
 ### ISS-001: Tuần ISO 8601 vs lịch Mỹ ✅
 - **Resolved:** 2026-04-23

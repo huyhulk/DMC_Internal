@@ -1,9 +1,19 @@
 -- ============================================================
--- STAGING INIT — DMC Production Manager
+-- [DEPRECATED / ARCHIVED — 2026-04-29]
+-- File này KHÔNG còn được dùng trong CI pipeline.
+--
+-- Lý do: migration 001_initial_schema.sql đã được fix (phiên #8, 2026-04-28)
+-- để phản ánh đúng schema production (data lowercase + "PCODE" UPPERCASE).
+-- staging-ci.yml nay dùng `supabase db push` trực tiếp — không cần bước
+-- pre-register hay staging_init nữa.
+--
+-- File này được giữ lại để reference lịch sử. KHÔNG chạy trên bất kỳ DB nào.
+-- ============================================================
+-- STAGING INIT — DMC Production Manager (ARCHIVED)
 -- Source of truth: .claude/database-schema.md (snapshot 2026-04-23)
 -- KHÔNG chạy trên production. Chỉ dành cho staging DB.
 --
--- Tại sao không dùng migration 001–006:
+-- Tại sao không dùng migration 001–006 (lúc đó):
 --   migration 001 tạo "DATA" (uppercase) + lowercase columns,
 --   nhưng production thực tế dùng data (lowercase) + "PCODE" uppercase.
 --   File này phản ánh schema production thực tế.

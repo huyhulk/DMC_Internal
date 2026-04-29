@@ -45,6 +45,52 @@
 
 ## 📜 Entries
 
+## 2026-04-29 (Phiên #9 — Staging audit & cleanup)
+**Branch:** staging
+**Claude model:** Sonnet 4.6
+**Task:** Kiểm tra toàn bộ staging setup, fix issues, cập nhật context docs
+
+### Đã làm
+- **Audit staging**: Đọc toàn bộ 15 migrations, 3 workflow files, env setup, context docs
+- **Fix `staging-ci.yml`**: Xóa bước pre-register migrations 001-006 — workaround này không còn cần thiết vì (1) staging DB đã có đủ 001-015 trong history, (2) migration 001 đã được fix đúng schema nên fresh staging DB cũng chạy `supabase db push` trực tiếp được. Workflow giờ chỉ có 1 bước: `supabase db push`.
+- **Fix `staging_init.sql`**: Thêm deprecation notice — file này archived, không dùng trong CI nữa
+- **Tạo `supabase/seed.sql`**: File empty đúng chuẩn để `config.toml` không báo lỗi khi chạy `supabase start` local
+- **Update `database-schema.md`**: Bổ sung đầy đủ 25 tables + views + RPC từ migrations 007-015; cập nhật migration history table; phân biệt "staging only" vs "production applied"
+- **Update `known-issues.md`**: SYS-001 → RESOLVED; DB-002 → RESOLVED; TD-002 → RESOLVED; xóa duplicate entries; ghi rõ còn cần tạo GitHub Environment production
+- **Commit `PLAN_KPI_2026.md`**: File này untracked từ phiên trước, commit vào staging branch
+
+### Quyết định kỹ thuật
+- Pre-registration workaround (001-006) bị xóa khỏi staging-ci.yml — migration 001 đã đúng schema (phiên #8), workaround trở thành dead code và gây confusion
+- `supabase db push` là idempotent: nếu staging DB đã có migration trong history thì skip, không chạy lại → safe cho cả fresh và existing DB
+- `staging_init.sql` được giữ lại as archive (không xóa) để reference lịch sử setup
+
+### Issues phát hiện
+- `supabase/seed.sql` không tồn tại nhưng được reference trong `config.toml` `sql_paths = ["./seed.sql"]` → local `supabase db reset` sẽ fail → đã fix
+
+### Files thay đổi
+- `.github/workflows/staging-ci.yml`
+- `supabase/staging-setup/staging_init.sql`
+- `supabase/seed.sql` (tạo mới)
+- `PLAN_KPI_2026.md` (commit lần đầu)
+
+### Context files updated
+- `.claude/database-schema.md`
+- `.claude/known-issues.md`
+- `.claude/work-log.md`
+
+### Status cuối phiên
+- [x] Code committed? Y
+- [ ] PR created? N
+- [x] Tests passing? N/A (no code logic changes)
+
+### Next time resume
+1. **GitHub Settings** — tạo Environment `production` với required reviewers (cho promote-to-prod.yml) — phải làm thủ công trên GitHub.com
+2. **Verify `STAGING_DB_URL` secret** — đảm bảo là direct connection URL (port 5432, không phải 6543)
+3. **Phase 3 KPI** — Bắt đầu build UI theo `PLAN_KPI_2026.md`: API routes + components cho KPI dashboard
+4. **Promote staging → main** khi Phase 3 sẵn sàng (dùng promote-to-prod.yml với confirm='PRODUCTION')
+
+---
+
 ## 2026-04-28 (Phiên #8 — Fix supabase db push hoàn toàn)
 **Branch:** staging → commit `435f220`
 **Claude model:** Sonnet 4.6
