@@ -45,6 +45,56 @@
 
 ## 📜 Entries
 
+## 2026-04-30 (Phiên #10 — Build defects entry form SX-01)
+**Branch:** feat/data-entry-defects (từ staging)
+**Claude model:** Sonnet 4.6
+**Task:** Build form nhập liệu Lỗi thành phẩm — reference implementation cho 12 form data entry còn lại
+
+### Đã làm
+- **`types/database.ts`**: Bổ sung type đầy đủ (Row/Insert/Update/Relationships) cho `production_defects`
+- **`lib/validations/defects.ts`**: Zod schema `defectEntrySchema` + `defectsBulkSchema`; `DEFECT_TYPES` enum (6 loại); `SHIFT_KEYS/SHIFT_LABELS` khớp migration 006; `KPI_WORKSHOPS_FORM`
+- **`lib/actions/defects.ts`**: `submitDefectsAction` (batch insert + workspace check + logger + revalidatePath); `getDefectsListAction` (list 50 records, filter theo workspace non-ADMIN)
+- **`app/(dashboard)/dashboard/production/defects/page.tsx`**: Server component fetch profile → tính `allowedWorkshops` → pass xuống client
+- **`components/production/defects-tab.tsx`**: Form Excel-like react-hook-form + useFieldArray; shared fields (date/workshop/shift); per-row fields (pcode/product/qty/type/cause/unit); live defect rate; history table 20 records; toast feedback
+- **`components/layout/dashboard-shell.tsx`**: Chuyển Production tab thành dropdown; thêm `PRODUCTION_ITEMS` gồm "Nhập liệu SX" + "Lỗi thành phẩm"; thêm state/timer/handler tương tự Coordination
+
+### Quyết định kỹ thuật
+- Shared fields (date/workshop/shift) tách khỏi rows để tránh duplicate khi nhập nhiều dòng cùng ca
+- `defect_type` enum hardcode 6 giá trị — **TODO: xác nhận với QC nhà máy** (Q-001)
+- Workspace check server-side trong action, KHÔNG trust client
+- Production tab chuyển thành dropdown (như Coordination) thay vì flat nav — nhất quán hơn khi có thêm sub-pages
+- KHÔNG thêm migration — schema `production_defects` đã có trong migration 009 (staging)
+
+### Verify
+- `npm run type-check` ✅ (0 errors)
+- `npm run lint` ✅ (0 errors, 15 warnings — tất cả pre-existing)
+
+### Open questions
+- Q-001: Defect type list cần confirm với QC nhà máy (hiện có: Sai kích thước, Lỗi bề mặt, Lỗi chống dính, Lỗi sơn, Lỗi đóng gói, Khác)
+- Q-002: Có cần PCODE autocomplete từ bảng `data` không?
+- Q-003: Có cần upload ảnh evidence cho defect không?
+
+### Files thay đổi
+- `types/database.ts`
+- `lib/validations/defects.ts` (mới)
+- `lib/actions/defects.ts` (mới)
+- `app/(dashboard)/dashboard/production/defects/page.tsx` (mới)
+- `components/production/defects-tab.tsx` (mới)
+- `components/layout/dashboard-shell.tsx`
+
+### Status cuối phiên
+- [x] Code committed? Y
+- [ ] PR created? N — chờ smoke test
+- [x] Tests passing? type-check ✅ lint ✅
+
+### Next time resume
+1. **Smoke test** — chạy `npm run dev`, login staging, vào `/dashboard/production/defects`, nhập 2-3 dòng, verify Supabase staging có record + KPI SX-01 lên số
+2. **Trả lời Q-001/002/003** với user trước khi mở rộng sang form tiếp theo
+3. **Tạo PR** `feat/data-entry-defects` → staging sau khi smoke test OK
+4. **Nhân rộng pattern** sang `material_usage` (SX-04) → `findings_5s` (SX-05) → `machine_breakdowns` (KT-01/02/03)
+
+---
+
 ## 2026-04-29 (Phiên #9 — Staging audit & cleanup)
 **Branch:** staging
 **Claude model:** Sonnet 4.6

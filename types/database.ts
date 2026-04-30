@@ -205,6 +205,60 @@ export interface Database {
           updated_at?: string | null
         }
       }
+      production_defects: {
+        Row: {
+          id: string
+          report_date: string
+          workshop: string
+          pcode: string | null
+          product_name: string | null
+          total_qty: number
+          defect_qty: number
+          defect_type: string | null
+          defect_cause: string | null
+          unit: string | null
+          shift: string | null
+          reported_by: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          report_date: string
+          workshop: string
+          pcode?: string | null
+          product_name?: string | null
+          total_qty: number
+          defect_qty?: number
+          defect_type?: string | null
+          defect_cause?: string | null
+          unit?: string | null
+          shift?: string | null
+          reported_by?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          id: string
+          report_date: string
+          workshop: string
+          pcode: string | null
+          product_name: string | null
+          total_qty: number
+          defect_qty: number
+          defect_type: string | null
+          defect_cause: string | null
+          unit: string | null
+          shift: string | null
+          reported_by: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }>
+        Relationships: []
+      }
     }   // end Tables
     Views: Record<string, never>
     Functions: Record<string, never>
