@@ -19,7 +19,7 @@ export function KpiDetailTable({ rows }: Props) {
         <table className="w-full min-w-[760px] text-[12px]">
           <thead className="bg-[#f9f9fb]">
             <tr>
-              {['KPI', 'Mục tiêu', 'Thực tế', 'Achievement', 'Records', 'Trạng thái'].map((h) => (
+              {['KPI', 'Mục tiêu', 'Thực tế', 'Achievement', 'Dữ liệu', 'Trạng thái'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left font-semibold text-[#6e6e73]">{h}</th>
               ))}
             </tr>
