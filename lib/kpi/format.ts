@@ -89,7 +89,16 @@ export function summarizeKpiRows(rows: KpiResultRow[]): KpiSummary {
   const total = rows.length
   const achieved = rows.filter((row) => row.is_achieved).length
   const failed = total - achieved
-  const dataPoints = rows.reduce((sum, row) => sum + row.data_count, 0)
+
+  // Production KPIs (SX-01/02/06) reuse the same Production rows → summing data_count
+  // triple-counts the same records. Use SX-01.data_count directly (= số lệnh SX đã
+  // tính trong kỳ, filter theo xưởng). Maintenance/Coordination have independent
+  // data sources per KPI → keep the sum as total data points.
+  const sx01 = rows.find((row) => row.kpi_code === 'SX-01')
+  const dataPoints = sx01 !== undefined
+    ? sx01.data_count
+    : rows.reduce((sum, row) => sum + row.data_count, 0)
+
   const avgAchievement = total > 0
     ? rows.reduce((sum, row) => sum + clamp(row.achievement_pct, 0, 200), 0) / total
     : 0

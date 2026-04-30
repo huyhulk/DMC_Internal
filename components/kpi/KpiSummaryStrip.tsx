@@ -8,7 +8,7 @@ export function KpiSummaryStrip({ summary }: Props) {
     { label: 'KPI đạt',      value: `${summary.achieved}/${summary.total}`, icon: CheckCircle2, color: 'text-[#2f9e44]' },
     { label: 'KPI chưa đạt', value: summary.failed.toString(),              icon: CircleAlert,  color: 'text-[#c92a2a]' },
     { label: 'Tỷ lệ đạt',    value: `${Math.round(summary.achievementRate)}%`, icon: Gauge,    color: 'text-dmc-primary' },
-    { label: 'Điểm dữ liệu', value: summary.dataPoints.toLocaleString('vi-VN'), icon: Database, color: 'text-[#6e6e73]' },
+    { label: 'Lệnh SX', value: summary.dataPoints.toLocaleString('vi-VN'), icon: Database, color: 'text-[#6e6e73]' },
   ]
 
   return (
