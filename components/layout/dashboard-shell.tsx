@@ -9,7 +9,7 @@ import {
   Factory, Wrench, Users2, BarChart3,
   KeyRound, LogOut, ChevronDown,
   TrendingUp, ShieldCheck, Package2, ShieldAlert,
-  Settings, Target, Clock,
+  Settings, Target, Clock, UserCog, SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction, changePasswordAction } from '@/lib/actions/auth'
@@ -39,6 +39,11 @@ const COORDINATION_ITEMS = [
   { code: 'hse', label: 'An Toàn',  icon: ShieldAlert, href: '/dashboard/coordination?sub=hse' },
 ] as const
 
+const ADMIN_ITEMS = [
+  { code: 'users',        label: 'Quản lý người dùng', icon: UserCog,           href: '/dashboard/admin' },
+  { code: 'kpi-settings', label: 'Cài đặt KPI',         icon: SlidersHorizontal, href: '/dashboard/admin/kpi-settings' },
+] as const
+
 const ROLE_COLOR: Record<string, string> = {
   ADMIN:      'text-[#3b5bdb] bg-[#3b5bdb]/10 border-[#3b5bdb]/25',
   MANAGER:    'text-[#2f9e44] bg-[#2f9e44]/10 border-[#2f9e44]/25',
@@ -57,8 +62,10 @@ export function DashboardShell({ user, children }: Props) {
   const [loggingOut, setLoggingOut]           = useState(false)
   const [reportOpen, setReportOpen]           = useState(false)
   const [coordOpen, setCoordOpen]             = useState(false)
+  const [adminOpen, setAdminOpen]             = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const coordTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const adminTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const allowedTabs = ROLE_TABS[user.role]
 
@@ -78,6 +85,15 @@ export function DashboardShell({ user, children }: Props) {
 
   function scheduleCloseCoord() {
     coordTimer.current = setTimeout(() => setCoordOpen(false), 180)
+  }
+
+  function openAdminDropdown() {
+    if (adminTimer.current) clearTimeout(adminTimer.current)
+    setAdminOpen(true)
+  }
+
+  function scheduleCloseAdmin() {
+    adminTimer.current = setTimeout(() => setAdminOpen(false), 180)
   }
 
   async function handleLogout() {
@@ -179,6 +195,41 @@ export function DashboardShell({ user, children }: Props) {
                 )
               }
 
+              /* Admin tab — dropdown trigger */
+              if (tabKey === 'admin') {
+                return (
+                  <div
+                    key="admin"
+                    onMouseEnter={openAdminDropdown}
+                    onMouseLeave={scheduleCloseAdmin}
+                  >
+                    <Link
+                      href="/dashboard/admin"
+                      onClick={() => setAdminOpen(false)}
+                      className={cn(
+                        'flex items-center gap-[5px] px-3.5 py-[7px]',
+                        'rounded-[10px] text-[13px] whitespace-nowrap',
+                        'select-none transition-all duration-200 hover:scale-105',
+                        active
+                          ? 'bg-white text-dmc-primary font-semibold shadow-sm shadow-black/[0.08]'
+                          : 'font-medium text-[#6e6e73] hover:text-[#1d1d1f] active:scale-[0.97]'
+                      )}
+                    >
+                      <Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
+                      <span>Hệ Thống</span>
+                      <ChevronDown
+                        size={10}
+                        strokeWidth={2.5}
+                        className={cn(
+                          'transition-transform duration-200 shrink-0',
+                          adminOpen ? 'rotate-180' : 'rotate-0'
+                        )}
+                      />
+                    </Link>
+                  </div>
+                )
+              }
+
               /* Report tab — dropdown trigger */
               if (tabKey === 'report') {
                 return (
@@ -267,6 +318,54 @@ export function DashboardShell({ user, children }: Props) {
                     key={code}
                     href={href}
                     onClick={() => setCoordOpen(false)}
+                    className={cn(
+                      'flex items-center gap-2.5 px-3 py-2.5 mx-1 rounded-xl',
+                      'text-[13px] font-medium transition-all duration-100',
+                      isActiveSub
+                        ? 'bg-dmc-primary/8 text-dmc-primary'
+                        : 'text-[#1d1d1f] hover:bg-[#f2f2f7]'
+                    )}
+                  >
+                    <ItemIcon size={14} strokeWidth={isActiveSub ? 2.5 : 2} className="shrink-0 text-[#6e6e73]" />
+                    <span>{label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+
+          {/* ── Admin dropdown — anchored to center column bottom ── */}
+          {allowedTabs.includes('admin') && (
+            <div
+              onMouseEnter={openAdminDropdown}
+              onMouseLeave={scheduleCloseAdmin}
+              className={cn(
+                'absolute top-full mt-1.5 z-50',
+                'left-1/2 -translate-x-1/2',
+                'w-52',
+                'bg-white/95 backdrop-blur-xl',
+                'border border-[#d2d2d7]/70',
+                'rounded-2xl shadow-apple-lg',
+                'py-1.5 overflow-hidden',
+                'transition-all duration-150 origin-top',
+                adminOpen
+                  ? 'opacity-100 scale-100 pointer-events-auto translate-y-0'
+                  : 'opacity-0 scale-[0.97] pointer-events-none -translate-y-1'
+              )}
+            >
+              <div className="px-3 pb-1.5 pt-1 border-b border-[#d2d2d7]/50 mb-1">
+                <span className="text-[11px] font-semibold text-[#aeaeb2] uppercase tracking-[0.07em]">
+                  Hệ thống
+                </span>
+              </div>
+
+              {ADMIN_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                const isActiveSub = pathname.startsWith(href)
+                return (
+                  <Link
+                    key={code}
+                    href={href}
+                    onClick={() => setAdminOpen(false)}
                     className={cn(
                       'flex items-center gap-2.5 px-3 py-2.5 mx-1 rounded-xl',
                       'text-[13px] font-medium transition-all duration-100',
