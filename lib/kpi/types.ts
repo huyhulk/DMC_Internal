@@ -1,10 +1,16 @@
 export type Department = 'PRODUCTION' | 'MAINTENANCE' | 'COORDINATION'
+export type KpiDepartment = Department
+
 export type PeriodType = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+
 export type OperatorType = 'lte' | 'gte' | 'lt' | 'gt' | 'eq'
+export type KpiTargetOperator = OperatorType
+
 export type ViewMode = 'overview' | 'workshop' | 'compare'
 
 export const WORKSHOPS = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 export type WorkshopCode = typeof WORKSHOPS[number]
+export type KpiWorkshop = 'DMC1' | 'DMC3' | 'DMC4' | 'DMC5' | 'PKT-SX'
 
 export const WORKSHOP_COLORS: Record<WorkshopCode, string> = {
   DMC1: '#3b5bdb',
@@ -19,18 +25,11 @@ export const DEPARTMENTS: { key: Department; label: string; shortLabel: string; 
   { key: 'COORDINATION', label: 'Phối Hợp',  shortLabel: 'KH', kpiCount: 6 },
 ]
 
-export const PERIOD_LABELS: Record<PeriodType, string> = {
-  weekly:    'Tuần',
-  monthly:   'Tháng',
-  quarterly: 'Quý',
-  yearly:    'Năm',
-}
-
-export interface KpiResult {
+export interface KpiResultRow {
   kpi_code: string
   kpi_name: string
   target_value: number
-  target_operator: OperatorType
+  target_operator: KpiTargetOperator
   actual_value: number
   unit: string
   is_achieved: boolean
@@ -39,8 +38,54 @@ export interface KpiResult {
   period_start: string
   period_end: string
   period_label: string
-  default_period: string
+  default_period: PeriodType
   is_period_match: boolean
+}
+
+export type KpiResult = KpiResultRow
+
+export interface KpiMatrixRow extends KpiResultRow {
+  workshop: Exclude<KpiWorkshop, 'PKT-SX'>
+}
+
+export interface KpiTrendPoint {
+  period_label: string
+  period_start: string
+  period_end: string
+  actual_value: number
+  target_value: number
+  is_achieved: boolean
+}
+
+export interface KpiSummary {
+  total: number
+  achieved: number
+  failed: number
+  achievementRate: number
+  avgAchievement: number
+  dataPoints: number
+}
+
+export interface KpiDepartmentSummary {
+  department: KpiDepartment
+  label: string
+  summary: KpiSummary
+  rows: KpiResultRow[]
+}
+
+export interface KpiComparisonResponse {
+  department: KpiDepartment
+  period: {
+    type: PeriodType
+    anchor: string
+    label: string
+    start: string
+    end: string
+  }
+  workshops: Array<Exclude<KpiWorkshop, 'PKT-SX'>>
+  rows: KpiMatrixRow[]
+  summaryByWorkshop: Record<string, KpiSummary>
+  insights: string[]
 }
 
 export interface KpiWorkshopResult {
