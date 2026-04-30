@@ -7,8 +7,8 @@ const config = [
     // designed for React 19. This project targets React 18, where calling setState
     // inside useEffect is valid and the standard data-fetching pattern.
     rules: {
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/incompatible-library": "warn",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/incompatible-library": "off",
     },
   },
 ];
