@@ -28,7 +28,7 @@ function todayLocal() {
 
 export function ProductionKpiDashboard() {
   const [period, setPeriod]     = useState<PeriodSelectorValue>(() => ({ periodType: 'monthly', anchorDate: todayLocal() }))
-  const [viewMode, setViewMode] = useState<ProductionKpiViewMode>('summary')
+  const [viewMode, setViewMode] = useState<ProductionKpiViewMode>('workshop')
   const [workshop, setWorkshop] = useState<KpiWorkshop | 'ALL'>('ALL')
   const [rowsData, setRowsData] = useState<KpiRowsPayload>({ rows: [], summary: EMPTY_SUMMARY, trends: {} })
   const [comparison, setComparison] = useState<KpiComparisonResponse | null>(null)

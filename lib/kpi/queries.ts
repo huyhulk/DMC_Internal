@@ -199,16 +199,6 @@ async function queryProductionOeeRow(
   const period = periodRow ?? await queryPeriodFromDb(params.periodType, params.anchorDate)
   const target = await queryKpiTarget('SX-03', params.periodType)
 
-  if (params.workshop === 'PKT-SX') {
-    return makeOeeRow({
-      actual: 0, target, dataCount: 0,
-      periodType: params.periodType,
-      periodStart: period.period_start,
-      periodEnd: period.period_end,
-      periodLabel: period.period_label,
-    }) as KpiResultRow
-  }
-
   if (params.workshop) {
     const data = await queryOEE(params.workshop as WorkshopCode, period.period_start, period.period_end)
     const actual = ((data.workshop?.OEE ?? 0) * 100)

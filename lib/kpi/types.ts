@@ -10,7 +10,7 @@ export type ViewMode = 'overview' | 'workshop' | 'compare'
 
 export const WORKSHOPS = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 export type WorkshopCode = typeof WORKSHOPS[number]
-export type KpiWorkshop = 'DMC1' | 'DMC3' | 'DMC4' | 'DMC5' | 'PKT-SX'
+export type KpiWorkshop = 'DMC1' | 'DMC3' | 'DMC4' | 'DMC5'
 
 export const WORKSHOP_COLORS: Record<WorkshopCode, string> = {
   DMC1: '#3b5bdb',
@@ -22,7 +22,7 @@ export const WORKSHOP_COLORS: Record<WorkshopCode, string> = {
 export const DEPARTMENTS: { key: Department; label: string; shortLabel: string; kpiCount: number }[] = [
   { key: 'PRODUCTION',   label: 'Sản Xuất',  shortLabel: 'SX', kpiCount: 6 },
   { key: 'MAINTENANCE',  label: 'Bảo Trì',   shortLabel: 'KT', kpiCount: 7 },
-  { key: 'COORDINATION', label: 'Phối Hợp',  shortLabel: 'KH', kpiCount: 6 },
+  { key: 'COORDINATION', label: 'Điều Phối',  shortLabel: 'KH', kpiCount: 6 },
 ]
 
 export interface KpiResultRow {
@@ -45,7 +45,7 @@ export interface KpiResultRow {
 export type KpiResult = KpiResultRow
 
 export interface KpiMatrixRow extends KpiResultRow {
-  workshop: Exclude<KpiWorkshop, 'PKT-SX'>
+  workshop: KpiWorkshop
 }
 
 export interface KpiTrendPoint {
@@ -82,7 +82,7 @@ export interface KpiComparisonResponse {
     start: string
     end: string
   }
-  workshops: Array<Exclude<KpiWorkshop, 'PKT-SX'>>
+  workshops: Array<KpiWorkshop>
   rows: KpiMatrixRow[]
   summaryByWorkshop: Record<string, KpiSummary>
   insights: string[]

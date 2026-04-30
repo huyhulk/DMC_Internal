@@ -6,7 +6,7 @@ export const KPI_DEPARTMENTS = ['PRODUCTION', 'MAINTENANCE', 'COORDINATION'] as 
 
 export const KPI_WORKSHOPS = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 
-export const KPI_WORKSHOP_OPTIONS = ['ALL', 'DMC1', 'DMC3', 'DMC4', 'DMC5', 'PKT-SX'] as const
+export const KPI_WORKSHOP_OPTIONS = ['ALL', 'DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 
 export const PERIOD_LABELS: Record<PeriodType, string> = {
   weekly: 'Tuần',
@@ -18,7 +18,7 @@ export const PERIOD_LABELS: Record<PeriodType, string> = {
 export const DEPARTMENT_LABELS: Record<KpiDepartment, string> = {
   PRODUCTION: 'Sản xuất',
   MAINTENANCE: 'Bảo trì',
-  COORDINATION: 'Phối hợp',
+  COORDINATION: 'Điều Phối',
 }
 
 export const KPI_WORKSHOP_LABELS: Record<KpiWorkshop, string> = {
@@ -26,10 +26,9 @@ export const KPI_WORKSHOP_LABELS: Record<KpiWorkshop, string> = {
   DMC3: 'DMC3 - Tôn Panel',
   DMC4: 'DMC4 - Xà gồ',
   DMC5: 'DMC5 - Tôn & PU',
-  'PKT-SX': 'PKT-SX',
 }
 
-export const KPI_WORKSHOP_COLORS: Record<Exclude<KpiWorkshop, 'PKT-SX'>, string> = {
+export const KPI_WORKSHOP_COLORS: Record<KpiWorkshop, string> = {
   DMC1: '#3b5bdb',
   DMC3: '#2f9e44',
   DMC4: '#d4870c',
@@ -47,5 +46,5 @@ export function isKpiDepartment(value: string | null): value is KpiDepartment {
 }
 
 export function isKpiWorkshop(value: string | null): value is KpiWorkshop {
-  return value === 'DMC1' || value === 'DMC3' || value === 'DMC4' || value === 'DMC5' || value === 'PKT-SX'
+  return value === 'DMC1' || value === 'DMC3' || value === 'DMC4' || value === 'DMC5'
 }

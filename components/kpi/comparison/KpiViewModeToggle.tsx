@@ -1,18 +1,17 @@
 'use client'
 
-import { Factory, Grid2X2, Layers3 } from 'lucide-react'
+import { Factory, Grid2X2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export type ProductionKpiViewMode = 'summary' | 'workshop' | 'comparison'
+export type ProductionKpiViewMode = 'workshop' | 'comparison'
 
 interface Props {
   value: ProductionKpiViewMode
   onChange: (value: ProductionKpiViewMode) => void
 }
 
-const MODES: Array<{ value: ProductionKpiViewMode; label: string; icon: typeof Layers3 }> = [
-  { value: 'summary',    label: 'Tổng hợp',     icon: Layers3 },
-  { value: 'workshop',   label: 'Theo xưởng',   icon: Factory },
+const MODES: Array<{ value: ProductionKpiViewMode; label: string; icon: typeof Factory }> = [
+  { value: 'workshop',   label: 'Theo xưởng',    icon: Factory },
   { value: 'comparison', label: 'Matrix 4 xưởng', icon: Grid2X2 },
 ]
 
