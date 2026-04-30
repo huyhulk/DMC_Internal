@@ -268,7 +268,6 @@ export function ReportDashboard() {
         <SectionCard title="2. Kết quả sản xuất" loading={output.loading} error={output.error}>
           {output.data && (
             <OutputSection
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               data={output.data as any}
               mode={mode}
             />
@@ -279,7 +278,6 @@ export function ReportDashboard() {
         <SectionCard title="3. Kết quả chất lượng" loading={quality.loading} error={quality.error}>
           {quality.data && (
             <QualitySection
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               data={quality.data as any}
               mode={mode}
             />

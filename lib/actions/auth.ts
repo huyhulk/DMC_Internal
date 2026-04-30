@@ -31,7 +31,6 @@ const fetchSessionUser = cache(async (): Promise<SessionUser | null> => {
 
   if (!profileData) return null
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const profile = profileData as any as { username: string; role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'; workspace: string }
 
   return {

@@ -45,6 +45,52 @@
 
 ## 📜 Entries
 
+## 2026-04-30 (Phiên #11 — Fix SX-01 source + KPI UX cleanup)
+**Branch:** feat/data-entry-defects → push to origin/staging
+**Claude model:** Sonnet 4.6
+**Task:** Fix SX-01 đọc từ Production table; bỏ Tổng hợp tab; xóa PKT-SX; đổi Phối hợp → Điều Phối
+
+### Đã làm
+- **Migration 016** (`supabase/migrations/016_sx01_from_production.sql`): Viết lại block SX-01 trong `rpc_calculate_kpi` — dùng CTE `DISTINCT ON ("PCODE")` để join `"Production"` với `data` qua pcode, tính `SUM(routput) / (eoutput + routput) * 100`. Apply lên staging `vfzjweyzwjczrxphnvaa` qua Management API thành công.
+- **Revert nav dropdown**: Xóa `PRODUCTION_ITEMS`, `productionOpen` state, `productionTimer` ref, 2 handler functions khỏi `dashboard-shell.tsx` — production tab trở lại plain link, không dropdown
+- **KPI: Bỏ tab Tổng hợp**: `KpiViewModeToggle` chỉ còn 2 mode (`workshop`, `comparison`). `ProductionKpiDashboard` default từ `'summary'` → `'workshop'`
+- **KPI: Xóa PKT-SX**: `KPI_WORKSHOP_OPTIONS`, `KPI_WORKSHOP_LABELS`, `KpiWorkshop` type, `isKpiWorkshop()` đều bỏ PKT-SX. `queries.ts` xóa dead code branch PKT-SX trong `queryProductionOeeRow`
+- **KPI: Đổi tên Điều Phối**: `DEPARTMENT_LABELS.COORDINATION` và `DEPARTMENTS[2].label` đổi từ `Phối hợp/Phối Hợp` → `Điều Phối` — lan truyền tự động qua tất cả component dùng constant
+- **Quy trình staging**: Lưu feedback vào memory `feedback_staging_workflow.md` — mọi upgrade phải push branch + verify Vercel + apply migration staging trước khi hỏi merge main
+- **Deploy**: 2 commits push lên `origin/staging`
+
+### Quyết định kỹ thuật
+- SX-01 dùng `DISTINCT ON ("PCODE")` trong CTE thay vì INNER JOIN trực tiếp để tránh row multiplication nếu `data` có duplicate PCODE
+- Staging verify trả về `data_count: 0` — không phải bug, do staging `data` chỉ có 100 seed rows (PCODE 00002–00110) trong khi `Production` staging có PCODEs khác; production sẽ khớp vì cả hai đều sync từ Google Sheet
+- Bỏ hoàn toàn PKT-SX (không giữ fallback) — xưởng này không phải production workshop, không có KPI riêng
+
+### Verify
+- `npm run type-check` ✅ (0 errors)
+- `npm run lint` ✅ (0 errors, 15 warnings — tất cả pre-existing)
+
+### Files thay đổi
+- `supabase/migrations/016_sx01_from_production.sql` (mới)
+- `components/layout/dashboard-shell.tsx` (revert production dropdown)
+- `lib/kpi/constants.ts`
+- `lib/kpi/types.ts`
+- `lib/kpi/queries.ts`
+- `components/kpi/comparison/KpiViewModeToggle.tsx`
+- `components/kpi/production/ProductionKpiDashboard.tsx`
+
+### Status cuối phiên
+- [x] Code committed? Y — commit `39dca80` (migration 016 + nav revert), `6f88521` (KPI UX)
+- [ ] PR created? N — staging only
+- [x] Tests passing? type-check ✅ lint ✅
+- [x] Migration applied to staging? Y — via Management API
+
+### Next time resume
+1. **Smoke test staging** — mở Vercel preview, vào KPI Sản xuất: xác nhận chỉ còn 2 tab (Theo xưởng + Matrix), dropdown không có PKT-SX, label "Điều Phối" hiển thị đúng
+2. **Smoke test SX-01** — trên production (khi deploy), verify SX-01 trả `actual_value > 0`
+3. **Tiếp tục data entry forms** — `material_usage` (SX-04), `findings_5s` (SX-05), `machine_breakdowns` (KT-01/02/03) theo pattern defects-tab.tsx
+4. **Trả lời Q-001/002/003** từ phiên #10 về defect types, PCODE autocomplete, upload ảnh
+
+---
+
 ## 2026-04-30 (Phiên #10 — Build defects entry form SX-01)
 **Branch:** feat/data-entry-defects (từ staging)
 **Claude model:** Sonnet 4.6
