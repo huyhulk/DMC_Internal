@@ -28,15 +28,39 @@ type ProdDataRow = {
   poutput: number | null
   eoutput: number | null
   routput: number | null
-  totalem: string | null
   pdate: string | null
 }
 type OrderDataRow = {
   PCODE: string
   QUANTITY: number | null
   DEADLINEDATE: string | null
+  WORKSHOP: string | null
 }
-type ProdDataset = { prodRows: ProdDataRow[]; orderRows: OrderDataRow[] }
+type ProdDataset = {
+  prodRows: ProdDataRow[]
+  orderRows: OrderDataRow[]
+  workshopByPcode: Map<string, string>
+}
+
+// Mirror of DB normalize_workshop(): map raw Google Sheet values → DMC codes
+function wsNormalize(raw: string | null | undefined): string {
+  if (!raw) return ''
+  const s = raw.trim().toUpperCase()
+  if (s === 'DMC1' || s === 'DMC3' || s === 'DMC4' || s === 'DMC5') return s
+  if (s === 'DM1' || s === 'DM2') return 'DMC1'
+  if (s === 'DM3') return 'DMC3'
+  if (s === 'DM4') return 'DMC4'
+  if (s === 'DM5') return 'DMC5'
+  const m = s.match(/(\d)/)
+  if (m) {
+    const n = m[1]
+    if (n === '1' || n === '2') return 'DMC1'
+    if (n === '3') return 'DMC3'
+    if (n === '4') return 'DMC4'
+    if (n === '5') return 'DMC5'
+  }
+  return ''
+}
 
 type KpiDef = {
   code: string
@@ -95,9 +119,9 @@ export async function queryProductionKpiRows(params: {
     queryProductionOeeRow(params, period),
   ])
 
-  const sx01 = calcSX01(dataset.prodRows, ws)
-  const sx02 = calcSX02(dataset.prodRows, dataset.orderRows, period.period_start, period.period_end, ws)
-  const sx06 = calcSX06(dataset.prodRows, dataset.orderRows, ws)
+  const sx01 = calcSX01(dataset.prodRows, dataset.workshopByPcode, ws)
+  const sx02 = calcSX02(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, period.period_start, period.period_end, ws)
+  const sx06 = calcSX06(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, ws)
 
   return [
     buildProdKpiRow(SX01_DEF, sx01T, sx01.actual, sx01.count, params.periodType, periodRef),
@@ -221,9 +245,9 @@ export async function queryProductionKpiComparison(params: {
 
   // SX-01/02/04/05/06 per workshop — computed from Production + data tables
   const prodMatrixRows: KpiMatrixRow[] = KPI_WORKSHOPS.flatMap((workshop) => {
-    const sx01 = calcSX01(dataset.prodRows, workshop)
-    const sx02 = calcSX02(dataset.prodRows, dataset.orderRows, from, to, workshop)
-    const sx06 = calcSX06(dataset.prodRows, dataset.orderRows, workshop)
+    const sx01 = calcSX01(dataset.prodRows, dataset.workshopByPcode, workshop)
+    const sx02 = calcSX02(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, from, to, workshop)
+    const sx06 = calcSX06(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, workshop)
     return [
       buildProdKpiRow(SX01_DEF, sx01T, sx01.actual, sx01.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
       buildProdKpiRow(SX02_DEF, sx02T, sx02.actual, sx02.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
@@ -281,7 +305,7 @@ async function fetchProdDataForPeriod(from: string, to: string): Promise<ProdDat
 
   const { data: prodRows } = await supabase
     .from('Production')
-    .select('pcode,poutput,eoutput,routput,totalem,pdate')
+    .select('pcode,poutput,eoutput,routput,pdate')
     .gte('pdate', from)
     .lte('pdate', to)
 
@@ -289,16 +313,26 @@ async function fetchProdDataForPeriod(from: string, to: string): Promise<ProdDat
     (prodRows ?? []).map(r => r.pcode).filter((p): p is string => !!p)
   )]
 
-  if (pcodes.length === 0) return { prodRows: [], orderRows: [] }
+  if (pcodes.length === 0) return { prodRows: [], orderRows: [], workshopByPcode: new Map() }
 
   const { data: orderRows } = await supabase
     .from('data')
-    .select('PCODE,QUANTITY,DEADLINEDATE')
+    .select('PCODE,QUANTITY,DEADLINEDATE,WORKSHOP')
     .in('PCODE', pcodes)
+
+  // Build pcode → normalized workshop from data table (totalem is empty in Production)
+  const workshopByPcode = new Map<string, string>()
+  for (const o of (orderRows ?? [])) {
+    if (o.PCODE) {
+      const ws = wsNormalize(o.WORKSHOP)
+      if (ws) workshopByPcode.set(o.PCODE, ws)
+    }
+  }
 
   return {
     prodRows: (prodRows ?? []) as ProdDataRow[],
     orderRows: (orderRows ?? []) as OrderDataRow[],
+    workshopByPcode,
   }
 }
 
@@ -307,9 +341,12 @@ async function fetchProdDataForPeriod(from: string, to: string): Promise<ProdDat
 // SX-01: tỷ lệ lỗi = eoutput (sản phẩm lỗi) / poutput (sản phẩm đã sản xuất)
 function calcSX01(
   prodRows: ProdDataRow[],
+  workshopByPcode: Map<string, string>,
   workshop: string | null,
 ): { actual: number; count: number } {
-  const rows = workshop ? prodRows.filter(r => r.totalem === workshop) : prodRows
+  const rows = workshop
+    ? prodRows.filter(r => r.pcode && workshopByPcode.get(r.pcode) === workshop)
+    : prodRows
   const totalProd = rows.reduce((s, r) => s + (r.poutput ?? 0), 0)
   const defects = rows.reduce((s, r) => s + (r.eoutput ?? 0), 0)
   return {
@@ -322,27 +359,27 @@ function calcSX01(
 function calcSX02(
   prodRows: ProdDataRow[],
   orderRows: OrderDataRow[],
+  workshopByPcode: Map<string, string>,
   from: string,
   to: string,
   workshop: string | null,
 ): { actual: number; count: number } {
-  // Build pcode → { maxPdate, workshop } from production rows
-  const maxByPcode = new Map<string, { maxDate: string; ws: string }>()
+  // Build pcode → maxPdate from production rows
+  const maxByPcode = new Map<string, string>()
   for (const r of prodRows) {
     if (!r.pcode) continue
     const ex = maxByPcode.get(r.pcode)
-    if (!ex || (r.pdate ?? '') > ex.maxDate)
-      maxByPcode.set(r.pcode, { maxDate: r.pdate ?? '', ws: r.totalem ?? '' })
+    if (!ex || (r.pdate ?? '') > ex)
+      maxByPcode.set(r.pcode, r.pdate ?? '')
   }
 
-  // Orders: deadline in period + have production + workshop matches via Production.totalem
+  // Orders: deadline in period + have production + workshop matches via data.WORKSHOP
   const scoped = orderRows.filter(o => {
     if (!o.DEADLINEDATE) return false
     const dl = o.DEADLINEDATE.substring(0, 10)
     if (dl < from || dl > to) return false
-    const prod = maxByPcode.get(o.PCODE)
-    if (!prod) return false // no production at all → exclude
-    if (workshop && prod.ws !== workshop) return false
+    if (!maxByPcode.has(o.PCODE)) return false // no production at all → exclude
+    if (workshop && workshopByPcode.get(o.PCODE) !== workshop) return false
     return true
   })
 
@@ -350,7 +387,7 @@ function calcSX02(
 
   const onTime = scoped.filter(o => {
     const dl = o.DEADLINEDATE!.substring(0, 10)
-    return (maxByPcode.get(o.PCODE)?.maxDate ?? '') <= dl
+    return (maxByPcode.get(o.PCODE) ?? '') <= dl
   }).length
 
   return { actual: (onTime / scoped.length) * 100, count: scoped.length }
@@ -360,11 +397,14 @@ function calcSX02(
 function calcSX06(
   prodRows: ProdDataRow[],
   orderRows: OrderDataRow[],
+  workshopByPcode: Map<string, string>,
   workshop: string | null,
 ): { actual: number; count: number } {
   const qtyMap = new Map(orderRows.map(o => [o.PCODE, o.QUANTITY ?? 0]))
 
-  const rows = workshop ? prodRows.filter(r => r.totalem === workshop) : prodRows
+  const rows = workshop
+    ? prodRows.filter(r => r.pcode && workshopByPcode.get(r.pcode) === workshop)
+    : prodRows
 
   const outputByPcode = new Map<string, number>()
   for (const r of rows) {
