@@ -1,0 +1,654 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { createClient } from '@/lib/supabase/server'
+import {
+  breakdownCreateSchema, breakdownUpdateSchema, breakdownResolveSchema,
+  scheduleCreateSchema, scheduleBulkCreateSchema, scheduleCompleteSchema,
+  drawingCreateSchema, drawingCompleteSchema,
+  surveyCreateSchema,
+  type BreakdownCreateInput, type BreakdownUpdateInput, type BreakdownResolveInput,
+  type ScheduleCreateInput, type ScheduleBulkCreateInput, type ScheduleCompleteInput,
+  type DrawingCreateInput, type DrawingCompleteInput,
+  type SurveyCreateInput,
+  MAINTENANCE_TYPES,
+} from '@/lib/validations/maintenance'
+import logger from '@/lib/logger'
+
+// ─── Types from DB ────────────────────────────────────────────────────────────
+
+export type BreakdownRow = {
+  id: string; workshop: string; machine_code: string; machine_name: string | null
+  breakdown_start: string; breakdown_end: string | null; downtime_minutes: number | null
+  failure_type: string | null; root_cause: string | null; is_planned: boolean
+  repair_action: string | null; parts_replaced: string | null; technician: string | null
+  status: string; created_at: string
+}
+
+export type ScheduleRow = {
+  id: string; workshop: string; machine_code: string; machine_name: string | null
+  maintenance_type: string; scheduled_date: string; actual_date: string | null
+  is_completed: boolean; is_on_time: boolean | null; checklist_items: unknown | null
+  technician: string | null; notes: string | null; created_at: string
+}
+
+export type DrawingRow = {
+  id: string; drawing_code: string; drawing_name: string; customer: string | null
+  project_code: string | null; request_date: string; due_date: string
+  delivered_date: string | null; is_on_time: boolean | null; has_errors: boolean
+  error_count: number; error_details: string | null; reviewer: string | null
+  drafter: string | null; status: string; notes: string | null; created_at: string
+}
+
+export type SurveyRow = {
+  id: string; survey_code: string; project_code: string | null; customer: string | null
+  survey_date: string; surveyor: string | null; total_items: number; error_items: number
+  accuracy_pct: number | null; error_details: unknown | null; notes: string | null
+  created_at: string
+}
+
+type ActionResult<T = undefined> = { success: boolean; message: string; data?: T; id?: string }
+
+// ─── Auth helper ──────────────────────────────────────────────────────────────
+
+async function requireAuth() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { user: null, profile: null, supabase }
+
+  const { data: profileData } = await supabase
+    .from('profiles').select('role,workspace').eq('id', user.id).single()
+
+  return { user, profile: profileData as { role: string; workspace: string } | null, supabase }
+}
+
+function revalidate() {
+  revalidatePath('/dashboard/maintenance')
+  revalidatePath('/dashboard/report/kpi')
+}
+
+// ─── Machine Breakdowns ───────────────────────────────────────────────────────
+
+export async function createBreakdownAction(input: BreakdownCreateInput): Promise<ActionResult<string>> {
+  try {
+    const parsed = breakdownCreateSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { breakdown_end, ...rest } = parsed.data
+    const hasEnd = breakdown_end && breakdown_end.trim() !== ''
+    const status = hasEnd ? 'resolved' : 'in_progress'
+
+    const { data, error } = await supabase.from('machine_breakdowns').insert({
+      ...rest,
+      machine_name:    rest.machine_name || null,
+      failure_type:    rest.failure_type ?? null,
+      root_cause:      rest.root_cause || null,
+      repair_action:   rest.repair_action || null,
+      parts_replaced:  rest.parts_replaced || null,
+      technician:      rest.technician || null,
+      breakdown_end:   hasEnd ? breakdown_end : null,
+      status,
+      created_by: user.id,
+    }).select('id').single()
+
+    if (error) {
+      logger.error({ error: error.message, userId: user.id }, 'createBreakdown DB error')
+      return { success: false, message: `Lỗi DB: ${error.message}` }
+    }
+
+    revalidate()
+    return { success: true, message: 'Đã lưu sự cố máy.', id: data?.id }
+  } catch (err) {
+    logger.error({ err }, 'createBreakdownAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function updateBreakdownAction(id: string, input: Omit<BreakdownUpdateInput, 'id'>): Promise<ActionResult> {
+  try {
+    const parsed = breakdownUpdateSchema.safeParse({ ...input, id })
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
+
+    const { id: _, ...rest } = parsed.data
+    const hasEnd = rest.breakdown_end && rest.breakdown_end.trim() !== ''
+    const updatePayload = {
+      ...rest,
+      machine_name:  rest.machine_name || null,
+      failure_type:  rest.failure_type ?? null,
+      root_cause:    rest.root_cause || null,
+      repair_action: rest.repair_action || null,
+      parts_replaced: rest.parts_replaced || null,
+      technician:    rest.technician || null,
+      breakdown_end: hasEnd ? rest.breakdown_end : null,
+      status: hasEnd ? 'resolved' : (rest.status ?? 'in_progress'),
+    }
+
+    const { error } = await supabase.from('machine_breakdowns').update(updatePayload).eq('id', id)
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã cập nhật sự cố.' }
+  } catch (err) {
+    logger.error({ err }, 'updateBreakdownAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function resolveBreakdownAction(id: string, input: BreakdownResolveInput): Promise<ActionResult> {
+  try {
+    const parsed = breakdownResolveSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { error } = await supabase.from('machine_breakdowns').update({
+      breakdown_end:  parsed.data.breakdown_end,
+      repair_action:  parsed.data.repair_action || null,
+      parts_replaced: parsed.data.parts_replaced || null,
+      technician:     parsed.data.technician || null,
+      status: 'resolved',
+    }).eq('id', id)
+
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã đánh dấu hoàn thành.' }
+  } catch (err) {
+    logger.error({ err }, 'resolveBreakdownAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function deleteBreakdownAction(id: string): Promise<ActionResult> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
+
+    const { error } = await supabase.from('machine_breakdowns').delete().eq('id', id)
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã xóa sự cố.' }
+  } catch (err) {
+    logger.error({ err }, 'deleteBreakdownAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function listBreakdownsAction(filter: {
+  workshop?: string; from?: string; to?: string
+  status?: string; failure_type?: string; limit?: number
+}): Promise<ActionResult<BreakdownRow[]>> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Chưa đăng nhập', data: [] }
+
+    let query = supabase.from('machine_breakdowns')
+      .select('*')
+      .order('breakdown_start', { ascending: false })
+      .limit(filter.limit ?? 100)
+
+    if (filter.from)         query = query.gte('breakdown_start', filter.from)
+    if (filter.to)           query = query.lte('breakdown_start', filter.to + 'T23:59:59')
+    if (filter.workshop && filter.workshop !== 'ALL') query = query.eq('workshop', filter.workshop)
+    if (filter.status && filter.status !== 'ALL')    query = query.eq('status', filter.status)
+    if (filter.failure_type && filter.failure_type !== 'ALL') query = query.eq('failure_type', filter.failure_type)
+
+    if (profile.role === 'SUPERVISOR' && profile.workspace && profile.workspace !== 'ALL') {
+      query = query.eq('workshop', profile.workspace)
+    }
+
+    const { data, error } = await query
+    if (error) return { success: false, message: error.message, data: [] }
+    return { success: true, message: '', data: (data ?? []) as BreakdownRow[] }
+  } catch (err) {
+    logger.error({ err }, 'listBreakdownsAction error')
+    return { success: false, message: String(err), data: [] }
+  }
+}
+
+// ─── Maintenance Schedule ─────────────────────────────────────────────────────
+
+export async function createScheduleAction(input: ScheduleCreateInput): Promise<ActionResult<string>> {
+  try {
+    const parsed = scheduleCreateSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { data, error } = await supabase.from('maintenance_schedule').insert({
+      workshop:         parsed.data.workshop,
+      machine_code:     parsed.data.machine_code,
+      machine_name:     parsed.data.machine_name || null,
+      maintenance_type: parsed.data.maintenance_type,
+      scheduled_date:   parsed.data.scheduled_date,
+      checklist_items:  parsed.data.checklist_items?.length ? parsed.data.checklist_items : null,
+      technician:       parsed.data.technician || null,
+      notes:            parsed.data.notes || null,
+    }).select('id').single()
+
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã thêm lịch bảo trì.', id: data?.id }
+  } catch (err) {
+    logger.error({ err }, 'createScheduleAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function bulkCreateScheduleAction(input: ScheduleBulkCreateInput): Promise<ActionResult<number>> {
+  try {
+    const parsed = scheduleBulkCreateSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { start_date, end_date, frequency, workshop, machine_code, machine_name,
+            maintenance_type, checklist_items, technician, notes } = parsed.data
+
+    const dates: string[] = []
+    const cur = new Date(start_date)
+    const endD = new Date(end_date)
+
+    while (cur <= endD) {
+      dates.push(cur.toISOString().split('T')[0])
+      if (frequency === 'weekly')    cur.setDate(cur.getDate() + 7)
+      else if (frequency === 'monthly') cur.setMonth(cur.getMonth() + 1)
+      else if (frequency === 'quarterly') cur.setMonth(cur.getMonth() + 3)
+    }
+
+    if (dates.length === 0) return { success: false, message: 'Không tạo được lịch nào trong khoảng ngày này.' }
+
+    const inserts = dates.map((d) => ({
+      workshop, machine_code,
+      machine_name: machine_name || null,
+      maintenance_type,
+      scheduled_date: d,
+      checklist_items: checklist_items?.length ? checklist_items : null,
+      technician: technician || null,
+      notes: notes || null,
+    }))
+
+    const { error } = await supabase.from('maintenance_schedule').insert(inserts)
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: `Đã tạo ${dates.length} lịch bảo trì.`, data: dates.length }
+  } catch (err) {
+    logger.error({ err }, 'bulkCreateScheduleAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function completeScheduleAction(id: string, input: ScheduleCompleteInput): Promise<ActionResult> {
+  try {
+    const parsed = scheduleCompleteSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { error } = await supabase.from('maintenance_schedule').update({
+      actual_date:     parsed.data.actual_date,
+      technician:      parsed.data.technician || null,
+      notes:           parsed.data.notes || null,
+      checklist_items: parsed.data.checklist_items?.length ? parsed.data.checklist_items : null,
+    }).eq('id', id)
+
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã đánh dấu hoàn thành bảo trì.' }
+  } catch (err) {
+    logger.error({ err }, 'completeScheduleAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function updateScheduleAction(id: string, input: Partial<ScheduleCreateInput>): Promise<ActionResult> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
+
+    const { error } = await supabase.from('maintenance_schedule').update({
+      ...input,
+      machine_name: input.machine_name || null,
+      checklist_items: input.checklist_items?.length ? input.checklist_items : null,
+      technician: input.technician || null,
+      notes: input.notes || null,
+    }).eq('id', id)
+
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã cập nhật lịch bảo trì.' }
+  } catch (err) {
+    logger.error({ err }, 'updateScheduleAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function deleteScheduleAction(id: string): Promise<ActionResult> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
+
+    const { error } = await supabase.from('maintenance_schedule').delete().eq('id', id)
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã xóa lịch bảo trì.' }
+  } catch (err) {
+    logger.error({ err }, 'deleteScheduleAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function listScheduleAction(filter: {
+  workshop?: string; from?: string; to?: string
+  status?: 'pending' | 'completed' | 'ALL'; maintenance_type?: string; limit?: number
+}): Promise<ActionResult<ScheduleRow[]>> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Chưa đăng nhập', data: [] }
+
+    let query = supabase.from('maintenance_schedule')
+      .select('*')
+      .order('scheduled_date', { ascending: false })
+      .limit(filter.limit ?? 200)
+
+    if (filter.from)  query = query.gte('scheduled_date', filter.from)
+    if (filter.to)    query = query.lte('scheduled_date', filter.to)
+    if (filter.workshop && filter.workshop !== 'ALL') query = query.eq('workshop', filter.workshop)
+    if (filter.maintenance_type && filter.maintenance_type !== 'ALL') {
+      query = query.eq('maintenance_type', filter.maintenance_type)
+    }
+    if (filter.status === 'completed')  query = query.not('actual_date', 'is', null)
+    if (filter.status === 'pending')    query = query.is('actual_date', null)
+
+    if (profile.role === 'SUPERVISOR' && profile.workspace && profile.workspace !== 'ALL') {
+      query = query.eq('workshop', profile.workspace)
+    }
+
+    const { data, error } = await query
+    if (error) return { success: false, message: error.message, data: [] }
+    return { success: true, message: '', data: (data ?? []) as ScheduleRow[] }
+  } catch (err) {
+    logger.error({ err }, 'listScheduleAction error')
+    return { success: false, message: String(err), data: [] }
+  }
+}
+
+// ─── Technical Drawings ───────────────────────────────────────────────────────
+
+export async function createDrawingAction(input: DrawingCreateInput): Promise<ActionResult<string>> {
+  try {
+    const parsed = drawingCreateSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { drawing_type: _, ...rest } = parsed.data
+
+    const { data, error } = await supabase.from('technical_drawings').insert({
+      drawing_code: rest.drawing_code,
+      drawing_name: rest.drawing_name,
+      customer:     rest.customer || null,
+      project_code: rest.project_code || null,
+      request_date: rest.request_date,
+      due_date:     rest.due_date,
+      drafter:      rest.drafter || null,
+      notes:        rest.notes || null,
+      status:       'in_progress',
+    }).select('id').single()
+
+    if (error) {
+      if (error.code === '23505') return { success: false, message: 'Mã bản vẽ đã tồn tại.' }
+      return { success: false, message: `Lỗi DB: ${error.message}` }
+    }
+
+    revalidate()
+    return { success: true, message: 'Đã tạo yêu cầu bản vẽ.', id: data?.id }
+  } catch (err) {
+    logger.error({ err }, 'createDrawingAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function updateDrawingAction(id: string, input: Partial<DrawingCreateInput>): Promise<ActionResult> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
+
+    const { drawing_type: _, ...rest } = input
+
+    const { error } = await supabase.from('technical_drawings').update({
+      ...rest,
+      customer:     rest.customer || null,
+      project_code: rest.project_code || null,
+      drafter:      rest.drafter || null,
+      notes:        rest.notes || null,
+    }).eq('id', id)
+
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã cập nhật bản vẽ.' }
+  } catch (err) {
+    logger.error({ err }, 'updateDrawingAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function completeDrawingAction(id: string, input: DrawingCompleteInput): Promise<ActionResult> {
+  try {
+    const parsed = drawingCompleteSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { error } = await supabase.from('technical_drawings').update({
+      delivered_date: parsed.data.delivered_date,
+      has_errors:     parsed.data.has_errors,
+      error_count:    parsed.data.has_errors ? (parsed.data.error_count ?? 0) : 0,
+      error_details:  parsed.data.has_errors ? (parsed.data.error_details || null) : null,
+      reviewer:       parsed.data.reviewer || null,
+      status:         parsed.data.status,
+    }).eq('id', id)
+
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã bàn giao bản vẽ.' }
+  } catch (err) {
+    logger.error({ err }, 'completeDrawingAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function deleteDrawingAction(id: string): Promise<ActionResult> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
+
+    const { error } = await supabase.from('technical_drawings').delete().eq('id', id)
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã xóa bản vẽ.' }
+  } catch (err) {
+    logger.error({ err }, 'deleteDrawingAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function listDrawingsAction(filter: {
+  from?: string; to?: string; status?: string; limit?: number
+}): Promise<ActionResult<DrawingRow[]>> {
+  try {
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Chưa đăng nhập', data: [] }
+
+    let query = supabase.from('technical_drawings')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(filter.limit ?? 100)
+
+    if (filter.from) query = query.gte('request_date', filter.from)
+    if (filter.to)   query = query.lte('request_date', filter.to)
+    if (filter.status && filter.status !== 'ALL') query = query.eq('status', filter.status)
+
+    const { data, error } = await query
+    if (error) return { success: false, message: error.message, data: [] }
+    return { success: true, message: '', data: (data ?? []) as DrawingRow[] }
+  } catch (err) {
+    logger.error({ err }, 'listDrawingsAction error')
+    return { success: false, message: String(err), data: [] }
+  }
+}
+
+// ─── Site Surveys ─────────────────────────────────────────────────────────────
+
+export async function createSurveyAction(input: SurveyCreateInput): Promise<ActionResult<string>> {
+  try {
+    const parsed = surveyCreateSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { data, error } = await supabase.from('site_surveys').insert({
+      survey_code:   parsed.data.survey_code,
+      survey_date:   parsed.data.survey_date,
+      project_code:  parsed.data.project_code || null,
+      customer:      parsed.data.customer || null,
+      surveyor:      parsed.data.surveyor || null,
+      total_items:   parsed.data.total_items,
+      error_items:   parsed.data.error_items,
+      error_details: parsed.data.error_details?.length ? parsed.data.error_details : null,
+      notes:         parsed.data.notes || null,
+    }).select('id').single()
+
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã lưu kết quả khảo sát.', id: data?.id }
+  } catch (err) {
+    logger.error({ err }, 'createSurveyAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function updateSurveyAction(id: string, input: Partial<SurveyCreateInput>): Promise<ActionResult> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
+
+    const { error } = await supabase.from('site_surveys').update({
+      ...input,
+      project_code:  input.project_code || null,
+      customer:      input.customer || null,
+      surveyor:      input.surveyor || null,
+      error_details: input.error_details?.length ? input.error_details : null,
+      notes:         input.notes || null,
+    }).eq('id', id)
+
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã cập nhật khảo sát.' }
+  } catch (err) {
+    logger.error({ err }, 'updateSurveyAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function deleteSurveyAction(id: string): Promise<ActionResult> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
+
+    const { error } = await supabase.from('site_surveys').delete().eq('id', id)
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return { success: true, message: 'Đã xóa khảo sát.' }
+  } catch (err) {
+    logger.error({ err }, 'deleteSurveyAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function listSurveysAction(filter: {
+  from?: string; to?: string; limit?: number
+}): Promise<ActionResult<SurveyRow[]>> {
+  try {
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Chưa đăng nhập', data: [] }
+
+    let query = supabase.from('site_surveys')
+      .select('*')
+      .order('survey_date', { ascending: false })
+      .limit(filter.limit ?? 100)
+
+    if (filter.from) query = query.gte('survey_date', filter.from)
+    if (filter.to)   query = query.lte('survey_date', filter.to)
+
+    const { data, error } = await query
+    if (error) return { success: false, message: error.message, data: [] }
+    return { success: true, message: '', data: (data ?? []) as SurveyRow[] }
+  } catch (err) {
+    logger.error({ err }, 'listSurveysAction error')
+    return { success: false, message: String(err), data: [] }
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+export async function listMachineCodesAction(workshop?: string): Promise<{ machine_code: string; machine_name: string | null }[]> {
+  try {
+    const { user, supabase } = await requireAuth()
+    if (!user) return []
+
+    let query = supabase.from('machine_breakdowns').select('machine_code, machine_name')
+    if (workshop && workshop !== 'ALL') query = query.eq('workshop', workshop)
+
+    const { data } = await query
+    if (!data) return []
+
+    const seen = new Set<string>()
+    const result: { machine_code: string; machine_name: string | null }[] = []
+    for (const row of data as { machine_code: string; machine_name: string | null }[]) {
+      if (!seen.has(row.machine_code)) {
+        seen.add(row.machine_code)
+        result.push({ machine_code: row.machine_code, machine_name: row.machine_name })
+      }
+    }
+    return result
+  } catch {
+    return []
+  }
+}
+
+// Re-export types needed by MAINTENANCE_TYPES constant
+export { MAINTENANCE_TYPES }
