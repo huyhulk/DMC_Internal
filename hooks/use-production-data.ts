@@ -35,8 +35,10 @@ const INITIAL_LINE: ProductLine = {
 const MAX_LINES = 5
 const INITIAL_LINES = 2
 
-function makeInitialLines(today: string): ProductLine[] {
-  return Array.from({ length: MAX_LINES }, () => ({ ...INITIAL_LINE, pdate: today }))
+// pdate always defaults to today (client local time), never to selectedDate.
+// selectedDate controls which day's orders are shown; pdate is the actual production date.
+function makeInitialLines(): ProductLine[] {
+  return Array.from({ length: MAX_LINES }, () => ({ ...INITIAL_LINE, pdate: getTodayLocal() }))
 }
 
 export function useProductionData(user: SessionUser) {
@@ -52,7 +54,7 @@ export function useProductionData(user: SessionUser) {
     pcodeStatuses: {},
     pcodeUnlocked: false,
     dateLocked: true,
-    lines: makeInitialLines(today),
+    lines: makeInitialLines(),
     unlockLog: [],
     orderInfo: null,
   })
@@ -112,7 +114,7 @@ export function useProductionData(user: SessionUser) {
         orderInfo: null,
         pcodeStatuses: statuses,
         pcodeUnlocked: false,
-        lines: makeInitialLines(s.selectedDate),
+        lines: makeInitialLines(),
       }))
       setVisibleRows(INITIAL_LINES)
     },
@@ -297,7 +299,7 @@ export function useProductionData(user: SessionUser) {
 
     const rowsToSave = isOther
       ? [{
-          pdate: selectedDate,
+          pdate: getTodayLocal(),
           totalem: '',
           pcode: actualPcode,
           products: '',
@@ -314,7 +316,7 @@ export function useProductionData(user: SessionUser) {
       : lines.slice(0, visibleRows)
           .filter((l) => l.product && !l.product.startsWith('--'))
           .map((l) => ({
-            pdate: l.pdate || selectedDate,
+            pdate: l.pdate || getTodayLocal(),
             totalem: '',
             pcode: actualPcode,
             products: l.product,

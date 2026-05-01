@@ -64,7 +64,8 @@ export function ProductionTab({ user }: Props) {
 
   async function handleSearch() {
     if (!searchQuery.trim()) return
-    await searchByPcode(searchQuery.trim())
+    const order = await searchByPcode(searchQuery.trim())
+    if (order) await loadData(order.initialdate)  // Load orders for that date so pcode appears in dropdown
   }
 
   async function handleRefreshNorms() {
