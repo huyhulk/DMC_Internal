@@ -66,7 +66,7 @@ const breakdownBaseSchema = z.object({
   breakdown_start: z.string().min(1, 'Nhập thời gian bắt đầu'),
   breakdown_end:   z.string().optional().or(z.literal('')),
   is_planned:      z.boolean().default(false),
-  failure_type:    z.enum(FAILURE_TYPES).optional(),
+  failure_type:    z.enum(FAILURE_TYPES).optional().or(z.literal('')),
   status:          z.enum(BREAKDOWN_STATUSES).optional(),
   root_cause:      z.string().trim().max(1000).optional().or(z.literal('')),
   repair_action:   z.string().trim().max(1000).optional().or(z.literal('')),

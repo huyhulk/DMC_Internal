@@ -49,9 +49,13 @@ export function SurveysTab({ user }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await listSurveysAction({ from: filter.from || undefined, to: filter.to || undefined })
-    if (res.success) setRows(res.data ?? [])
-    setLoading(false)
+    try {
+      const res = await listSurveysAction({ from: filter.from || undefined, to: filter.to || undefined })
+      if (res.success) setRows(res.data ?? [])
+      else setRows([])
+    } finally {
+      setLoading(false)
+    }
   }, [filter])
 
   useEffect(() => { void load() }, [load])

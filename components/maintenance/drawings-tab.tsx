@@ -54,13 +54,17 @@ export function DrawingsTab({ user }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await listDrawingsAction({
-      from:   filter.from || undefined,
-      to:     filter.to   || undefined,
-      status: mode === 'deliver' ? 'in_progress' : (filter.status !== 'ALL' ? filter.status : undefined),
-    })
-    if (res.success) setRows(res.data ?? [])
-    setLoading(false)
+    try {
+      const res = await listDrawingsAction({
+        from:   filter.from || undefined,
+        to:     filter.to   || undefined,
+        status: mode === 'deliver' ? 'in_progress' : (filter.status !== 'ALL' ? filter.status : undefined),
+      })
+      if (res.success) setRows(res.data ?? [])
+      else setRows([])
+    } finally {
+      setLoading(false)
+    }
   }, [filter, mode])
 
   useEffect(() => { void load() }, [load])

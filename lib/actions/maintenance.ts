@@ -92,7 +92,7 @@ export async function createBreakdownAction(input: BreakdownCreateInput): Promis
     const { data, error } = await supabase.from('machine_breakdowns').insert({
       ...rest,
       machine_name:    rest.machine_name || null,
-      failure_type:    rest.failure_type ?? null,
+      failure_type:    rest.failure_type || null,
       root_cause:      rest.root_cause || null,
       repair_action:   rest.repair_action || null,
       parts_replaced:  rest.parts_replaced || null,
@@ -129,7 +129,7 @@ export async function updateBreakdownAction(id: string, input: Omit<BreakdownUpd
     const updatePayload = {
       ...rest,
       machine_name:  rest.machine_name || null,
-      failure_type:  rest.failure_type ?? null,
+      failure_type:  rest.failure_type || null,
       root_cause:    rest.root_cause || null,
       repair_action: rest.repair_action || null,
       parts_replaced: rest.parts_replaced || null,

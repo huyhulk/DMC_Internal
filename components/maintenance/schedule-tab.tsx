@@ -427,13 +427,13 @@ export function ScheduleTab({ user }: Props) {
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => { setShowCreate(false); setSelectedMachines(new Set()) }}
               className="flex-1 h-10 rounded-xl border border-[#d2d2d7] text-[13px] text-[#6e6e73] hover:bg-[#f2f2f7]">Hủy</button>
-            <button type="submit" disabled={submitting || selectedMachines.size === 0}
+            <button type="submit" disabled={submitting}
               className="flex-1 h-10 rounded-xl bg-dmc-primary text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50">
               {submitting
                 ? 'Đang lưu…'
                 : selectedMachines.size > 0
                   ? `Tạo ${selectedMachines.size} lịch`
-                  : 'Chọn thiết bị'}
+                  : 'Tạo lịch'}
             </button>
           </div>
         </form>
