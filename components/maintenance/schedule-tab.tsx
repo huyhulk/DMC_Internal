@@ -20,7 +20,6 @@ import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
-import { Combobox } from '@/components/ui/combobox'
 import type { SessionUser } from '@/types'
 
 const inputCls = 'w-full h-9 px-2.5 rounded-lg text-[12px] font-medium text-[#1d1d1f] placeholder:text-[#aeaeb2] bg-white border border-[#d2d2d7] focus:outline-none focus:ring-1 focus:ring-dmc-primary/40 focus:border-dmc-primary/50 transition-all'
@@ -37,7 +36,7 @@ export function ScheduleTab({ user }: Props) {
   const [completeId, setCompleteId]   = useState<string | null>(null)
   const [completeChecklist, setCompleteChecklist] = useState<{ item: string; ok: boolean; note: string }[]>([])
   const [deleteId, setDeleteId]       = useState<string | null>(null)
-  const [machineCodes, setMachineCodes] = useState<string[]>([])
+  const [machines, setMachines] = useState<{ machine_code: string; machine_name: string | null }[]>([])
   const [submitting, setSubmitting]   = useState(false)
 
   const [filter, setFilter] = useState({ workshop: 'ALL', from: '', to: '', type: 'ALL' })
@@ -57,11 +56,6 @@ export function ScheduleTab({ user }: Props) {
     setLoading(false)
   }, [filter, mode])
 
-  useEffect(() => { void load() }, [load])
-  useEffect(() => {
-    listMachineCodesAction().then((c) => setMachineCodes(c.map((x) => x.machine_code)))
-  }, [])
-
   const createForm = useForm<ScheduleCreateInput>({
     resolver: zodResolver(scheduleCreateSchema),
     defaultValues: { workshop: KPI_WORKSHOPS[0], maintenance_type: 'monthly', scheduled_date: getTodayLocal() },
@@ -71,6 +65,19 @@ export function ScheduleTab({ user }: Props) {
     resolver: zodResolver(scheduleBulkCreateSchema),
     defaultValues: { workshop: KPI_WORKSHOPS[0], maintenance_type: 'monthly', frequency: 'monthly', start_date: getTodayLocal(), end_date: getTodayLocal() },
   })
+
+  const createWorkshop = createForm.watch('workshop')
+  const bulkWorkshop   = bulkForm.watch('workshop')
+
+  useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    listMachineCodesAction(createWorkshop).then(setMachines)
+  }, [createWorkshop])
+
+  useEffect(() => {
+    listMachineCodesAction(bulkWorkshop).then(setMachines)
+  }, [bulkWorkshop])
 
   const completeForm = useForm<ScheduleCompleteInput>({
     resolver: zodResolver(scheduleCompleteSchema),
@@ -136,9 +143,6 @@ export function ScheduleTab({ user }: Props) {
     if (row.scheduled_date < today) return 'Quá hạn'
     return 'Chưa thực hiện'
   }
-
-  const machineFieldCreate = createForm.watch('machine_code') ?? ''
-  const machineFieldBulk   = bulkForm.watch('machine_code') ?? ''
 
   return (
     <div className="space-y-4">
@@ -275,16 +279,31 @@ export function ScheduleTab({ user }: Props) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Mã máy *</label>
-              <Combobox value={machineFieldCreate} onChange={(v) => createForm.setValue('machine_code', v)}
-                options={machineCodes} placeholder="MCT-01..." />
+              <label className={labelCls}>Tên thiết bị *</label>
+              <select
+                className={inputCls}
+                value={createForm.watch('machine_code') ?? ''}
+                onChange={(e) => {
+                  const code = e.target.value
+                  const found = machines.find((m) => m.machine_code === code)
+                  createForm.setValue('machine_name', found?.machine_name ?? '', { shouldValidate: true })
+                  createForm.setValue('machine_code', code, { shouldValidate: true })
+                }}
+              >
+                <option value="">— Chọn thiết bị —</option>
+                {machines.map((m) => (
+                  <option key={m.machine_code} value={m.machine_code}>
+                    {m.machine_name ?? m.machine_code}
+                  </option>
+                ))}
+              </select>
               {createForm.formState.errors.machine_code && (
                 <p className="text-[11px] text-red-500 mt-0.5">{createForm.formState.errors.machine_code.message}</p>
               )}
             </div>
             <div>
-              <label className={labelCls}>Tên máy</label>
-              <input {...createForm.register('machine_name')} className={inputCls} />
+              <label className={labelCls}>Mã thiết bị</label>
+              <input {...createForm.register('machine_code')} className={inputCls} placeholder="Tự điền khi chọn tên" />
             </div>
             <div>
               <label className={labelCls}>Ngày lịch *</label>
@@ -338,9 +357,24 @@ export function ScheduleTab({ user }: Props) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Mã máy *</label>
-              <Combobox value={machineFieldBulk} onChange={(v) => bulkForm.setValue('machine_code', v)}
-                options={machineCodes} placeholder="MCT-01..." />
+              <label className={labelCls}>Tên thiết bị *</label>
+              <select
+                className={inputCls}
+                value={bulkForm.watch('machine_code') ?? ''}
+                onChange={(e) => {
+                  const code = e.target.value
+                  const found = machines.find((m) => m.machine_code === code)
+                  bulkForm.setValue('machine_name', found?.machine_name ?? '')
+                  bulkForm.setValue('machine_code', code)
+                }}
+              >
+                <option value="">— Chọn thiết bị —</option>
+                {machines.map((m) => (
+                  <option key={m.machine_code} value={m.machine_code}>
+                    {m.machine_name ?? m.machine_code}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className={labelCls}>Loại BT *</label>

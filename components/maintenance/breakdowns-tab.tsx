@@ -19,7 +19,6 @@ import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
-import { Combobox } from '@/components/ui/combobox'
 import type { SessionUser } from '@/types'
 
 const inputCls = 'w-full h-9 px-2.5 rounded-lg text-[12px] font-medium text-[#1d1d1f] placeholder:text-[#aeaeb2] bg-white border border-[#d2d2d7] focus:outline-none focus:ring-1 focus:ring-dmc-primary/40 focus:border-dmc-primary/50 transition-all'
@@ -42,13 +41,13 @@ function formatDowntime(minutes: number | null) {
 interface Props { user: SessionUser }
 
 export function BreakdownsTab({ user }: Props) {
-  const [rows, setRows]           = useState<BreakdownRow[]>([])
-  const [loading, setLoading]     = useState(true)
+  const [rows, setRows]             = useState<BreakdownRow[]>([])
+  const [loading, setLoading]       = useState(true)
   const [showCreate, setShowCreate] = useState(false)
-  const [resolveId, setResolveId] = useState<string | null>(null)
-  const [deleteId, setDeleteId]   = useState<string | null>(null)
-  const [machineCodes, setMachineCodes] = useState<string[]>([])
-  const [pktStaff, setPktStaff]         = useState<string[]>([])
+  const [resolveId, setResolveId]   = useState<string | null>(null)
+  const [deleteId, setDeleteId]     = useState<string | null>(null)
+  const [machines, setMachines]     = useState<{ machine_code: string; machine_name: string | null }[]>([])
+  const [pktStaff, setPktStaff]     = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   const [filter, setFilter] = useState({
@@ -73,13 +72,6 @@ export function BreakdownsTab({ user }: Props) {
     setLoading(false)
   }, [filter])
 
-  useEffect(() => { void load() }, [load])
-
-  useEffect(() => {
-    listMachineCodesAction().then((codes) => setMachineCodes(codes.map((c) => c.machine_code)))
-    listStaffByWorkshopAction('PKT-SX').then((staff) => setPktStaff(staff.map((s) => s.name)))
-  }, [])
-
   const createForm = useForm<BreakdownCreateInput>({
     resolver: zodResolver(breakdownCreateSchema),
     defaultValues: {
@@ -93,6 +85,18 @@ export function BreakdownsTab({ user }: Props) {
     resolver: zodResolver(breakdownResolveSchema),
     defaultValues: { breakdown_end: new Date().toISOString().slice(0, 16) },
   })
+
+  const formWorkshop = createForm.watch('workshop')
+
+  useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    listMachineCodesAction(formWorkshop).then(setMachines)
+  }, [formWorkshop])
+
+  useEffect(() => {
+    listStaffByWorkshopAction('PKT-SX').then((staff) => setPktStaff(staff.map((s) => s.name)))
+  }, [])
 
   async function onCreateSubmit(values: BreakdownCreateInput) {
     setSubmitting(true)
@@ -136,8 +140,6 @@ export function BreakdownsTab({ user }: Props) {
     }
     setSubmitting(false)
   }
-
-  const machineField = createForm.watch('machine_code') ?? ''
 
   return (
     <div className="space-y-4">
@@ -272,20 +274,35 @@ export function BreakdownsTab({ user }: Props) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Mã máy *</label>
-              <Combobox
-                value={machineField}
-                onChange={(v) => createForm.setValue('machine_code', v)}
-                options={machineCodes}
-                placeholder="MCT-01, MXG-Z-01..."
+              <label className={labelCls}>Tên thiết bị *</label>
+              <select
+                className={inputCls}
+                value={createForm.watch('machine_code') ?? ''}
+                onChange={(e) => {
+                  const code = e.target.value
+                  const found = machines.find((m) => m.machine_code === code)
+                  createForm.setValue('machine_name', found?.machine_name ?? '', { shouldValidate: true })
+                  createForm.setValue('machine_code', code, { shouldValidate: true })
+                }}
+              >
+                <option value="">— Chọn thiết bị —</option>
+                {machines.map((m) => (
+                  <option key={m.machine_code} value={m.machine_code}>
+                    {m.machine_name ?? m.machine_code}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Mã thiết bị</label>
+              <input
+                {...createForm.register('machine_code')}
+                className={inputCls}
+                placeholder="Tự điền khi chọn tên"
               />
               {createForm.formState.errors.machine_code && (
                 <p className="text-[11px] text-red-500 mt-0.5">{createForm.formState.errors.machine_code.message}</p>
               )}
-            </div>
-            <div>
-              <label className={labelCls}>Tên máy</label>
-              <input {...createForm.register('machine_name')} className={inputCls} placeholder="Tên đầy đủ (không bắt buộc)" />
             </div>
             <div>
               <label className={labelCls}>Loại lỗi</label>
