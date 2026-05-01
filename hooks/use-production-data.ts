@@ -189,7 +189,7 @@ export function useProductionData(user: SessionUser) {
         const lines = [...s.lines]
         lines[idx] = { ...lines[idx], [field]: value }
 
-        const orderQty = Math.round(parseFloat(s.orderInfo?.quantity ?? '0') || 0)
+        const orderQty = parseFloat(s.orderInfo?.quantity ?? '0') || 0
 
         if (field === 'product' && value && !String(value).startsWith('--')) {
           const ws = s.selectedWorkshop

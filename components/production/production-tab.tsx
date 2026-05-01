@@ -64,8 +64,7 @@ export function ProductionTab({ user }: Props) {
 
   async function handleSearch() {
     if (!searchQuery.trim()) return
-    const order = await searchByPcode(searchQuery.trim())
-    if (order) await loadData(order.initialdate)
+    await searchByPcode(searchQuery.trim())
   }
 
   async function handleRefreshNorms() {

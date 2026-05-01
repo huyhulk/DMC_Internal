@@ -296,7 +296,8 @@ export function BreakdownsTab({ user }: Props) {
             <div>
               <label className={labelCls}>Mã thiết bị</label>
               <input
-                {...createForm.register('machine_code')}
+                value={createForm.watch('machine_code') ?? ''}
+                onChange={(e) => createForm.setValue('machine_code', e.target.value, { shouldValidate: true })}
                 className={inputCls}
                 placeholder="Tự điền khi chọn tên"
               />
