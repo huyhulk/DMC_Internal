@@ -6,15 +6,17 @@ import { BreakdownsTab } from './breakdowns-tab'
 import { ScheduleTab } from './schedule-tab'
 import { DrawingsTab } from './drawings-tab'
 import { SurveysTab } from './surveys-tab'
+import { MachinesTab } from './machines-tab'
 import type { SessionUser } from '@/types'
 
-type MaintenanceSub = 'breakdowns' | 'schedule' | 'drawings' | 'surveys'
+type MaintenanceSub = 'breakdowns' | 'schedule' | 'drawings' | 'surveys' | 'machines'
 
 const TABS: { key: MaintenanceSub; label: string }[] = [
   { key: 'breakdowns', label: 'Sự cố máy' },
   { key: 'schedule',   label: 'Lịch BT' },
   { key: 'drawings',   label: 'Bản vẽ' },
   { key: 'surveys',    label: 'Khảo sát' },
+  { key: 'machines',   label: 'Thiết bị' },
 ]
 
 interface Props {
@@ -58,6 +60,7 @@ export function MaintenanceShell({ user, activeSub }: Props) {
         {sub === 'schedule'   && <ScheduleTab user={user} />}
         {sub === 'drawings'   && <DrawingsTab user={user} />}
         {sub === 'surveys'    && <SurveysTab user={user} />}
+        {sub === 'machines'   && <MachinesTab user={user} />}
       </div>
     </div>
   )

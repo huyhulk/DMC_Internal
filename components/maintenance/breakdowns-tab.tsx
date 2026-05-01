@@ -13,7 +13,7 @@ import {
 } from '@/lib/validations/maintenance'
 import {
   createBreakdownAction, resolveBreakdownAction, deleteBreakdownAction, listBreakdownsAction,
-  listMachineCodesAction, type BreakdownRow,
+  listMachineCodesAction, listStaffByWorkshopAction, type BreakdownRow,
 } from '@/lib/actions/maintenance'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -48,6 +48,7 @@ export function BreakdownsTab({ user }: Props) {
   const [resolveId, setResolveId] = useState<string | null>(null)
   const [deleteId, setDeleteId]   = useState<string | null>(null)
   const [machineCodes, setMachineCodes] = useState<string[]>([])
+  const [pktStaff, setPktStaff]         = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   const [filter, setFilter] = useState({
@@ -76,6 +77,7 @@ export function BreakdownsTab({ user }: Props) {
 
   useEffect(() => {
     listMachineCodesAction().then((codes) => setMachineCodes(codes.map((c) => c.machine_code)))
+    listStaffByWorkshopAction('PKT-SX').then((staff) => setPktStaff(staff.map((s) => s.name)))
   }, [])
 
   const createForm = useForm<BreakdownCreateInput>({
@@ -326,7 +328,10 @@ export function BreakdownsTab({ user }: Props) {
             </div>
             <div>
               <label className={labelCls}>Thợ sửa</label>
-              <input {...createForm.register('technician')} className={inputCls} />
+              <select {...createForm.register('technician')} className={inputCls}>
+                <option value="">— Chọn —</option>
+                {pktStaff.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -369,7 +374,10 @@ export function BreakdownsTab({ user }: Props) {
             </div>
             <div>
               <label className={labelCls}>Thợ sửa</label>
-              <input {...resolveForm.register('technician')} className={inputCls} />
+              <select {...resolveForm.register('technician')} className={inputCls}>
+                <option value="">— Chọn —</option>
+                {pktStaff.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
             </div>
           </div>
           <div className="flex gap-2 pt-1">

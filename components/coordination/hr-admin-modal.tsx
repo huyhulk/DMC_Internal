@@ -315,6 +315,8 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
                   {FACTORIES.map((f) => (
                     <option key={f} value={f}>{f}</option>
                   ))}
+                  <option value="PKT-SX">PKT-SX (Kỹ thuật-SX)</option>
+                  <option value="DIEU-PHOI">DIEU-PHOI (Điều phối)</option>
                   <option value="Khác">Khác</option>
                 </select>
               </FormField>

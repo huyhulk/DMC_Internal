@@ -18,6 +18,7 @@ import {
   listCustomersAction, listVehicleCodesAction,
   type DeliveryRow,
 } from '@/lib/actions/coordination'
+import { listStaffByWorkshopAction } from '@/lib/actions/maintenance'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -52,8 +53,9 @@ export function DeliveryTab({ user }: Props) {
   const [completeId, setCompleteId]   = useState<string | null>(null)
   const [deleteId, setDeleteId]       = useState<string | null>(null)
   const [showBaseline, setShowBaseline] = useState(false)
-  const [customers, setCustomers]     = useState<string[]>([])
-  const [vehicleCodes, setVehicleCodes] = useState<string[]>([])
+  const [customers, setCustomers]       = useState<string[]>([])
+  const [vehicleCodes, setVehicleCodes]  = useState<string[]>([])
+  const [dieuPhoiStaff, setDieuPhoiStaff] = useState<string[]>([])
   const [submitting, setSubmitting]   = useState(false)
 
   const [filter, setFilter] = useState({ from: '', to: '', status: 'ALL' })
@@ -73,6 +75,7 @@ export function DeliveryTab({ user }: Props) {
   useEffect(() => {
     listCustomersAction().then(setCustomers)
     listVehicleCodesAction().then(setVehicleCodes)
+    listStaffByWorkshopAction('DIEU-PHOI').then((staff) => setDieuPhoiStaff(staff.map((s) => s.name)))
   }, [])
 
   const createForm = useForm<DeliveryCreateInput>({
@@ -304,7 +307,10 @@ export function DeliveryTab({ user }: Props) {
             </div>
             <div>
               <label className={labelCls}>Tài xế</label>
-              <input {...createForm.register('driver')} className={inputCls} />
+              <select {...createForm.register('driver')} className={inputCls}>
+                <option value="">— Chọn —</option>
+                {dieuPhoiStaff.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
             </div>
           </div>
           <div>

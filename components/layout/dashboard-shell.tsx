@@ -46,10 +46,11 @@ const COORDINATION_ITEMS = [
 ] as const
 
 const MAINTENANCE_ITEMS = [
-  { code: 'breakdowns', label: 'Sự Cố Máy',  icon: AlertTriangle,  href: '/dashboard/maintenance?sub=breakdowns' },
+  { code: 'breakdowns', label: 'Sự Cố Máy',   icon: AlertTriangle, href: '/dashboard/maintenance?sub=breakdowns' },
   { code: 'schedule',   label: 'Lịch Bảo Trì', icon: CalendarClock, href: '/dashboard/maintenance?sub=schedule' },
-  { code: 'drawings',   label: 'Bản Vẽ KT',  icon: FileImage,      href: '/dashboard/maintenance?sub=drawings' },
-  { code: 'surveys',    label: 'Khảo Sát',   icon: Ruler,          href: '/dashboard/maintenance?sub=surveys' },
+  { code: 'drawings',   label: 'Bản Vẽ KT',   icon: FileImage,     href: '/dashboard/maintenance?sub=drawings' },
+  { code: 'surveys',    label: 'Khảo Sát',    icon: Ruler,         href: '/dashboard/maintenance?sub=surveys' },
+  { code: 'machines',   label: 'Thiết Bị',    icon: Wrench,        href: '/dashboard/maintenance?sub=machines' },
 ] as const
 
 const ADMIN_ITEMS = [

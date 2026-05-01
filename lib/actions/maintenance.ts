@@ -7,10 +7,12 @@ import {
   scheduleCreateSchema, scheduleBulkCreateSchema, scheduleCompleteSchema,
   drawingCreateSchema, drawingCompleteSchema,
   surveyCreateSchema,
+  machineCreateSchema, machineUpdateSchema,
   type BreakdownCreateInput, type BreakdownUpdateInput, type BreakdownResolveInput,
   type ScheduleCreateInput, type ScheduleBulkCreateInput, type ScheduleCompleteInput,
   type DrawingCreateInput, type DrawingCompleteInput,
   type SurveyCreateInput,
+  type MachineCreateInput,
   MAINTENANCE_TYPES,
 } from '@/lib/validations/maintenance'
 import logger from '@/lib/logger'
@@ -45,6 +47,12 @@ export type SurveyRow = {
   survey_date: string; surveyor: string | null; total_items: number; error_items: number
   accuracy_pct: number | null; error_details: unknown | null; notes: string | null
   created_at: string
+}
+
+export type MachineRow = {
+  id: string; machine_name: string; machine_code: string | null
+  machine_location: string; machine_status: string; machine_capacity: string | null
+  created_at: string; updated_at: string
 }
 
 type ActionResult<T = undefined> = { success: boolean; message: string; data?: T; id?: string }
@@ -630,21 +638,20 @@ export async function listMachineCodesAction(workshop?: string): Promise<{ machi
     const { user, supabase } = await requireAuth()
     if (!user) return []
 
-    let query = supabase.from('machine_breakdowns').select('machine_code, machine_name')
-    if (workshop && workshop !== 'ALL') query = query.eq('workshop', workshop)
+    let query = supabase
+      .from('machines')
+      .select('machine_code, machine_name')
+      .eq('machine_status', 'active')
+      .not('machine_code', 'is', null)
+      .order('machine_code')
+    if (workshop && workshop !== 'ALL') query = query.eq('machine_location', workshop)
 
     const { data } = await query
     if (!data) return []
-
-    const seen = new Set<string>()
-    const result: { machine_code: string; machine_name: string | null }[] = []
-    for (const row of data as { machine_code: string; machine_name: string | null }[]) {
-      if (!seen.has(row.machine_code)) {
-        seen.add(row.machine_code)
-        result.push({ machine_code: row.machine_code, machine_name: row.machine_name })
-      }
-    }
-    return result
+    return (data as { machine_code: string; machine_name: string }[]).map((r) => ({
+      machine_code: r.machine_code,
+      machine_name: r.machine_name,
+    }))
   } catch {
     return []
   }
@@ -652,3 +659,118 @@ export async function listMachineCodesAction(workshop?: string): Promise<{ machi
 
 // Re-export types needed by MAINTENANCE_TYPES constant
 export { MAINTENANCE_TYPES }
+
+// ─── Machines CRUD ────────────────────────────────────────────────────────────
+
+export async function listMachinesAction(location?: string): Promise<ActionResult<MachineRow[]>> {
+  try {
+    const { user, supabase } = await requireAuth()
+    if (!user) return { success: false, message: 'Chưa đăng nhập', data: [] }
+
+    let query = supabase.from('machines').select('*').order('machine_location').order('machine_code')
+    if (location && location !== 'ALL') query = query.eq('machine_location', location)
+
+    const { data, error } = await query
+    if (error) return { success: false, message: error.message, data: [] }
+    return { success: true, message: '', data: (data ?? []) as MachineRow[] }
+  } catch (err) {
+    logger.error({ err }, 'listMachinesAction error')
+    return { success: false, message: String(err), data: [] }
+  }
+}
+
+export async function createMachineAction(input: MachineCreateInput): Promise<ActionResult<string>> {
+  try {
+    const parsed = machineCreateSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền thêm.' }
+
+    const { data, error } = await supabase.from('machines').insert({
+      machine_name:     parsed.data.machine_name,
+      machine_code:     parsed.data.machine_code || null,
+      machine_location: parsed.data.machine_location,
+      machine_status:   parsed.data.machine_status,
+      machine_capacity: parsed.data.machine_capacity || null,
+    }).select('id').single()
+
+    if (error) {
+      if (error.code === '23505') return { success: false, message: 'Mã thiết bị đã tồn tại.' }
+      return { success: false, message: `Lỗi DB: ${error.message}` }
+    }
+
+    revalidatePath('/dashboard/maintenance')
+    return { success: true, message: 'Đã thêm thiết bị.', id: data?.id }
+  } catch (err) {
+    logger.error({ err }, 'createMachineAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function updateMachineAction(id: string, input: MachineCreateInput): Promise<ActionResult> {
+  try {
+    const parsed = machineCreateSchema.safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
+
+    const { error } = await supabase.from('machines').update({
+      machine_name:     parsed.data.machine_name,
+      machine_code:     parsed.data.machine_code || null,
+      machine_location: parsed.data.machine_location,
+      machine_status:   parsed.data.machine_status,
+      machine_capacity: parsed.data.machine_capacity || null,
+    }).eq('id', id)
+
+    if (error) {
+      if (error.code === '23505') return { success: false, message: 'Mã thiết bị đã tồn tại.' }
+      return { success: false, message: `Lỗi DB: ${error.message}` }
+    }
+
+    revalidatePath('/dashboard/maintenance')
+    return { success: true, message: 'Đã cập nhật thiết bị.' }
+  } catch (err) {
+    logger.error({ err }, 'updateMachineAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+export async function deleteMachineAction(id: string): Promise<ActionResult> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
+
+    const { error } = await supabase.from('machines').delete().eq('id', id)
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidatePath('/dashboard/maintenance')
+    return { success: true, message: 'Đã xóa thiết bị.' }
+  } catch (err) {
+    logger.error({ err }, 'deleteMachineAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
+// ─── Staff lookup (human_resource table) ─────────────────────────────────────
+
+export async function listStaffByWorkshopAction(factory: string): Promise<{ id: number; name: string }[]> {
+  try {
+    const { user, supabase } = await requireAuth()
+    if (!user) return []
+
+    const { data } = await supabase
+      .from('human_resource')
+      .select('id, name')
+      .eq('factory', factory)
+      .order('name')
+
+    return (data ?? []) as { id: number; name: string }[]
+  } catch {
+    return []
+  }
+}

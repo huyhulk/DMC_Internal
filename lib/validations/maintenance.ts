@@ -199,3 +199,27 @@ export const surveyCreateSchema = z.object({
 )
 
 export type SurveyCreateInput = z.infer<typeof surveyCreateSchema>
+
+// ─── Machines ─────────────────────────────────────────────────────────────────
+
+export const MACHINE_STATUSES = ['active', 'inactive', 'maintenance', 'broken'] as const
+
+export const MACHINE_STATUS_LABELS: Record<typeof MACHINE_STATUSES[number], string> = {
+  active:      'Hoạt động',
+  inactive:    'Ngừng hoạt động',
+  maintenance: 'Đang bảo trì',
+  broken:      'Hỏng',
+}
+
+export const machineCreateSchema = z.object({
+  machine_name:     z.string().trim().min(1, 'Nhập tên thiết bị').max(200),
+  machine_code:     z.string().trim().max(50).optional().or(z.literal('')),
+  machine_location: z.enum(KPI_WORKSHOPS, { required_error: 'Chọn vị trí' }),
+  machine_status:   z.enum(MACHINE_STATUSES).default('active'),
+  machine_capacity: z.string().trim().max(100).optional().or(z.literal('')),
+})
+
+export const machineUpdateSchema = machineCreateSchema.extend({ id: z.string().uuid() })
+
+export type MachineCreateInput = z.infer<typeof machineCreateSchema>
+export type MachineUpdateInput = z.infer<typeof machineUpdateSchema>
