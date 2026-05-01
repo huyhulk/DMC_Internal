@@ -13,7 +13,7 @@ import {
 } from '@/lib/validations/maintenance'
 import {
   createBreakdownAction, resolveBreakdownAction, deleteBreakdownAction, listBreakdownsAction,
-  listMachineCodesAction, listStaffByWorkshopAction, type BreakdownRow,
+  listStaffByWorkshopAction, type BreakdownRow,
 } from '@/lib/actions/maintenance'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -91,7 +91,11 @@ export function BreakdownsTab({ user }: Props) {
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
-    listMachineCodesAction(formWorkshop).then(setMachines)
+    const loc = formWorkshop ? `?location=${formWorkshop}` : ''
+    fetch(`/api/machines${loc}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => Array.isArray(data) && setMachines(data))
+      .catch(() => {})
   }, [formWorkshop])
 
   useEffect(() => {

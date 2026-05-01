@@ -13,7 +13,7 @@ import {
 } from '@/lib/validations/maintenance'
 import {
   createScheduleAction, bulkCreateScheduleAction, completeScheduleAction,
-  deleteScheduleAction, listScheduleAction, listMachineCodesAction,
+  deleteScheduleAction, listScheduleAction,
   type ScheduleRow,
 } from '@/lib/actions/maintenance'
 import { Dialog } from '@/components/ui/dialog'
@@ -72,11 +72,19 @@ export function ScheduleTab({ user }: Props) {
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
-    listMachineCodesAction(createWorkshop).then(setMachines)
+    const loc = createWorkshop ? `?location=${createWorkshop}` : ''
+    fetch(`/api/machines${loc}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => Array.isArray(data) && setMachines(data))
+      .catch(() => {})
   }, [createWorkshop])
 
   useEffect(() => {
-    listMachineCodesAction(bulkWorkshop).then(setMachines)
+    const loc = bulkWorkshop ? `?location=${bulkWorkshop}` : ''
+    fetch(`/api/machines${loc}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => Array.isArray(data) && setMachines(data))
+      .catch(() => {})
   }, [bulkWorkshop])
 
   const completeForm = useForm<ScheduleCompleteInput>({
