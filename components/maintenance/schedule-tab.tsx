@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, CheckCircle, Trash2, Repeat } from 'lucide-react'
 import { cn, formatDate, getTodayLocal } from '@/lib/utils'
+import { getMaintenanceWorkshopOptions } from '@/lib/maintenance/workflow'
 import {
   scheduleBulkCreateSchema, scheduleCompleteSchema,
   MAINTENANCE_TYPES, MAINTENANCE_TYPE_LABELS, KPI_WORKSHOPS,
@@ -52,8 +53,10 @@ export function ScheduleTab({ user }: Props) {
   const [selectedMachines, setSelectedMachines] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting]   = useState(false)
 
-  const [filter, setFilter] = useState({ workshop: 'ALL', from: '', to: '', type: 'ALL' })
-  const allowedWorkshops = ['ALL', ...KPI_WORKSHOPS]
+  const allowedWorkshops = getMaintenanceWorkshopOptions(user.role, user.workspace, true)
+  const createWorkshopOptions = allowedWorkshops.filter((w) => w !== 'ALL')
+  const defaultWorkshop = (createWorkshopOptions[0] ?? KPI_WORKSHOPS[0]) as typeof KPI_WORKSHOPS[number]
+  const [filter, setFilter] = useState({ workshop: allowedWorkshops[0] ?? defaultWorkshop, from: '', to: '', type: 'ALL' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -76,7 +79,7 @@ export function ScheduleTab({ user }: Props) {
 
   const createForm = useForm<CreateFields>({
     defaultValues: {
-      workshop:         KPI_WORKSHOPS[0],
+      workshop:         defaultWorkshop,
       maintenance_type: 'monthly',
       scheduled_date:   getTodayLocal(),
       technician:       '',
@@ -87,7 +90,7 @@ export function ScheduleTab({ user }: Props) {
   const bulkForm = useForm<ScheduleBulkCreateInput>({
     resolver: zodResolver(scheduleBulkCreateSchema),
     defaultValues: {
-      workshop:         KPI_WORKSHOPS[0],
+      workshop:         defaultWorkshop,
       machine_code:     '',
       machine_name:     '',
       maintenance_type: 'monthly',
@@ -152,7 +155,7 @@ export function ScheduleTab({ user }: Props) {
         toast.success(`Đã tạo ${successCount} lịch bảo trì`)
         setShowCreate(false)
         createForm.reset({
-          workshop: KPI_WORKSHOPS[0], maintenance_type: 'monthly',
+          workshop: defaultWorkshop, maintenance_type: 'monthly',
           scheduled_date: getTodayLocal(), technician: '', notes: '',
         })
         setSelectedMachines(new Set())
@@ -349,7 +352,7 @@ export function ScheduleTab({ user }: Props) {
             <div>
               <label className={labelCls}>Xưởng *</label>
               <select {...createForm.register('workshop')} className={inputCls}>
-                {KPI_WORKSHOPS.map((w) => <option key={w} value={w}>{w}</option>)}
+                {createWorkshopOptions.map((w) => <option key={w} value={w}>{w}</option>)}
               </select>
             </div>
             <div>
@@ -446,7 +449,7 @@ export function ScheduleTab({ user }: Props) {
             <div>
               <label className={labelCls}>Xưởng *</label>
               <select {...bulkForm.register('workshop')} className={inputCls}>
-                {KPI_WORKSHOPS.map((w) => <option key={w} value={w}>{w}</option>)}
+                {createWorkshopOptions.map((w) => <option key={w} value={w}>{w}</option>)}
               </select>
             </div>
             <div>

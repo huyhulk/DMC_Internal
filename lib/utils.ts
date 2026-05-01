@@ -15,6 +15,10 @@ export function getTodayLocal(): string {
   return format(new Date(), 'yyyy-MM-dd')
 }
 
+export function getLocalDateTimeInputValue(date = new Date()): string {
+  return format(date, "yyyy-MM-dd'T'HH:mm")
+}
+
 /**
  * Formats a date value to display string.
  * Handles both "YYYY-MM-DD" (DATE) and "YYYY-MM-DDTHH:mm:ss" (TIMESTAMP) inputs.

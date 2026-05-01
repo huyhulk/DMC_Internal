@@ -6,9 +6,10 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, Send, Trash2 } from 'lucide-react'
 import { cn, formatDate, getTodayLocal } from '@/lib/utils'
+import { getDrawingListFilter } from '@/lib/maintenance/workflow'
 import {
   drawingCreateSchema, drawingCompleteSchema,
-  DRAWING_TYPES, DRAWING_TYPE_LABELS, DRAWING_STATUSES, DRAWING_STATUS_LABELS,
+  DRAWING_STATUSES, DRAWING_STATUS_LABELS,
   type DrawingCreateInput, type DrawingCompleteInput,
 } from '@/lib/validations/maintenance'
 import {
@@ -55,10 +56,12 @@ export function DrawingsTab({ user }: Props) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
+      const drawingFilter = getDrawingListFilter(mode, filter.status)
       const res = await listDrawingsAction({
         from:   filter.from || undefined,
         to:     filter.to   || undefined,
-        status: mode === 'deliver' ? 'in_progress' : (filter.status !== 'ALL' ? filter.status : undefined),
+        status: drawingFilter.status,
+        openOnly: drawingFilter.openOnly,
       })
       if (res.success) setRows(res.data ?? [])
       else setRows([])
@@ -232,21 +235,12 @@ export function DrawingsTab({ user }: Props) {
       {/* Create Dialog */}
       <Dialog open={showCreate} onClose={() => setShowCreate(false)} title="Thêm yêu cầu bản vẽ" size="lg">
         <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Mã bản vẽ *</label>
-              <input {...createForm.register('drawing_code')} className={inputCls} />
-              {createForm.formState.errors.drawing_code && (
-                <p className="text-[11px] text-red-500 mt-0.5">{createForm.formState.errors.drawing_code.message}</p>
-              )}
-            </div>
-            <div>
-              <label className={labelCls}>Loại bản vẽ</label>
-              <select {...createForm.register('drawing_type')} className={inputCls}>
-                <option value="">— Chọn loại —</option>
-                {DRAWING_TYPES.map((t) => <option key={t} value={t}>{DRAWING_TYPE_LABELS[t]}</option>)}
-              </select>
-            </div>
+          <div>
+            <label className={labelCls}>Mã bản vẽ *</label>
+            <input {...createForm.register('drawing_code')} className={inputCls} />
+            {createForm.formState.errors.drawing_code && (
+              <p className="text-[11px] text-red-500 mt-0.5">{createForm.formState.errors.drawing_code.message}</p>
+            )}
           </div>
           <div>
             <label className={labelCls}>Tên bản vẽ *</label>

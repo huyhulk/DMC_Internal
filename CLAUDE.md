@@ -55,6 +55,18 @@ Bạn muốn làm gì hôm nay?
 - KHÔNG code trước khi user confirm plan
 - KHÔNG sửa .claude/*.md trừ khi user yêu cầu
 
+### Quy trình bắt buộc khi sửa bug / sửa tính năng
+Áp dụng cho toàn bộ dự án từ 2026-05-01 trở đi:
+
+1. **Kiểm tra hiện trạng**: đọc context liên quan, kiểm tra branch, git status, log gần nhất, script test/build, và khu vực code bị ảnh hưởng.
+2. **Tìm root cause**: tái hiện lỗi hoặc chỉ ra bằng chứng trong code/log/test; không sửa theo phỏng đoán.
+3. **Lên plan sửa**: liệt kê bug, nguyên nhân, phạm vi file sẽ sửa, test sẽ chạy; chờ user confirm nếu thay đổi có rủi ro hoặc theo yêu cầu guardrails.
+4. **Sửa chữa**: sửa đúng root cause, phạm vi hẹp, không refactor ngoài task, không revert thay đổi của user.
+5. **Test mẫu trên local server**: chạy `type-check`, `lint`, test liên quan, và mở local dev server để smoke test UI/flow khi task có giao diện.
+6. **Hỏi trước khi push GitHub**: sau khi local pass, báo kết quả và hỏi user có muốn commit/push/tạo PR không. Không tự push khi chưa được phép.
+
+**Branch mặc định:** toàn bộ dự án hiện làm trên `staging`. Khi tạo branch mới, tạo từ `staging` trừ khi user chỉ định khác. Không push/merge vào `main` khi chưa có yêu cầu rõ ràng.
+
 ---
 
 ## 🛑 Nguyên tắc cao nhất (TUYỆT ĐỐI)

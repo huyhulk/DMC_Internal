@@ -13,9 +13,10 @@ import {
   type DrawingCreateInput, type DrawingCompleteInput,
   type SurveyCreateInput,
   type MachineCreateInput,
-  MAINTENANCE_TYPES,
 } from '@/lib/validations/maintenance'
 import logger from '@/lib/logger'
+import { isBreakdownEndAfterStart } from '@/lib/maintenance/workflow'
+import { getUserWorkspaces, isWorkspaceAllowed } from '@/lib/utils'
 
 // ─── Types from DB ────────────────────────────────────────────────────────────
 
@@ -75,6 +76,10 @@ function revalidate() {
   revalidatePath('/dashboard/report/kpi')
 }
 
+function canAccessWorkshop(profile: { role: string; workspace: string }, workshop: string): boolean {
+  return isWorkspaceAllowed(workshop, profile.role, getUserWorkspaces(profile.workspace ?? ''))
+}
+
 // ─── Machine Breakdowns ───────────────────────────────────────────────────────
 
 export async function createBreakdownAction(input: BreakdownCreateInput): Promise<ActionResult<string>> {
@@ -84,6 +89,10 @@ export async function createBreakdownAction(input: BreakdownCreateInput): Promis
 
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    if (!canAccessWorkshop(profile, parsed.data.workshop)) {
+      return { success: false, message: 'Không có quyền thao tác với xưởng này.' }
+    }
 
     const { breakdown_end, ...rest } = parsed.data
     const hasEnd = breakdown_end && breakdown_end.trim() !== ''
@@ -154,8 +163,22 @@ export async function resolveBreakdownAction(id: string, input: BreakdownResolve
     const parsed = breakdownResolveSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
-    const { user, supabase } = await requireAuth()
-    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { data: existing, error: readError } = await supabase
+      .from('machine_breakdowns')
+      .select('breakdown_start,workshop')
+      .eq('id', id)
+      .single()
+
+    if (readError || !existing) return { success: false, message: readError?.message ?? 'Không tìm thấy sự cố.' }
+    if (!canAccessWorkshop(profile, String(existing.workshop))) {
+      return { success: false, message: 'Không có quyền thao tác với xưởng này.' }
+    }
+    if (!isBreakdownEndAfterStart(String(existing.breakdown_start), parsed.data.breakdown_end)) {
+      return { success: false, message: 'Thời gian kết thúc phải sau thời gian bắt đầu.' }
+    }
 
     const { error } = await supabase.from('machine_breakdowns').update({
       breakdown_end:  parsed.data.breakdown_end,
@@ -211,8 +234,9 @@ export async function listBreakdownsAction(filter: {
     if (filter.status && filter.status !== 'ALL')    query = query.eq('status', filter.status)
     if (filter.failure_type && filter.failure_type !== 'ALL') query = query.eq('failure_type', filter.failure_type)
 
-    if (profile.role === 'SUPERVISOR' && profile.workspace && profile.workspace !== 'ALL') {
-      query = query.eq('workshop', profile.workspace)
+    const userWorkspaces = getUserWorkspaces(profile.workspace ?? '')
+    if (!['ADMIN', 'MANAGER'].includes(profile.role) && userWorkspaces.length > 0) {
+      query = query.in('workshop', userWorkspaces)
     }
 
     const { data, error } = await query
@@ -231,8 +255,12 @@ export async function createScheduleAction(input: ScheduleCreateInput): Promise<
     const parsed = scheduleCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
-    const { user, supabase } = await requireAuth()
-    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    if (!profile || !canAccessWorkshop(profile, parsed.data.workshop)) {
+      return { success: false, message: 'Không có quyền thao tác với xưởng này.' }
+    }
 
     const { data, error } = await supabase.from('maintenance_schedule').insert({
       workshop:         parsed.data.workshop,
@@ -260,11 +288,14 @@ export async function bulkCreateScheduleAction(input: ScheduleBulkCreateInput): 
     const parsed = scheduleBulkCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
-    const { user, supabase } = await requireAuth()
-    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
 
     const { start_date, end_date, frequency, workshop, machine_code, machine_name,
             maintenance_type, checklist_items, technician, notes } = parsed.data
+    if (!profile || !canAccessWorkshop(profile, workshop)) {
+      return { success: false, message: 'Không có quyền thao tác với xưởng này.' }
+    }
 
     const dates: string[] = []
     const cur = new Date(start_date)
@@ -305,8 +336,19 @@ export async function completeScheduleAction(id: string, input: ScheduleComplete
     const parsed = scheduleCompleteSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
-    const { user, supabase } = await requireAuth()
-    if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+
+    const { data: existing, error: readError } = await supabase
+      .from('maintenance_schedule')
+      .select('workshop')
+      .eq('id', id)
+      .single()
+
+    if (readError || !existing) return { success: false, message: readError?.message ?? 'Không tìm thấy lịch bảo trì.' }
+    if (!profile || !canAccessWorkshop(profile, String(existing.workshop))) {
+      return { success: false, message: 'Không có quyền thao tác với xưởng này.' }
+    }
 
     const { error } = await supabase.from('maintenance_schedule').update({
       actual_date:     parsed.data.actual_date,
@@ -388,8 +430,9 @@ export async function listScheduleAction(filter: {
     if (filter.status === 'completed')  query = query.not('actual_date', 'is', null)
     if (filter.status === 'pending')    query = query.is('actual_date', null)
 
-    if (profile.role === 'SUPERVISOR' && profile.workspace && profile.workspace !== 'ALL') {
-      query = query.eq('workshop', profile.workspace)
+    const userWorkspaces = getUserWorkspaces(profile.workspace ?? '')
+    if (!['ADMIN', 'MANAGER'].includes(profile.role) && userWorkspaces.length > 0) {
+      query = query.in('workshop', userWorkspaces)
     }
 
     const { data, error } = await query
@@ -509,7 +552,7 @@ export async function deleteDrawingAction(id: string): Promise<ActionResult> {
 }
 
 export async function listDrawingsAction(filter: {
-  from?: string; to?: string; status?: string; limit?: number
+  from?: string; to?: string; status?: string; openOnly?: boolean; limit?: number
 }): Promise<ActionResult<DrawingRow[]>> {
   try {
     const { user, supabase } = await requireAuth()
@@ -523,6 +566,7 @@ export async function listDrawingsAction(filter: {
     if (filter.from) query = query.gte('request_date', filter.from)
     if (filter.to)   query = query.lte('request_date', filter.to)
     if (filter.status && filter.status !== 'ALL') query = query.eq('status', filter.status)
+    if (filter.openOnly) query = query.neq('status', 'released')
 
     const { data, error } = await query
     if (error) return { success: false, message: error.message, data: [] }
@@ -658,8 +702,6 @@ export async function listMachineCodesAction(workshop?: string): Promise<{ machi
 }
 
 // Re-export types needed by MAINTENANCE_TYPES constant
-export { MAINTENANCE_TYPES }
-
 // ─── Machines CRUD ────────────────────────────────────────────────────────────
 
 export async function listMachinesAction(location?: string): Promise<ActionResult<MachineRow[]>> {

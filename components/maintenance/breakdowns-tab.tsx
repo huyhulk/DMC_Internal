@@ -5,7 +5,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, CheckCircle, Pencil, Trash2 } from 'lucide-react'
-import { cn, formatDate, getTodayLocal } from '@/lib/utils'
+import { cn, formatDate, getLocalDateTimeInputValue } from '@/lib/utils'
+import { getMaintenanceWorkshopOptions } from '@/lib/maintenance/workflow'
 import {
   breakdownCreateSchema, breakdownResolveSchema,
   FAILURE_TYPES, FAILURE_TYPE_LABELS, BREAKDOWN_STATUSES, BREAKDOWN_STATUS_LABELS,
@@ -55,9 +56,8 @@ export function BreakdownsTab({ user }: Props) {
     from: '', to: '', status: 'ALL', failure_type: 'ALL',
   })
 
-  const allowedWorkshops = user.role === 'ADMIN' || user.role === 'MANAGER'
-    ? ['ALL', ...KPI_WORKSHOPS]
-    : [user.workspace]
+  const allowedWorkshops = getMaintenanceWorkshopOptions(user.role, user.workspace, true)
+  const createWorkshopOptions = allowedWorkshops.filter((w) => w !== 'ALL')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -79,15 +79,15 @@ export function BreakdownsTab({ user }: Props) {
   const createForm = useForm<BreakdownCreateInput>({
     resolver: zodResolver(breakdownCreateSchema),
     defaultValues: {
-      workshop: (allowedWorkshops[0] === 'ALL' ? KPI_WORKSHOPS[0] : allowedWorkshops[0]) as typeof KPI_WORKSHOPS[number],
-      breakdown_start: new Date().toISOString().slice(0, 16),
+      workshop: (createWorkshopOptions[0] ?? KPI_WORKSHOPS[0]) as typeof KPI_WORKSHOPS[number],
+      breakdown_start: getLocalDateTimeInputValue(),
       is_planned: false,
     },
   })
 
   const resolveForm = useForm<BreakdownResolveInput>({
     resolver: zodResolver(breakdownResolveSchema),
-    defaultValues: { breakdown_end: new Date().toISOString().slice(0, 16) },
+    defaultValues: { breakdown_end: getLocalDateTimeInputValue() },
   })
 
   const formWorkshop = createForm.watch('workshop')
@@ -240,7 +240,7 @@ export function BreakdownsTab({ user }: Props) {
                       <div className="flex items-center justify-center gap-2">
                         {row.status !== 'resolved' && (
                           <button
-                            onClick={() => { setResolveId(row.id); resolveForm.reset({ breakdown_end: new Date().toISOString().slice(0, 16) }) }}
+                            onClick={() => { setResolveId(row.id); resolveForm.reset({ breakdown_end: getLocalDateTimeInputValue() }) }}
                             title="Đánh dấu xong"
                             className="text-emerald-600 hover:text-emerald-700 transition-colors"
                           >
@@ -265,12 +265,15 @@ export function BreakdownsTab({ user }: Props) {
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onClose={() => setShowCreate(false)} title="Báo cáo sự cố máy" size="lg">
-        <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4">
+        <form onSubmit={createForm.handleSubmit(onCreateSubmit, (errs) => {
+          const msg = Object.values(errs)[0]?.message
+          if (msg) toast.error(msg)
+        })} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Xưởng *</label>
               <select {...createForm.register('workshop')} className={inputCls}>
-                {KPI_WORKSHOPS.map((w) => <option key={w} value={w}>{w}</option>)}
+                {createWorkshopOptions.map((w) => <option key={w} value={w}>{w}</option>)}
               </select>
             </div>
             <div>
