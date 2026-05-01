@@ -21,7 +21,7 @@ import { ChangePasswordDialog } from '@/components/shared/change-password-dialog
 const TAB_CONFIG = {
   production:   { label: 'Sản Xuất',  icon: Factory,   href: '/dashboard/production' },
   maintenance:  { label: 'Bảo Trì',   icon: Wrench,    href: '/dashboard/maintenance' },
-  coordination: { label: 'Phối Hợp',  icon: Users2,    href: '/dashboard/coordination' },
+  coordination: { label: 'Điều Phối',  icon: Users2,    href: '/dashboard/coordination' },
   report:       { label: 'Báo Cáo',   icon: BarChart3, href: '/dashboard/report' },
   admin:        { label: 'Hệ Thống',  icon: Settings,  href: '/dashboard/admin' },
 } as const

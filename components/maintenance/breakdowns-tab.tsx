@@ -61,15 +61,19 @@ export function BreakdownsTab({ user }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await listBreakdownsAction({
-      workshop:     filter.workshop !== 'ALL' ? filter.workshop : undefined,
-      from:         filter.from || undefined,
-      to:           filter.to   || undefined,
-      status:       filter.status !== 'ALL' ? filter.status : undefined,
-      failure_type: filter.failure_type !== 'ALL' ? filter.failure_type : undefined,
-    })
-    if (res.success) setRows(res.data ?? [])
-    setLoading(false)
+    try {
+      const res = await listBreakdownsAction({
+        workshop:     filter.workshop !== 'ALL' ? filter.workshop : undefined,
+        from:         filter.from || undefined,
+        to:           filter.to   || undefined,
+        status:       filter.status !== 'ALL' ? filter.status : undefined,
+        failure_type: filter.failure_type !== 'ALL' ? filter.failure_type : undefined,
+      })
+      if (res.success) setRows(res.data ?? [])
+      else setRows([])
+    } finally {
+      setLoading(false)
+    }
   }, [filter])
 
   const createForm = useForm<BreakdownCreateInput>({
@@ -104,45 +108,37 @@ export function BreakdownsTab({ user }: Props) {
 
   async function onCreateSubmit(values: BreakdownCreateInput) {
     setSubmitting(true)
-    const res = await createBreakdownAction(values)
-    if (res.success) {
-      toast.success(res.message)
-      setShowCreate(false)
-      createForm.reset()
-      void load()
-    } else {
-      toast.error(res.message)
+    try {
+      const res = await createBreakdownAction(values)
+      if (res.success) { toast.success(res.message); setShowCreate(false); createForm.reset(); void load() }
+      else toast.error(res.message)
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitting(false)
   }
 
   async function onResolveSubmit(values: BreakdownResolveInput) {
     if (!resolveId) return
     setSubmitting(true)
-    const res = await resolveBreakdownAction(resolveId, values)
-    if (res.success) {
-      toast.success(res.message)
-      setResolveId(null)
-      resolveForm.reset()
-      void load()
-    } else {
-      toast.error(res.message)
+    try {
+      const res = await resolveBreakdownAction(resolveId, values)
+      if (res.success) { toast.success(res.message); setResolveId(null); resolveForm.reset(); void load() }
+      else toast.error(res.message)
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitting(false)
   }
 
   async function onDelete() {
     if (!deleteId) return
     setSubmitting(true)
-    const res = await deleteBreakdownAction(deleteId)
-    if (res.success) {
-      toast.success(res.message)
-      setDeleteId(null)
-      void load()
-    } else {
-      toast.error(res.message)
+    try {
+      const res = await deleteBreakdownAction(deleteId)
+      if (res.success) { toast.success(res.message); setDeleteId(null); void load() }
+      else toast.error(res.message)
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitting(false)
   }
 
   return (

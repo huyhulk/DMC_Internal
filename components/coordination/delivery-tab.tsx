@@ -143,6 +143,11 @@ export function DeliveryTab({ user }: Props) {
   }
 
   const damagedWeight = completeForm.watch('damaged_weight_tons') ?? 0
+  const today = getTodayLocal()
+
+  function isOverdue(row: DeliveryRow) {
+    return !row.actual_date && (row.status === 'planned' || row.status === 'in_transit') && row.planned_date < today
+  }
 
   return (
     <div className="space-y-4">
@@ -229,9 +234,12 @@ export function DeliveryTab({ user }: Props) {
                         : <span className="text-[#aeaeb2]">—</span>}
                     </td>
                     <td className="p-3 text-center">
-                      <Badge variant={statusVariant(row.status)}>
-                        {DELIVERY_STATUS_LABELS[row.status as typeof DELIVERY_STATUSES[number]] ?? row.status}
-                      </Badge>
+                      {isOverdue(row)
+                        ? <Badge variant="danger">Quá hạn</Badge>
+                        : <Badge variant={statusVariant(row.status)}>
+                            {DELIVERY_STATUS_LABELS[row.status as typeof DELIVERY_STATUSES[number]] ?? row.status}
+                          </Badge>
+                      }
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">

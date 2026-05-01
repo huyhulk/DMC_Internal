@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, getTodayLocal } from '@/lib/utils'
 import type { NormItem, ProductLine } from '@/types'
 
 interface Props {
@@ -60,7 +60,7 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
         <FieldGroup label="Ngày sản xuất">
           <input
             type="date"
-            value={line.pdate}
+            value={line.pdate || getTodayLocal()}
             onChange={(e) => onChange('pdate', e.target.value)}
             className={inputCls}
           />

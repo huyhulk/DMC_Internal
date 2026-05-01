@@ -67,6 +67,10 @@ export function Combobox({
         value={query}
         onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
+        onBlur={() => {
+          const trimmed = query.trim()
+          if (trimmed && trimmed !== value) onChange(trimmed)
+        }}
         placeholder={placeholder}
         disabled={disabled}
         className={inputCls}

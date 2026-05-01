@@ -139,7 +139,7 @@ export type Finding5sResolveInput = z.infer<typeof finding5sResolveSchema>
 
 export const statReportCreateSchema = z.object({
   report_name:        z.string().trim().min(1, 'Nhập tên báo cáo').max(200),
-  report_type:        z.enum(REPORT_TYPES).optional(),
+  report_type:        z.enum(REPORT_TYPES).optional().or(z.literal('')),
   due_date:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày không hợp lệ'),
   recipient:          z.string().trim().max(200).optional().or(z.literal('')),
   responsible_person: z.string().trim().max(100).optional().or(z.literal('')),
@@ -148,7 +148,7 @@ export const statReportCreateSchema = z.object({
 
 export const statReportBulkSchema = z.object({
   report_name:        z.string().trim().min(1, 'Nhập tên báo cáo').max(200),
-  report_type:        z.enum(REPORT_TYPES).optional(),
+  report_type:        z.enum(REPORT_TYPES).optional().or(z.literal('')),
   start_date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày không hợp lệ'),
   end_date:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày không hợp lệ'),
   frequency:          z.enum(['weekly', 'monthly', 'quarterly']),
@@ -174,7 +174,7 @@ export type StatReportSubmitInput = z.infer<typeof statReportSubmitSchema>
 export const isoCreateSchema = z.object({
   procedure_code:          z.string().trim().regex(/^[A-Z0-9\-]{5,30}$/i, 'Mã ISO phải 5-30 ký tự'),
   procedure_name:          z.string().trim().min(1, 'Nhập tên quy trình').max(200),
-  category:                z.enum(ISO_CATEGORIES).optional(),
+  category:                z.enum(ISO_CATEGORIES).optional().or(z.literal('')),
   planned_completion_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày không hợp lệ'),
   responsible_person:      z.string().trim().max(100).optional().or(z.literal('')),
   notes:                   z.string().trim().max(1000).optional().or(z.literal('')),

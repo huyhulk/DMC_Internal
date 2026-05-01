@@ -140,12 +140,15 @@ export async function completeDeliveryAction(id: string, input: DeliveryComplete
     const { user, supabase } = await requireAuth()
     if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
 
+    // If damaged weight is recorded, force status to 'damaged' regardless of what was submitted
+    const finalStatus = (parsed.data.damaged_weight_tons ?? 0) > 0 ? 'damaged' : parsed.data.status
+
     const { error } = await supabase.from('deliveries').update({
       actual_date:         parsed.data.actual_date,
       damaged_weight_tons: parsed.data.damaged_weight_tons ?? 0,
       damage_reason:       parsed.data.damage_reason || null,
       delivery_cost:       parsed.data.delivery_cost ?? null,
-      status:              parsed.data.status,
+      status:              finalStatus,
     }).eq('id', id)
 
     if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
@@ -726,12 +729,12 @@ export async function listCustomersAction(): Promise<string[]> {
     const { user, supabase } = await requireAuth()
     if (!user) return []
 
-    const { data } = await supabase.from('v_data').select('customer').not('customer', 'is', null).limit(500)
+    const { data } = await supabase.from('data').select('"CUSTOMER"').not('"CUSTOMER"', 'is', null).limit(500)
     if (!data) return []
 
     const seen = new Set<string>()
-    for (const row of data as { customer: string | null }[]) {
-      if (row.customer) seen.add(row.customer)
+    for (const row of data as { CUSTOMER: string | null }[]) {
+      if (row.CUSTOMER) seen.add(row.CUSTOMER)
     }
     return Array.from(seen).sort()
   } catch {

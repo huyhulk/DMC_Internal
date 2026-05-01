@@ -57,15 +57,19 @@ export function ScheduleTab({ user }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await listScheduleAction({
-      workshop: filter.workshop !== 'ALL' ? filter.workshop : undefined,
-      from:     filter.from || undefined,
-      to:       filter.to   || undefined,
-      maintenance_type: filter.type !== 'ALL' ? filter.type : undefined,
-      status:   mode === 'execute' ? 'pending' : 'ALL',
-    })
-    if (res.success) setRows(res.data ?? [])
-    setLoading(false)
+    try {
+      const res = await listScheduleAction({
+        workshop: filter.workshop !== 'ALL' ? filter.workshop : undefined,
+        from:     filter.from || undefined,
+        to:       filter.to   || undefined,
+        maintenance_type: filter.type !== 'ALL' ? filter.type : undefined,
+        status:   mode === 'execute' ? 'pending' : 'ALL',
+      })
+      if (res.success) setRows(res.data ?? [])
+      else setRows([])
+    } finally {
+      setLoading(false)
+    }
   }, [filter, mode])
 
   // ─── Forms ───────────────────────────────────────────────────────────────────
