@@ -18,23 +18,31 @@ CREATE INDEX IF NOT EXISTS idx_hr_name    ON public.human_resource (name);
 
 ALTER TABLE public.human_resource ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hr_select_authenticated" ON public.human_resource
-  FOR SELECT TO authenticated USING (true);
+DO $$ BEGIN
+  CREATE POLICY "hr_select_authenticated" ON public.human_resource
+    FOR SELECT TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "hr_insert_admin" ON public.human_resource
-  FOR INSERT TO authenticated WITH CHECK (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('ADMIN','MANAGER'))
-  );
+DO $$ BEGIN
+  CREATE POLICY "hr_insert_admin" ON public.human_resource
+    FOR INSERT TO authenticated WITH CHECK (
+      EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('ADMIN','MANAGER'))
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "hr_update_admin" ON public.human_resource
-  FOR UPDATE TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('ADMIN','MANAGER')))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('ADMIN','MANAGER')));
+DO $$ BEGIN
+  CREATE POLICY "hr_update_admin" ON public.human_resource
+    FOR UPDATE TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('ADMIN','MANAGER')))
+    WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('ADMIN','MANAGER')));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "hr_delete_admin" ON public.human_resource
-  FOR DELETE TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
-  );
+DO $$ BEGIN
+  CREATE POLICY "hr_delete_admin" ON public.human_resource
+    FOR DELETE TO authenticated USING (
+      EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ─── hr_daily ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.hr_daily (
