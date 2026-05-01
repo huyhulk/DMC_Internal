@@ -60,8 +60,12 @@ CREATE INDEX IF NOT EXISTS idx_hr_daily_factory_date ON public.hr_daily (factory
 
 ALTER TABLE public.hr_daily ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hr_daily_select" ON public.hr_daily
-  FOR SELECT TO authenticated USING (true);
+DO $$ BEGIN
+  CREATE POLICY "hr_daily_select" ON public.hr_daily
+    FOR SELECT TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "hr_daily_upsert_admin" ON public.hr_daily
-  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "hr_daily_upsert_admin" ON public.hr_daily
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
