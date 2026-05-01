@@ -1,15 +1,15 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useForm, useFieldArray } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, CheckCircle, Trash2, Repeat } from 'lucide-react'
 import { cn, formatDate, getTodayLocal } from '@/lib/utils'
 import {
-  scheduleCreateSchema, scheduleBulkCreateSchema, scheduleCompleteSchema,
+  scheduleBulkCreateSchema, scheduleCompleteSchema,
   MAINTENANCE_TYPES, MAINTENANCE_TYPE_LABELS, KPI_WORKSHOPS,
-  type ScheduleCreateInput, type ScheduleBulkCreateInput, type ScheduleCompleteInput,
+  type ScheduleBulkCreateInput, type ScheduleCompleteInput,
 } from '@/lib/validations/maintenance'
 import {
   createScheduleAction, bulkCreateScheduleAction, completeScheduleAction,
@@ -25,6 +25,17 @@ import type { SessionUser } from '@/types'
 const inputCls = 'w-full h-9 px-2.5 rounded-lg text-[12px] font-medium text-[#1d1d1f] placeholder:text-[#aeaeb2] bg-white border border-[#d2d2d7] focus:outline-none focus:ring-1 focus:ring-dmc-primary/40 focus:border-dmc-primary/50 transition-all'
 const labelCls = 'block text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73] mb-1'
 
+type Machine = { machine_code: string; machine_name: string | null }
+
+// Shared fields for Create dialog — machine(s) come from checkbox state, not the form
+type CreateFields = {
+  workshop:         (typeof KPI_WORKSHOPS)[number]
+  maintenance_type: (typeof MAINTENANCE_TYPES)[number]
+  scheduled_date:   string
+  technician:       string
+  notes:            string
+}
+
 interface Props { user: SessionUser }
 
 export function ScheduleTab({ user }: Props) {
@@ -36,11 +47,12 @@ export function ScheduleTab({ user }: Props) {
   const [completeId, setCompleteId]   = useState<string | null>(null)
   const [completeChecklist, setCompleteChecklist] = useState<{ item: string; ok: boolean; note: string }[]>([])
   const [deleteId, setDeleteId]       = useState<string | null>(null)
-  const [machines, setMachines] = useState<{ machine_code: string; machine_name: string | null }[]>([])
+  const [createMachines, setCreateMachines] = useState<Machine[]>([])
+  const [bulkMachines,   setBulkMachines]   = useState<Machine[]>([])
+  const [selectedMachines, setSelectedMachines] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting]   = useState(false)
 
   const [filter, setFilter] = useState({ workshop: 'ALL', from: '', to: '', type: 'ALL' })
-
   const allowedWorkshops = ['ALL', ...KPI_WORKSHOPS]
 
   const load = useCallback(async () => {
@@ -56,79 +68,131 @@ export function ScheduleTab({ user }: Props) {
     setLoading(false)
   }, [filter, mode])
 
-  const createForm = useForm<ScheduleCreateInput>({
-    resolver: zodResolver(scheduleCreateSchema),
-    defaultValues: { workshop: KPI_WORKSHOPS[0], maintenance_type: 'monthly', scheduled_date: getTodayLocal() },
+  // ─── Forms ───────────────────────────────────────────────────────────────────
+
+  const createForm = useForm<CreateFields>({
+    defaultValues: {
+      workshop:         KPI_WORKSHOPS[0],
+      maintenance_type: 'monthly',
+      scheduled_date:   getTodayLocal(),
+      technician:       '',
+      notes:            '',
+    },
   })
 
   const bulkForm = useForm<ScheduleBulkCreateInput>({
     resolver: zodResolver(scheduleBulkCreateSchema),
-    defaultValues: { workshop: KPI_WORKSHOPS[0], maintenance_type: 'monthly', frequency: 'monthly', start_date: getTodayLocal(), end_date: getTodayLocal() },
+    defaultValues: {
+      workshop:         KPI_WORKSHOPS[0],
+      machine_code:     '',
+      machine_name:     '',
+      maintenance_type: 'monthly',
+      frequency:        'monthly',
+      start_date:       getTodayLocal(),
+      end_date:         getTodayLocal(),
+    },
   })
-
-  const createWorkshop = createForm.watch('workshop')
-  const bulkWorkshop   = bulkForm.watch('workshop')
-
-  useEffect(() => { void load() }, [load])
-
-  useEffect(() => {
-    const loc = createWorkshop ? `?location=${createWorkshop}` : ''
-    fetch(`/api/machines${loc}`, { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => Array.isArray(data) && setMachines(data))
-      .catch(() => {})
-  }, [createWorkshop])
-
-  useEffect(() => {
-    const loc = bulkWorkshop ? `?location=${bulkWorkshop}` : ''
-    fetch(`/api/machines${loc}`, { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => Array.isArray(data) && setMachines(data))
-      .catch(() => {})
-  }, [bulkWorkshop])
 
   const completeForm = useForm<ScheduleCompleteInput>({
     resolver: zodResolver(scheduleCompleteSchema),
     defaultValues: { actual_date: getTodayLocal() },
   })
 
-  const { fields: checklistFields, append: appendItem, remove: removeItem } = useFieldArray({
-    control: createForm.control, name: 'checklist_items' as never,
-  })
+  const createWorkshop  = createForm.watch('workshop')
+  const bulkWorkshop    = bulkForm.watch('workshop')
+  const bulkMachineCode = bulkForm.watch('machine_code')
 
-  async function onCreateSubmit(values: ScheduleCreateInput) {
+  useEffect(() => { void load() }, [load])
+
+  // Fetch machine list for Create dialog, clear selection when workshop changes
+  useEffect(() => {
+    setSelectedMachines(new Set())
+    fetch(`/api/machines?location=${createWorkshop}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => Array.isArray(data) && setCreateMachines(data))
+      .catch(() => {})
+  }, [createWorkshop])
+
+  // Fetch machine list for Bulk dialog, reset machine selection when workshop changes
+  useEffect(() => {
+    bulkForm.setValue('machine_code', '')
+    bulkForm.setValue('machine_name', '')
+    fetch(`/api/machines?location=${bulkWorkshop}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => Array.isArray(data) && setBulkMachines(data))
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkWorkshop])
+
+  // ─── Handlers ────────────────────────────────────────────────────────────────
+
+  async function onCreateSubmit(values: CreateFields) {
+    if (selectedMachines.size === 0) {
+      toast.warning('Chọn ít nhất một thiết bị')
+      return
+    }
     setSubmitting(true)
-    const res = await createScheduleAction(values)
-    if (res.success) { toast.success(res.message); setShowCreate(false); createForm.reset(); void load() }
-    else toast.error(res.message)
-    setSubmitting(false)
+    try {
+      let successCount = 0
+      for (const code of selectedMachines) {
+        const m = createMachines.find((x) => x.machine_code === code)
+        const res = await createScheduleAction({
+          ...values,
+          machine_code: code,
+          machine_name: m?.machine_name ?? '',
+        })
+        if (res.success) successCount++
+        else toast.error(res.message)
+      }
+      if (successCount > 0) {
+        toast.success(`Đã tạo ${successCount} lịch bảo trì`)
+        setShowCreate(false)
+        createForm.reset({
+          workshop: KPI_WORKSHOPS[0], maintenance_type: 'monthly',
+          scheduled_date: getTodayLocal(), technician: '', notes: '',
+        })
+        setSelectedMachines(new Set())
+        void load()
+      }
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function onBulkSubmit(values: ScheduleBulkCreateInput) {
     setSubmitting(true)
-    const res = await bulkCreateScheduleAction(values)
-    if (res.success) { toast.success(res.message); setShowBulk(false); bulkForm.reset(); void load() }
-    else toast.error(res.message)
-    setSubmitting(false)
+    try {
+      const res = await bulkCreateScheduleAction(values)
+      if (res.success) { toast.success(res.message); setShowBulk(false); bulkForm.reset(); void load() }
+      else toast.error(res.message)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function onCompleteSubmit(values: ScheduleCompleteInput) {
     if (!completeId) return
     setSubmitting(true)
-    const payload = { ...values, checklist_items: completeChecklist.length ? completeChecklist : undefined }
-    const res = await completeScheduleAction(completeId, payload)
-    if (res.success) { toast.success(res.message); setCompleteId(null); void load() }
-    else toast.error(res.message)
-    setSubmitting(false)
+    try {
+      const payload = { ...values, checklist_items: completeChecklist.length ? completeChecklist : undefined }
+      const res = await completeScheduleAction(completeId, payload)
+      if (res.success) { toast.success(res.message); setCompleteId(null); void load() }
+      else toast.error(res.message)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function onDelete() {
     if (!deleteId) return
     setSubmitting(true)
-    const res = await deleteScheduleAction(deleteId)
-    if (res.success) { toast.success(res.message); setDeleteId(null); void load() }
-    else toast.error(res.message)
-    setSubmitting(false)
+    try {
+      const res = await deleteScheduleAction(deleteId)
+      if (res.success) { toast.success(res.message); setDeleteId(null); void load() }
+      else toast.error(res.message)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   function openComplete(row: ScheduleRow) {
@@ -152,8 +216,12 @@ export function ScheduleTab({ user }: Props) {
     return 'Chưa thực hiện'
   }
 
+  const allSelected  = createMachines.length > 0 && selectedMachines.size === createMachines.length
+  const someSelected = selectedMachines.size > 0 && !allSelected
+
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-[#1d1d1f]">Lịch bảo trì (KT-04)</h1>
@@ -240,7 +308,7 @@ export function ScheduleTab({ user }: Props) {
                     </td>
                     <td className="p-3"><Badge variant="neutral">{row.workshop}</Badge></td>
                     <td className="p-3 text-[12px]">
-                      {MAINTENANCE_TYPE_LABELS[row.maintenance_type as typeof MAINTENANCE_TYPES[number]] ?? row.maintenance_type}
+                      {MAINTENANCE_TYPE_LABELS[row.maintenance_type as (typeof MAINTENANCE_TYPES)[number]] ?? row.maintenance_type}
                     </td>
                     <td className="p-3 text-[12px]">{row.actual_date ? formatDate(row.actual_date) : '—'}</td>
                     <td className="p-3 text-center">
@@ -270,8 +338,8 @@ export function ScheduleTab({ user }: Props) {
         )}
       </div>
 
-      {/* Create Dialog */}
-      <Dialog open={showCreate} onClose={() => setShowCreate(false)} title="Thêm lịch bảo trì" size="lg">
+      {/* Create Dialog — multi-machine checkbox list */}
+      <Dialog open={showCreate} onClose={() => { setShowCreate(false); setSelectedMachines(new Set()) }} title="Thêm lịch bảo trì" size="lg">
         <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -287,35 +355,8 @@ export function ScheduleTab({ user }: Props) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Tên thiết bị *</label>
-              <select
-                className={inputCls}
-                value={createForm.watch('machine_code') ?? ''}
-                onChange={(e) => {
-                  const code = e.target.value
-                  const found = machines.find((m) => m.machine_code === code)
-                  createForm.setValue('machine_name', found?.machine_name ?? '', { shouldValidate: true })
-                  createForm.setValue('machine_code', code, { shouldValidate: true })
-                }}
-              >
-                <option value="">— Chọn thiết bị —</option>
-                {machines.map((m) => (
-                  <option key={m.machine_code} value={m.machine_code}>
-                    {m.machine_name ?? m.machine_code}
-                  </option>
-                ))}
-              </select>
-              {createForm.formState.errors.machine_code && (
-                <p className="text-[11px] text-red-500 mt-0.5">{createForm.formState.errors.machine_code.message}</p>
-              )}
-            </div>
-            <div>
-              <label className={labelCls}>Mã thiết bị</label>
-              <input {...createForm.register('machine_code')} className={inputCls} placeholder="Tự điền khi chọn tên" />
-            </div>
-            <div>
               <label className={labelCls}>Ngày lịch *</label>
-              <input type="date" {...createForm.register('scheduled_date')} className={inputCls} />
+              <input type="date" {...createForm.register('scheduled_date', { required: 'Chọn ngày lịch' })} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Thợ bảo trì</label>
@@ -326,35 +367,75 @@ export function ScheduleTab({ user }: Props) {
             <label className={labelCls}>Ghi chú</label>
             <textarea {...createForm.register('notes')} rows={2} className={cn(inputCls, 'h-auto resize-none')} />
           </div>
+
+          {/* Machine checkbox list */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className={labelCls}>Danh sách kiểm tra</label>
-              <button type="button" onClick={() => appendItem('' as never)}
-                className="text-[11px] text-dmc-primary hover:underline flex items-center gap-1">
-                <Plus size={11} /> Thêm mục
-              </button>
-            </div>
-            {checklistFields.map((field, idx) => (
-              <div key={field.id} className="flex gap-2 mb-1.5">
-                <input {...createForm.register(`checklist_items.${idx}` as never)} className={inputCls} placeholder={`Mục ${idx + 1}`} />
-                <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 shrink-0">
-                  <Trash2 size={14} />
-                </button>
+            <label className={labelCls}>
+              Chọn thiết bị *{selectedMachines.size > 0 && (
+                <span className="text-dmc-primary normal-case font-normal ml-1">— {selectedMachines.size} đã chọn</span>
+              )}
+            </label>
+            <div className="border border-[#d2d2d7] rounded-lg overflow-hidden">
+              {/* Select all row */}
+              <label className="flex items-center gap-2.5 px-3 py-2 bg-[#f5f5f7] border-b border-[#d2d2d7] cursor-pointer hover:bg-[#ebebeb]">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => { if (el) el.indeterminate = someSelected }}
+                  onChange={(e) =>
+                    setSelectedMachines(
+                      e.target.checked ? new Set(createMachines.map((m) => m.machine_code)) : new Set()
+                    )
+                  }
+                  className="w-4 h-4 accent-dmc-primary"
+                />
+                <span className="text-[11px] font-semibold text-[#6e6e73] select-none">
+                  Chọn tất cả ({selectedMachines.size}/{createMachines.length})
+                </span>
+              </label>
+              {/* Machine rows */}
+              <div className="max-h-52 overflow-y-auto divide-y divide-[#d2d2d7]/40">
+                {createMachines.length === 0 ? (
+                  <p className="text-[12px] text-[#aeaeb2] px-3 py-5 text-center">Không có thiết bị nào trong xưởng này</p>
+                ) : (
+                  createMachines.map((m) => (
+                    <label key={m.machine_code} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-[#f5f5f7]">
+                      <input
+                        type="checkbox"
+                        checked={selectedMachines.has(m.machine_code)}
+                        onChange={(e) => {
+                          const next = new Set(selectedMachines)
+                          if (e.target.checked) next.add(m.machine_code)
+                          else next.delete(m.machine_code)
+                          setSelectedMachines(next)
+                        }}
+                        className="w-4 h-4 accent-dmc-primary shrink-0"
+                      />
+                      <span className="text-[12px] text-[#1d1d1f] flex-1 select-none">{m.machine_name ?? m.machine_code}</span>
+                      <span className="text-[10px] text-[#aeaeb2] font-mono">{m.machine_code}</span>
+                    </label>
+                  ))
+                )}
               </div>
-            ))}
+            </div>
           </div>
-          <div className="flex gap-2 pt-2">
-            <button type="button" onClick={() => setShowCreate(false)}
+
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={() => { setShowCreate(false); setSelectedMachines(new Set()) }}
               className="flex-1 h-10 rounded-xl border border-[#d2d2d7] text-[13px] text-[#6e6e73] hover:bg-[#f2f2f7]">Hủy</button>
-            <button type="submit" disabled={submitting}
+            <button type="submit" disabled={submitting || selectedMachines.size === 0}
               className="flex-1 h-10 rounded-xl bg-dmc-primary text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50">
-              {submitting ? 'Đang lưu…' : 'Thêm lịch'}
+              {submitting
+                ? 'Đang lưu…'
+                : selectedMachines.size > 0
+                  ? `Tạo ${selectedMachines.size} lịch`
+                  : 'Chọn thiết bị'}
             </button>
           </div>
         </form>
       </Dialog>
 
-      {/* Bulk Create Dialog */}
+      {/* Bulk Create Dialog — single machine + date range */}
       <Dialog open={showBulk} onClose={() => setShowBulk(false)} title="Tạo lịch định kỳ" size="md">
         <form onSubmit={bulkForm.handleSubmit(onBulkSubmit)} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -368,21 +449,24 @@ export function ScheduleTab({ user }: Props) {
               <label className={labelCls}>Tên thiết bị *</label>
               <select
                 className={inputCls}
-                value={bulkForm.watch('machine_code') ?? ''}
+                value={bulkMachineCode ?? ''}
                 onChange={(e) => {
                   const code = e.target.value
-                  const found = machines.find((m) => m.machine_code === code)
-                  bulkForm.setValue('machine_name', found?.machine_name ?? '')
-                  bulkForm.setValue('machine_code', code)
+                  const found = bulkMachines.find((m) => m.machine_code === code)
+                  bulkForm.setValue('machine_name', found?.machine_name ?? '', { shouldValidate: true })
+                  bulkForm.setValue('machine_code', code, { shouldValidate: true })
                 }}
               >
                 <option value="">— Chọn thiết bị —</option>
-                {machines.map((m) => (
+                {bulkMachines.map((m) => (
                   <option key={m.machine_code} value={m.machine_code}>
                     {m.machine_name ?? m.machine_code}
                   </option>
                 ))}
               </select>
+              {bulkForm.formState.errors.machine_code && (
+                <p className="text-[11px] text-red-500 mt-0.5">{bulkForm.formState.errors.machine_code.message}</p>
+              )}
             </div>
             <div>
               <label className={labelCls}>Loại BT *</label>

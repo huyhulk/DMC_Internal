@@ -189,6 +189,8 @@ export function useProductionData(user: SessionUser) {
         const lines = [...s.lines]
         lines[idx] = { ...lines[idx], [field]: value }
 
+        const orderQty = parseInt(s.orderInfo?.quantity ?? '0', 10) || 0
+
         if (field === 'product' && value && !String(value).startsWith('--')) {
           const ws = s.selectedWorkshop
           const norm = s.initData?.norms.find(
@@ -196,6 +198,15 @@ export function useProductionData(user: SessionUser) {
           )
           if (norm) {
             lines[idx].workforce = norm.nwforce
+          }
+
+          // Auto-fill poutput: remaining = orderQty - sum of previous lines
+          if (orderQty > 0) {
+            const usedQty = lines.slice(0, idx).reduce((sum, l) => sum + (Number(l.poutput) || 0), 0)
+            lines[idx].poutput = Math.max(0, orderQty - usedQty)
+          }
+
+          if (norm) {
             // Recalculate realnorm immediately so selecting product last (after
             // poutput/starttime/endtime are already filled) doesn't leave realnorm = 0.
             lines[idx].realnorm = calcRealNorm({
@@ -206,6 +217,7 @@ export function useProductionData(user: SessionUser) {
               endtime: lines[idx].endtime,
             })
           }
+
           if (idx >= visibleRows - 1 && visibleRows < MAX_LINES) {
             setVisibleRows((r) => r + 1)
           }
@@ -224,6 +236,28 @@ export function useProductionData(user: SessionUser) {
               starttime: line.starttime,
               endtime: line.endtime,
             })
+          }
+
+          // When poutput changes, cascade default poutput to subsequent visible lines that have a product
+          if (field === 'poutput' && orderQty > 0) {
+            for (let j = idx + 1; j < visibleRows; j++) {
+              if (lines[j].product && !lines[j].product.startsWith('--')) {
+                const usedQty = lines.slice(0, j).reduce((sum, l) => sum + (Number(l.poutput) || 0), 0)
+                lines[j].poutput = Math.max(0, orderQty - usedQty)
+                const jNorm = s.initData?.norms.find(
+                  (n) => n.products === lines[j].product && workshopCode(n.workshop) === workshopCode(s.selectedWorkshop)
+                )
+                if (jNorm) {
+                  lines[j].realnorm = calcRealNorm({
+                    nwforce: jNorm.nwforce,
+                    workforce: lines[j].workforce,
+                    poutput: lines[j].poutput,
+                    starttime: lines[j].starttime,
+                    endtime: lines[j].endtime,
+                  })
+                }
+              }
+            }
           }
         }
 
