@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { getInitData, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
+import { getProductionRowsValidationError } from '@/lib/production/workflow'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { InitData, Order, NormItem, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
@@ -34,6 +35,32 @@ const INITIAL_LINE: ProductLine = {
 
 const MAX_LINES = 5
 const INITIAL_LINES = 2
+
+function normalizedStatus(status: string): string {
+  return status
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+}
+
+function isDeliveredOrder(order: Pick<Order, 'status'>): boolean {
+  return normalizedStatus(order.status).includes('da giao')
+}
+
+function buildPcodeStatuses(orders: Order[], submittedPcodes: string[]): Record<string, PcodeStatus> {
+  const statuses: Record<string, PcodeStatus> = {}
+  orders.forEach((o) => {
+    const isSubmitted = submittedPcodes.includes(o.pcode)
+    const isDelivered = isDeliveredOrder(o)
+    const locked = isSubmitted || isDelivered
+    const reason = isDelivered ? 'delivered' : isSubmitted ? 'submitted' : ''
+    const key = locked ? `${o.pcode} ${isDelivered ? '🔒📦' : '🔒'}` : o.pcode
+    statuses[key] = { pcode: o.pcode, locked, reason: reason as PcodeStatus['reason'] }
+  })
+  return statuses
+}
 
 // pdate always defaults to today (client local time), never to selectedDate.
 // selectedDate controls which day's orders are shown; pdate is the actual production date.
@@ -97,14 +124,7 @@ export function useProductionData(user: SessionUser) {
           statuses[t] = { pcode: t, locked: false, reason: '' }
         })
       } else {
-        orders.forEach((o) => {
-          const isSubmitted = submitted.includes(o.pcode)
-          const isDelivered = o.status.trim().toLowerCase() === 'đã giao'
-          const locked = isSubmitted || isDelivered
-          const reason = isDelivered ? 'delivered' : isSubmitted ? 'submitted' : ''
-          const key = locked ? `${o.pcode} ${isDelivered ? '🔒📦' : '🔒'}` : o.pcode
-          statuses[key] = { pcode: o.pcode, locked, reason: reason as PcodeStatus['reason'] }
-        })
+        Object.assign(statuses, buildPcodeStatuses(orders, submitted))
       }
 
       setState((s) => ({
@@ -128,12 +148,13 @@ export function useProductionData(user: SessionUser) {
       const status = state.pcodeStatuses[displayPcode]
       if (!status) return
 
+      if (status.reason === 'delivered') {
+        toast.error('Mã LSX này đã giao hàng. Không thể nhập thêm.')
+        return
+      }
+
       if (status.locked && !state.pcodeUnlocked) {
-        if (status.reason === 'delivered') {
-          toast.error('Mã LSX này đã giao hàng. Không thể nhập thêm.')
-        } else {
-          toast.warning('Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
-        }
+        toast.warning('Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
         return
       }
 
@@ -155,6 +176,40 @@ export function useProductionData(user: SessionUser) {
     [state.initData, state.pcodeStatuses, state.pcodeUnlocked, state.selectedWorkshop]
   )
 
+  const selectOrder = useCallback(
+    (order: Order): boolean => {
+      if (!state.initData) return false
+
+      if (isDeliveredOrder(order)) {
+        toast.error('Mã LSX này đã giao hàng. Không thể nhập thêm.')
+        return false
+      }
+
+      const submitted = state.initData.submittedPcodes.includes(order.pcode)
+      if (submitted && !state.pcodeUnlocked) {
+        toast.warning('Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
+        return false
+      }
+
+      const orders = state.initData.orders.filter((o) => o.workshop === order.workshop)
+      const statuses = buildPcodeStatuses(orders, state.initData.submittedPcodes)
+      const displayPcode = Object.keys(statuses).find((key) => statuses[key].pcode === order.pcode) ?? order.pcode
+
+      setState((s) => ({
+        ...s,
+        selectedWorkshop: order.workshop,
+        selectedPcode: displayPcode,
+        orderInfo: order,
+        pcodeStatuses: statuses,
+        pcodeUnlocked: false,
+        lines: makeInitialLines(),
+      }))
+      setVisibleRows(INITIAL_LINES)
+      return true
+    },
+    [state.initData, state.pcodeUnlocked]
+  )
+
   const unlockDate = useCallback(
     (password: string): boolean => {
       setState((s) => ({
@@ -172,7 +227,7 @@ export function useProductionData(user: SessionUser) {
       const now = new Date().toTimeString().slice(0, 8)
       const newStatuses: Record<string, PcodeStatus> = {}
       Object.entries(state.pcodeStatuses).forEach(([key, val]) => {
-        newStatuses[key] = { ...val, locked: false }
+        newStatuses[key] = { ...val, locked: val.reason === 'delivered' }
       })
       setState((s) => ({
         ...s,
@@ -331,13 +386,9 @@ export function useProductionData(user: SessionUser) {
             log: unlockLog.join(' | '),
           }))
 
-    if (rowsToSave.length === 0) {
-      toast.warning('Vui lòng chọn ít nhất 1 sản phẩm')
-      return false
-    }
-
-    if (!isOther && rowsToSave.some((r) => !r.starttime || !r.endtime)) {
-      toast.warning('Vui lòng nhập giờ bắt đầu và kết thúc cho tất cả dòng sản xuất')
+    const validationError = getProductionRowsValidationError(rowsToSave)
+    if (validationError) {
+      toast.warning(validationError)
       return false
     }
 
@@ -413,6 +464,7 @@ export function useProductionData(user: SessionUser) {
     loadData,
     selectWorkshop,
     selectPcode,
+    selectOrder,
     unlockDate,
     unlockPcode,
     updateLine,

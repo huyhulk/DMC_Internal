@@ -45,6 +45,62 @@
 
 ## 📜 Entries
 
+## 2026-05-02 (Phiên #12 — UI nhập liệu sản xuất theo danh mục lệnh)
+**Branch:** staging
+**Claude model:** GPT-5 Codex
+**Task:** Đổi giao diện nhập liệu sản xuất từ chọn LSX bằng dropdown sang danh mục lệnh theo ngày/role, mở popup nhập liệu khi chọn lệnh, giữ mobile dễ thao tác.
+
+### Đã làm
+- Thay màn chính nhập liệu sản xuất bằng danh mục lệnh sản xuất theo `Ngày lập phiếu` và quyền `role/workspace` hiện có.
+- Giữ ô tìm kiếm theo LSX; danh mục mỗi dòng hiển thị LSX, khách hàng, diễn giải, số lượng, tình trạng.
+- Sắp xếp danh mục theo ưu tiên: đang sản xuất → chưa sản xuất → hoàn thành/đã SX → đã giao.
+- Click vào một dòng mở popup nhập liệu dùng lại luồng nhập thời gian, sản lượng, lỗi, tái chế, sản phẩm như form cũ.
+- Popup responsive cho mobile: cao gần full màn hình, phần body cuộn được để thấy Sản phẩm #2 và các sản phẩm tiếp theo.
+- Giữ logic khóa ngày lập phiếu và khóa lệnh sản xuất; lệnh đã nhập cần mở khóa LSX, lệnh đã giao vẫn bị chặn.
+- Thêm helper/test regression cho lọc và sắp xếp danh mục lệnh.
+- Thêm hover/focus xanh lá cho hàng lệnh để dễ nhận biết dòng đang trỏ/chọn.
+- Thay chọn giờ/phút bằng wheel picker cuộn chuột/vuốt mobile kiểu bánh lăn.
+- Khôi phục và khóa rule nhập liệu: giờ kết thúc phải lớn hơn giờ bắt đầu; rule này hiện chạy ở cả client trước submit và server action trước insert.
+
+### Quyết định kỹ thuật
+- Tách logic lọc/sắp xếp lệnh vào `lib/production/workflow.ts` để test được độc lập, tránh hard-code thứ tự trạng thái trực tiếp trong component.
+- Giữ server-side scope theo role/workspace trong luồng data hiện có; UI chỉ trình bày lại danh sách đã được lọc theo quyền.
+- Chuyển form nhập liệu vào modal thay vì render trực tiếp dưới danh sách để danh mục chính gọn hơn và mobile có vùng thao tác tập trung.
+
+### Verify
+- `npm run type-check` ✅
+- `npm run lint` ✅
+- `npm test` ✅ — 83/83 pass
+- `npm run build` ✅ sau khi dừng dev server và xoá cache `.next` bị Windows/OneDrive giữ
+- Browser smoke desktop + mobile trên `http://localhost:3000/dashboard/production` ✅
+- Test nhập/lưu mẫu qua popup trên staging: tạo được 1 dòng `Production`, sau đó đã xoá record test ✅
+- Test invalid time qua browser: start `09:00`, end `08:00` bị chặn, hiện warning, không tạo record ✅
+- Local server hiện trả `200` tại `http://localhost:3000/login`
+
+### Files thay đổi
+- `components/production/production-tab.tsx`
+- `components/production/product-line-card.tsx`
+- `hooks/use-production-data.ts`
+- `lib/actions/data.ts`
+- `lib/production/workflow.ts`
+- `lib/validations/production.ts`
+- `__tests__/production-workflow.test.ts`
+
+### Context files updated
+- `.claude/work-log.md`
+
+### Status cuối phiên
+- [ ] Code committed? N — đang chờ user xác nhận commit/push
+- [ ] PR created? N
+- [x] Tests passing? Y — type-check, lint, full test, build, browser smoke
+- [x] Documentation updated? Y — work log này
+
+### Next time resume
+- Nếu user xác nhận, commit/push lên `origin/staging` với scope: các file production ở trên + `.claude/work-log.md`.
+- Không gom các file untracked cũ ngoài scope trong `.claude/` và `scripts/` nếu user không yêu cầu.
+
+---
+
 ## 2026-04-30 (Phiên #11 — Fix SX-01 source + KPI UX cleanup)
 **Branch:** feat/data-entry-defects → push to origin/staging
 **Claude model:** Sonnet 4.6

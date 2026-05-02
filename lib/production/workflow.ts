@@ -1,0 +1,94 @@
+import type { Order } from '@/types'
+
+export interface ProductionInputRow {
+  pdate: string
+  pcode: string
+  products?: string
+  poutput: number
+  eoutput: number
+  routput: number
+  workforce: number
+  starttime: string
+  endtime: string
+}
+
+function normalizeStatus(status: string): string {
+  return status
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+}
+
+export function getProductionOrderStatusRank(status: string): number {
+  const normalized = normalizeStatus(status)
+
+  if (normalized.includes('dang sx') || normalized.includes('dang san xuat')) return 0
+  if (normalized.includes('chua sx') || normalized.includes('chua san xuat') || normalized === '') return 1
+  if (
+    normalized.includes('da sx') ||
+    normalized.includes('da san xuat') ||
+    normalized.includes('hoan thanh')
+  ) return 2
+  if (normalized.includes('da giao') || normalized.includes('giao hang')) return 3
+
+  return 4
+}
+
+export function sortProductionOrdersForEntry(orders: Order[]): Order[] {
+  return [...orders].sort((a, b) => {
+    const rankDiff = getProductionOrderStatusRank(a.status) - getProductionOrderStatusRank(b.status)
+    if (rankDiff !== 0) return rankDiff
+    return a.pcode.localeCompare(b.pcode, 'vi', { numeric: true, sensitivity: 'base' })
+  })
+}
+
+export function filterProductionOrdersByPcode(orders: Order[], query: string): Order[] {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return orders
+  return orders.filter((order) => order.pcode.toLowerCase().includes(normalizedQuery))
+}
+
+function parseTimeToMinutes(value: string): number | null {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return null
+
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+
+  return hours * 60 + minutes
+}
+
+export function isProductionTimeRangeValid(starttime: string, endtime: string): boolean {
+  const start = parseTimeToMinutes(starttime)
+  const end = parseTimeToMinutes(endtime)
+  if (start === null || end === null) return false
+  return end > start
+}
+
+export function getProductionRowsValidationError(rows: ProductionInputRow[]): string | null {
+  if (rows.length === 0) return 'Vui lòng chọn ít nhất 1 sản phẩm.'
+
+  for (const [index, row] of rows.entries()) {
+    const line = index + 1
+
+    if (!row.pdate) return `Dòng ${line}: vui lòng chọn ngày sản xuất.`
+    if (!row.pcode) return `Dòng ${line}: vui lòng chọn mã LSX.`
+    if (!row.starttime || !row.endtime) {
+      return `Dòng ${line}: vui lòng nhập giờ bắt đầu và kết thúc.`
+    }
+    if (!isProductionTimeRangeValid(row.starttime, row.endtime)) {
+      return `Dòng ${line}: giờ kết thúc phải lớn hơn giờ bắt đầu.`
+    }
+
+    const numericValues = [row.poutput, row.eoutput, row.routput, row.workforce]
+    if (numericValues.some((value) => !Number.isFinite(value) || value < 0)) {
+      return `Dòng ${line}: số lượng và nhân sự không được âm.`
+    }
+  }
+
+  return null
+}

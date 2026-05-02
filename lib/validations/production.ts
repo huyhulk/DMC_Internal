@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isProductionTimeRangeValid } from '@/lib/production/workflow'
 
 export const productLineSchema = z.object({
   product: z.string().min(1),
@@ -10,6 +11,9 @@ export const productLineSchema = z.object({
   eoutput: z.number().min(0).default(0),
   routput: z.number().min(0).default(0),
   realnorm: z.number().default(0),
+}).refine((line) => isProductionTimeRangeValid(line.starttime, line.endtime), {
+  message: 'Giờ kết thúc phải lớn hơn giờ bắt đầu',
+  path: ['endtime'],
 })
 
 export const recordProductionSchema = z.object({

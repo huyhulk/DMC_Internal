@@ -3,6 +3,7 @@
 import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
+import { getProductionRowsValidationError } from '@/lib/production/workflow'
 import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, Order, ProductionReportRow } from '@/types'
@@ -226,8 +227,9 @@ export async function recordProductionAction(rows: Array<{
     }
 
     // ── 3. Insert ─────────────────────────────────────────────────────────────
-    if (rows.some((r) => !r.starttime || !r.endtime)) {
-      return { success: false, message: 'Thiếu giờ bắt đầu hoặc kết thúc. Vui lòng kiểm tra lại.' }
+    const validationError = getProductionRowsValidationError(rows)
+    if (validationError) {
+      return { success: false, message: validationError }
     }
 
     const { error } = await supabase.from('Production').insert(rows)
