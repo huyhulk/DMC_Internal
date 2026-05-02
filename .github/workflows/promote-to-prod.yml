@@ -7,14 +7,16 @@ on:
         description: 'Type PRODUCTION to confirm promotion'
         required: true
 
-# Requires "production" environment configured in GitHub Settings
-# (Settings → Environments → production → add required reviewers)
-environment: production
+permissions:
+  contents: write
 
 jobs:
   promote:
     name: Merge staging → main & apply migrations
     runs-on: ubuntu-latest
+    # Requires "production" environment configured in GitHub Settings
+    # (Settings → Environments → production → add required reviewers)
+    environment: production
 
     steps:
       - name: Validate confirmation
