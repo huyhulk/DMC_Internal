@@ -58,3 +58,18 @@ Latest entry:
   - `rpc_overtime_summary('monthly', '2026-05-02', NULL)` returned successfully with 0 rows.
   - `material_usage`, `findings_5s`, and `hr_daily` count queries succeeded; all currently have 0 rows.
   - This confirms schema/RPC availability, but not real KPI numbers because staging has no rows in these KPI/HR tables.
+- 2026-05-02: User provided `C:\Users\trump\Downloads\INSTALL.md` for "Installing Superpowers for Codex" and asked to install for future runs.
+  - Read `INSTALL.md`; it instructs cloning `https://github.com/obra/superpowers.git` to `~/.codex/superpowers` and creating a Windows junction at `~/.agents/skills/superpowers` pointing to `~/.codex/superpowers/skills`.
+  - Pre-check: Git is installed; neither target path exists yet; no `superpowers` or `bootstrap` block found in `~/.codex/AGENTS.md`.
+  - Next step: clone repo, create junction, verify skills directory, then restart Codex to discover new skills.
+- 2026-05-02: Superpowers install completed:
+  - Cloned `https://github.com/obra/superpowers.git` to `C:\Users\trump\.codex\superpowers` at commit `e7a2d16`.
+  - Created Windows junction `C:\Users\trump\.agents\skills\superpowers` -> `C:\Users\trump\.codex\superpowers\skills`.
+  - Verified 14 skill directories are visible through the junction, including `using-superpowers`, `brainstorming`, `writing-plans`, `executing-plans`, `systematic-debugging`, `verification-before-completion`, `subagent-driven-development`, and `dispatching-parallel-agents`.
+  - Updated `C:\Users\trump\.codex\config.toml` to set `[features].multi_agent = true` for Superpowers subagent skills.
+  - Codex needs restart/relaunch to discover the newly installed skills in future sessions.
+- 2026-05-02: Added compatibility junctions for Codex App skill discovery:
+  - Current Codex App session shows user skills under `C:\Users\trump\.codex\skills\<skill>\SKILL.md`, while Superpowers INSTALL uses `C:\Users\trump\.agents\skills\superpowers\<skill>\SKILL.md`.
+  - Created one direct junction per Superpowers skill under `C:\Users\trump\.codex\skills\`, pointing to the matching folder under `C:\Users\trump\.codex\superpowers\skills\`.
+  - Verified all 14 direct `C:\Users\trump\.codex\skills\<skill>\SKILL.md` paths exist through the junctions.
+  - Still requires Codex restart/relaunch for the active skill list to refresh.
