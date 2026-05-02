@@ -69,8 +69,14 @@
 - `npm test` ✅ — 4 suites / 83 tests pass.
 - `npm run build` ✅
 
+### Kết quả push/CI
+- Commit code: `b855c64 fix(kpi): complete production KPI and HR cleanup`.
+- Đã push lên `origin/staging`.
+- GitHub Actions `Staging CI` run `25253092701` ✅:
+  - Type Check, Lint & Build pass.
+  - Apply Migrations to Staging DB pass; migration 019 đã được apply qua workflow.
+
 ### Chưa làm
-- Chưa apply migration 019 lên staging trực tiếp; nếu push `staging`, GitHub Actions `staging-ci.yml` sẽ apply migration sau khi test/build pass.
 - Chưa chạy `scripts/copy-production-to-staging.mjs` vì script này ghi dữ liệu staging và cần chủ đích rõ ràng.
 - Các file `.claude/PLAN_DATA_ENTRY_DEFECTS.md`, `.claude/SNIPPETS_DEFECTS.md`, `.claude/README.md`, `.claude/launch.json`, và `scripts/copy-production-to-staging.mjs` đang để ngoài commit scope.
 
@@ -86,8 +92,7 @@
 - `components/kpi/kpi-radar-chart.tsx` (deleted)
 
 ### Next time resume
-- Nếu tiếp tục cùng scope, commit/push phần đã stage lên `origin/staging`, rồi xem kết quả GitHub Actions.
-- Nếu cần verify DB thật, apply migration 019 lên staging trước, sau đó smoke test overtime/KPI production endpoints.
+- Nếu tiếp tục cùng scope, smoke test overtime/KPI production endpoints trên staging.
 - Không chạy script copy production → staging nếu user chưa xác nhận vì sẽ thay dữ liệu staging.
 
 ---

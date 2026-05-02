@@ -45,3 +45,11 @@ Latest entry:
   - deleted old KPI files: `components/kpi/kpi-card.tsx`, `components/kpi/kpi-department-dashboard.tsx`, `components/kpi/kpi-matrix-table.tsx`, `components/kpi/kpi-radar-chart.tsx`
   - left untracked old plan/snippet/script files out of scope.
   - staged secret scan only matched the word `secrets` inside this work-log rule; no credential-like value found.
+- 2026-05-02: Committed and pushed cleanup:
+  - Commit `b855c64 fix(kpi): complete production KPI and HR cleanup`.
+  - Pushed `staging` to `origin/staging`.
+  - GitHub Actions `Staging CI` run `25253092701` passed:
+    - Type Check, Lint & Build passed.
+    - Apply Migrations to Staging DB passed, so migration 019 was applied through CI.
+  - Remaining untracked/out-of-scope files: `.claude/PLAN_DATA_ENTRY_DEFECTS.md`, `.claude/README.md`, `.claude/SNIPPETS_DEFECTS.md`, `.claude/launch.json`, `scripts/copy-production-to-staging.mjs`.
+  - Next useful check: smoke test staging KPI/overtime endpoints or UI.
