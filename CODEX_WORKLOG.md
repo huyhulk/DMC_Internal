@@ -53,3 +53,8 @@ Latest entry:
     - Apply Migrations to Staging DB passed, so migration 019 was applied through CI.
   - Remaining untracked/out-of-scope files: `.claude/PLAN_DATA_ENTRY_DEFECTS.md`, `.claude/README.md`, `.claude/SNIPPETS_DEFECTS.md`, `.claude/launch.json`, `scripts/copy-production-to-staging.mjs`.
   - Next useful check: smoke test staging KPI/overtime endpoints or UI.
+- 2026-05-02: Post-push DB smoke on staging using `.env.local` service key without printing secrets:
+  - Project host prefix: `vfzjweyzwjczrxphnvaa`.
+  - `rpc_overtime_summary('monthly', '2026-05-02', NULL)` returned successfully with 0 rows.
+  - `material_usage`, `findings_5s`, and `hr_daily` count queries succeeded; all currently have 0 rows.
+  - This confirms schema/RPC availability, but not real KPI numbers because staging has no rows in these KPI/HR tables.
