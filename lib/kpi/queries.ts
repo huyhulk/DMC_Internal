@@ -36,9 +36,21 @@ type OrderDataRow = {
   DEADLINEDATE: string | null
   WORKSHOP: string | null
 }
+type MaterialUsageDataRow = {
+  workshop: string
+  norm_qty: number | null
+  actual_qty: number | null
+}
+type Finding5sDataRow = {
+  workshop: string
+  department: string | null
+  is_on_time: boolean | null
+}
 type ProdDataset = {
   prodRows: ProdDataRow[]
   orderRows: OrderDataRow[]
+  materialRows: MaterialUsageDataRow[]
+  findingRows: Finding5sDataRow[]
   workshopByPcode: Map<string, string>
 }
 
@@ -121,14 +133,16 @@ export async function queryProductionKpiRows(params: {
 
   const sx01 = calcSX01(dataset.prodRows, dataset.workshopByPcode, ws)
   const sx02 = calcSX02(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, period.period_start, period.period_end, ws)
+  const sx04 = calcSX04(dataset.materialRows, ws)
+  const sx05 = calcSX05(dataset.findingRows, ws)
   const sx06 = calcSX06(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, ws)
 
   return [
     buildProdKpiRow(SX01_DEF, sx01T, sx01.actual, sx01.count, params.periodType, periodRef),
     buildProdKpiRow(SX02_DEF, sx02T, sx02.actual, sx02.count, params.periodType, periodRef),
     oeeRow,
-    buildProdKpiRow(SX04_DEF, sx04T, 0, 0, params.periodType, periodRef),
-    buildProdKpiRow(SX05_DEF, sx05T, 0, 0, params.periodType, periodRef),
+    buildProdKpiRow(SX04_DEF, sx04T, sx04.actual, sx04.count, params.periodType, periodRef),
+    buildProdKpiRow(SX05_DEF, sx05T, sx05.actual, sx05.count, params.periodType, periodRef),
     buildProdKpiRow(SX06_DEF, sx06T, sx06.actual, sx06.count, params.periodType, periodRef),
   ].sort((a, b) => a.kpi_code.localeCompare(b.kpi_code))
 }
@@ -247,12 +261,14 @@ export async function queryProductionKpiComparison(params: {
   const prodMatrixRows: KpiMatrixRow[] = KPI_WORKSHOPS.flatMap((workshop) => {
     const sx01 = calcSX01(dataset.prodRows, dataset.workshopByPcode, workshop)
     const sx02 = calcSX02(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, from, to, workshop)
+    const sx04 = calcSX04(dataset.materialRows, workshop)
+    const sx05 = calcSX05(dataset.findingRows, workshop)
     const sx06 = calcSX06(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, workshop)
     return [
       buildProdKpiRow(SX01_DEF, sx01T, sx01.actual, sx01.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
       buildProdKpiRow(SX02_DEF, sx02T, sx02.actual, sx02.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
-      buildProdKpiRow(SX04_DEF, sx04T, 0, 0, params.periodType, periodRef, workshop) as KpiMatrixRow,
-      buildProdKpiRow(SX05_DEF, sx05T, 0, 0, params.periodType, periodRef, workshop) as KpiMatrixRow,
+      buildProdKpiRow(SX04_DEF, sx04T, sx04.actual, sx04.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
+      buildProdKpiRow(SX05_DEF, sx05T, sx05.actual, sx05.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
       buildProdKpiRow(SX06_DEF, sx06T, sx06.actual, sx06.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
     ]
   })
@@ -303,22 +319,45 @@ export async function queryKpiDepartmentSummary(params: {
 async function fetchProdDataForPeriod(from: string, to: string): Promise<ProdDataset> {
   const supabase = await createClient()
 
-  const { data: prodRows } = await supabase
-    .from('Production')
-    .select('pcode,poutput,eoutput,routput,pdate')
-    .gte('pdate', from)
-    .lte('pdate', to)
+  const [prodRes, materialRes, findingRes] = await Promise.all([
+    supabase
+      .from('Production')
+      .select('pcode,poutput,eoutput,routput,pdate')
+      .gte('pdate', from)
+      .lte('pdate', to),
+    supabase
+      .from('material_usage')
+      .select('workshop,norm_qty,actual_qty')
+      .gte('report_date', from)
+      .lte('report_date', to),
+    supabase
+      .from('findings_5s')
+      .select('workshop,department,is_on_time')
+      .gte('finding_date', from)
+      .lte('finding_date', to),
+  ])
+
+  if (prodRes.error) throw new Error(prodRes.error.message)
+  if (materialRes.error) throw new Error(materialRes.error.message)
+  if (findingRes.error) throw new Error(findingRes.error.message)
+
+  const prodRows = (prodRes.data ?? []) as ProdDataRow[]
+  const materialRows = (materialRes.data ?? []) as MaterialUsageDataRow[]
+  const findingRows = (findingRes.data ?? []) as Finding5sDataRow[]
 
   const pcodes = [...new Set(
-    (prodRows ?? []).map(r => r.pcode).filter((p): p is string => !!p)
+    prodRows.map(r => r.pcode).filter((p): p is string => !!p)
   )]
 
-  if (pcodes.length === 0) return { prodRows: [], orderRows: [], workshopByPcode: new Map() }
+  if (pcodes.length === 0) {
+    return { prodRows: [], orderRows: [], materialRows, findingRows, workshopByPcode: new Map() }
+  }
 
-  const { data: orderRows } = await supabase
+  const { data: orderRows, error: orderError } = await supabase
     .from('data')
     .select('PCODE,QUANTITY,DEADLINEDATE,WORKSHOP')
     .in('PCODE', pcodes)
+  if (orderError) throw new Error(orderError.message)
 
   // Build pcode → normalized workshop from data table (totalem is empty in Production)
   const workshopByPcode = new Map<string, string>()
@@ -330,8 +369,10 @@ async function fetchProdDataForPeriod(from: string, to: string): Promise<ProdDat
   }
 
   return {
-    prodRows: (prodRows ?? []) as ProdDataRow[],
+    prodRows,
     orderRows: (orderRows ?? []) as OrderDataRow[],
+    materialRows,
+    findingRows,
     workshopByPcode,
   }
 }
@@ -393,7 +434,38 @@ function calcSX02(
   return { actual: (onTime / scoped.length) * 100, count: scoped.length }
 }
 
-// SX-06: tiến độ sản lượng = SUM(eoutput trong kỳ) / SUM(QUANTITY của đơn đang sx) × 100
+// SX-04: percent of material usage within norm.
+function calcSX04(
+  materialRows: MaterialUsageDataRow[],
+  workshop: string | null,
+): { actual: number; count: number } {
+  const rows = workshop
+    ? materialRows.filter(r => r.workshop === workshop)
+    : materialRows
+  const normQty = rows.reduce((sum, row) => sum + (row.norm_qty ?? 0), 0)
+  const actualQty = rows.reduce((sum, row) => sum + (row.actual_qty ?? 0), 0)
+  return {
+    actual: actualQty > 0 ? Math.min(100, (normQty / actualQty) * 100) : 0,
+    count: rows.length,
+  }
+}
+
+// SX-05: percent of production/ALL 5S findings resolved on time.
+function calcSX05(
+  findingRows: Finding5sDataRow[],
+  workshop: string | null,
+): { actual: number; count: number } {
+  const rows = findingRows.filter((row) => {
+    if (row.department !== 'PRODUCTION' && row.department !== 'ALL') return false
+    if (workshop && row.workshop !== workshop) return false
+    return true
+  })
+  if (rows.length === 0) return { actual: 0, count: 0 }
+  const onTime = rows.filter((row) => row.is_on_time === true).length
+  return { actual: (onTime / rows.length) * 100, count: rows.length }
+}
+
+// SX-06: output progress = SUM(poutput in period) / SUM(order quantity).
 function calcSX06(
   prodRows: ProdDataRow[],
   orderRows: OrderDataRow[],
@@ -409,7 +481,7 @@ function calcSX06(
   const outputByPcode = new Map<string, number>()
   for (const r of rows) {
     if (!r.pcode) continue
-    outputByPcode.set(r.pcode, (outputByPcode.get(r.pcode) ?? 0) + (r.eoutput ?? 0))
+    outputByPcode.set(r.pcode, (outputByPcode.get(r.pcode) ?? 0) + (r.poutput ?? 0))
   }
 
   let totalOut = 0, totalQty = 0, count = 0

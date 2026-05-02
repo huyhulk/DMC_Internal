@@ -45,6 +45,53 @@
 
 ## 📜 Entries
 
+## 2026-05-02 (Phiên #13 — Verify KPI/HR cleanup worktree)
+**Branch:** staging
+**Claude model:** GPT-5 Codex
+**Task:** Tiếp tục phần đang dở trong working tree: KPI sản xuất dùng dữ liệu thật cho SX-04/SX-05, sửa SX-06, và migration cleanup HR/overtime.
+
+### Đã làm
+- Đọc lại `.claude/work-log.md`, plan/snippet cũ về defects, `git status`, diff hiện tại và migration mới.
+- Xác định phần đang dở hiện tại là cleanup KPI/HR, không phải plan defects cũ:
+  - `lib/kpi/queries.ts`: lấy `material_usage` cho SX-04, lấy `findings_5s` cho SX-05, sửa SX-06 dùng `poutput`.
+  - `types/database.ts`: sửa `hr_daily.id` từ `number` sang `string` vì migration 018 tạo UUID.
+  - `supabase/migrations/019_cleanup_overtime_hr.sql`: sửa `rpc_overtime_summary`, siết policy ghi `hr_daily`, thêm trigger `updated_at` và constraint factory `NOT VALID`.
+  - Dọn các component KPI cũ dạng `components/kpi/kpi-*.tsx` đã được thay bằng component PascalCase/nested.
+- Đối chiếu schema trong migration 009 và 018 để xác nhận các cột `material_usage`, `findings_5s`, `hr_daily` khớp với code.
+- Kiểm tra không còn import/reference tới các file KPI cũ bị xoá.
+
+### Verify
+- `npm run type-check` ✅
+- `npm run lint` ✅
+- `npm test` lần đầu fail do cache generated `.next` thiếu `.next/build/package.json`.
+- `npm run build` lần đầu fail do Windows/OneDrive lock thư mục `.next/server/app/dashboard/admin`.
+- Đã verify `.next` nằm đúng trong workspace và không có process `node` chạy, sau đó xoá `.next`.
+- `npm test` ✅ — 4 suites / 83 tests pass.
+- `npm run build` ✅
+
+### Chưa làm
+- Chưa apply migration 019 lên staging trực tiếp; nếu push `staging`, GitHub Actions `staging-ci.yml` sẽ apply migration sau khi test/build pass.
+- Chưa chạy `scripts/copy-production-to-staging.mjs` vì script này ghi dữ liệu staging và cần chủ đích rõ ràng.
+- Các file `.claude/PLAN_DATA_ENTRY_DEFECTS.md`, `.claude/SNIPPETS_DEFECTS.md`, `.claude/README.md`, `.claude/launch.json`, và `scripts/copy-production-to-staging.mjs` đang để ngoài commit scope.
+
+### Files thay đổi/chưa commit
+- `.claude/work-log.md`
+- `CODEX_WORKLOG.md`
+- `lib/kpi/queries.ts`
+- `types/database.ts`
+- `supabase/migrations/019_cleanup_overtime_hr.sql`
+- `components/kpi/kpi-card.tsx` (deleted)
+- `components/kpi/kpi-department-dashboard.tsx` (deleted)
+- `components/kpi/kpi-matrix-table.tsx` (deleted)
+- `components/kpi/kpi-radar-chart.tsx` (deleted)
+
+### Next time resume
+- Nếu tiếp tục cùng scope, commit/push phần đã stage lên `origin/staging`, rồi xem kết quả GitHub Actions.
+- Nếu cần verify DB thật, apply migration 019 lên staging trước, sau đó smoke test overtime/KPI production endpoints.
+- Không chạy script copy production → staging nếu user chưa xác nhận vì sẽ thay dữ liệu staging.
+
+---
+
 ## 2026-05-02 (Phiên #12 — UI nhập liệu sản xuất theo danh mục lệnh)
 **Branch:** staging
 **Claude model:** GPT-5 Codex
@@ -61,6 +108,8 @@
 - Thêm hover/focus xanh lá cho hàng lệnh để dễ nhận biết dòng đang trỏ/chọn.
 - Thay chọn giờ/phút bằng wheel picker cuộn chuột/vuốt mobile kiểu bánh lăn.
 - Khôi phục và khóa rule nhập liệu: giờ kết thúc phải lớn hơn giờ bắt đầu; rule này hiện chạy ở cả client trước submit và server action trước insert.
+- Commit và push lên `origin/staging`: `c5e4980 improve production entry workflow`.
+- Sửa lỗi cấu hình GitHub Actions có sẵn trong `promote-to-prod.yml`: chuyển `environment: production` vào đúng cấp job và thêm `permissions: contents: write`; commit `c3559f6 fix promote workflow validation`.
 
 ### Quyết định kỹ thuật
 - Tách logic lọc/sắp xếp lệnh vào `lib/production/workflow.ts` để test được độc lập, tránh hard-code thứ tự trạng thái trực tiếp trong component.
@@ -75,6 +124,7 @@
 - Browser smoke desktop + mobile trên `http://localhost:3000/dashboard/production` ✅
 - Test nhập/lưu mẫu qua popup trên staging: tạo được 1 dòng `Production`, sau đó đã xoá record test ✅
 - Test invalid time qua browser: start `09:00`, end `08:00` bị chặn, hiện warning, không tạo record ✅
+- GitHub Actions `Staging CI` cho commit `c3559f6` ✅ — Type Check, Lint & Build pass; Apply Migrations to Staging DB pass. URL: https://github.com/huyhulk/DMC_Internal/actions/runs/25252176414
 - Local server hiện trả `200` tại `http://localhost:3000/login`
 
 ### Files thay đổi
@@ -85,18 +135,22 @@
 - `lib/production/workflow.ts`
 - `lib/validations/production.ts`
 - `__tests__/production-workflow.test.ts`
+- `.github/workflows/promote-to-prod.yml`
 
 ### Context files updated
 - `.claude/work-log.md`
 
 ### Status cuối phiên
-- [ ] Code committed? N — đang chờ user xác nhận commit/push
+- [x] Code committed? Y — `c5e4980`, `c3559f6`
 - [ ] PR created? N
-- [x] Tests passing? Y — type-check, lint, full test, build, browser smoke
+- [x] Pushed? Y — `origin/staging`
+- [x] Tests passing? Y — type-check, lint, full test, build, browser smoke, GitHub Staging CI
 - [x] Documentation updated? Y — work log này
 
 ### Next time resume
-- Nếu user xác nhận, commit/push lên `origin/staging` với scope: các file production ở trên + `.claude/work-log.md`.
+- Tiếp tục từ `staging` commit mới nhất `c3559f6`.
+- Nếu cần kiểm tra lại UI: local server `http://localhost:3000/dashboard/production`, login `admin / 123123`.
+- Chưa tạo PR/merge main; chỉ push staging.
 - Không gom các file untracked cũ ngoài scope trong `.claude/` và `scripts/` nếu user không yêu cầu.
 
 ---

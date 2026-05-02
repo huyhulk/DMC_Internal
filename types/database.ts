@@ -185,7 +185,7 @@ export interface Database {
       }
       hr_daily: {
         Row: {
-          id: number
+          id: string
           factory: string
           pdate: string
           totalem: number | null
