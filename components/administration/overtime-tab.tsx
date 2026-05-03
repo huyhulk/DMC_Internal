@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { CheckCircle, Clock, Plus, RefreshCw, Send, Trash2, XCircle } from 'lucide-react'
 import { cn, formatDate, getTodayLocal } from '@/lib/utils'
@@ -29,6 +30,7 @@ import type { SessionUser } from '@/types'
 import type { OvertimeEmployeeOption } from '@/lib/overtime/workflow'
 
 type ParticipantDraft = { human_resource_id: string; employee_name: string; hours: string }
+type OvertimeView = 'request' | 'approvals' | 'history'
 
 const inputCls = 'w-full h-9 px-2.5 rounded-lg text-[12px] font-medium text-[#1d1d1f] placeholder:text-[#aeaeb2] bg-white border border-[#d2d2d7] focus:outline-none focus:ring-1 focus:ring-dmc-primary/40 focus:border-dmc-primary/50 transition-all'
 const labelCls = 'block text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73] mb-1'
@@ -50,6 +52,7 @@ interface Props {
 }
 
 export function OvertimeTab({ user }: Props) {
+  const searchParams = useSearchParams()
   const today = getTodayLocal()
   const approver = canApproveRequests(user.role)
   const allowedWorkshops = getMaintenanceWorkshopOptions(user.role, user.workspace, true)
@@ -84,6 +87,12 @@ export function OvertimeTab({ user }: Props) {
   const [participants, setParticipants] = useState<ParticipantDraft[]>([
     { human_resource_id: '', employee_name: '', hours: '2' },
   ])
+  const requestedView = searchParams.get('view')
+  const activeView: OvertimeView = requestedView === 'approvals' && approver
+    ? 'approvals'
+    : requestedView === 'history'
+      ? 'history'
+      : 'request'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -105,6 +114,15 @@ export function OvertimeTab({ user }: Props) {
   }, [filter])
 
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    if (activeView === 'approvals') {
+      setFilter((prev) => ({ ...prev, status: 'pending' }))
+    }
+    if (activeView === 'history') {
+      setFilter((prev) => ({ ...prev, status: 'ALL' }))
+    }
+  }, [activeView])
 
   useEffect(() => {
     if (requestWorkshopOptions.length === 0) {
@@ -340,7 +358,39 @@ export function OvertimeTab({ user }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-4">
+      <div className="grid grid-cols-1 gap-2 rounded-2xl border border-[#d2d2d7]/60 bg-white p-2 sm:grid-cols-3">
+        <a
+          href="/dashboard/administration?sub=overtime&view=request"
+          className={cn(
+            'rounded-xl px-3 py-2.5 text-center text-[13px] font-semibold transition-colors',
+            activeView === 'request' ? 'bg-dmc-primary text-white shadow-sm' : 'text-[#1d1d1f] hover:bg-[#f5f5f7]'
+          )}
+        >
+          Xin tăng ca
+        </a>
+        <a
+          href="/dashboard/administration?sub=overtime&view=approvals"
+          className={cn(
+            'rounded-xl px-3 py-2.5 text-center text-[13px] font-semibold transition-colors',
+            activeView === 'approvals' ? 'bg-dmc-primary text-white shadow-sm' : 'text-[#1d1d1f] hover:bg-[#f5f5f7]',
+            !approver && 'pointer-events-none opacity-40'
+          )}
+        >
+          Phê duyệt tăng ca
+        </a>
+        <a
+          href="/dashboard/administration?sub=overtime&view=history"
+          className={cn(
+            'rounded-xl px-3 py-2.5 text-center text-[13px] font-semibold transition-colors',
+            activeView === 'history' ? 'bg-dmc-primary text-white shadow-sm' : 'text-[#1d1d1f] hover:bg-[#f5f5f7]'
+          )}
+        >
+          Lịch sử
+        </a>
+      </div>
+
+      <div className={cn('grid grid-cols-1 gap-4', activeView === 'request' && 'xl:grid-cols-[420px_minmax(0,1fr)]')}>
+        {activeView === 'request' && (
         <section className="bg-white rounded-2xl border border-[#d2d2d7]/60 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-[14px] font-semibold text-[#1d1d1f]">Tạo request</h2>
@@ -488,9 +538,27 @@ export function OvertimeTab({ user }: Props) {
             {submitting ? 'Đang gửi...' : 'Gửi yêu cầu duyệt'}
           </button>
         </section>
+        )}
 
         <section className="space-y-3">
           <div className="bg-white rounded-2xl border border-[#d2d2d7]/60 p-4">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-[15px] font-bold text-[#1d1d1f]">
+                  {activeView === 'approvals' ? 'Phê duyệt tăng ca' : activeView === 'history' ? 'Lịch sử tăng ca' : 'Yêu cầu tăng ca gần đây'}
+                </h2>
+                <p className="text-[12px] text-[#6e6e73]">
+                  {activeView === 'approvals'
+                    ? 'Danh sách request đang chờ duyệt, bấm nút xanh để duyệt hoặc đỏ để từ chối.'
+                    : activeView === 'history'
+                      ? 'Theo dõi các request đã duyệt, từ chối hoặc đang chờ.'
+                      : 'Theo dõi request vừa tạo và trạng thái duyệt.'}
+                </p>
+              </div>
+              {activeView === 'approvals' && (
+                <Badge variant="warning">{rows.length} chờ duyệt</Badge>
+              )}
+            </div>
             <div className="flex flex-wrap gap-3">
               <div className="flex flex-col gap-1">
                 <label className={labelCls}>Xưởng</label>

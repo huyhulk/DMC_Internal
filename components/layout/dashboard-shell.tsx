@@ -249,6 +249,7 @@ export function DashboardShell({ user, children }: Props) {
                 return (
                   <div
                     key="maintenance"
+                    className="relative"
                     onMouseEnter={openMaintDropdown}
                     onMouseLeave={scheduleCloseMaint}
                   >
@@ -275,6 +276,19 @@ export function DashboardShell({ user, children }: Props) {
                         )}
                       />
                     </Link>
+                    {maintOpen && (
+                      <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                        {MAINTENANCE_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                          const isActiveSub = pathname.startsWith('/dashboard/maintenance') && activeMaintenanceSub === code
+                          return (
+                            <Link key={code} href={href} onClick={() => setMaintOpen(false)} className={cn('mx-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-100', isActiveSub ? 'bg-dmc-primary/8 text-dmc-primary' : 'text-[#1d1d1f] hover:bg-[#f2f2f7]')}>
+                              <ItemIcon size={14} strokeWidth={isActiveSub ? 2.5 : 2} className="shrink-0 text-[#6e6e73]" />
+                              <span>{label}</span>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               }
@@ -284,6 +298,7 @@ export function DashboardShell({ user, children }: Props) {
                 return (
                   <div
                     key="coordination"
+                    className="relative"
                     onMouseEnter={openCoordDropdown}
                     onMouseLeave={scheduleCloseCoord}
                   >
@@ -310,6 +325,19 @@ export function DashboardShell({ user, children }: Props) {
                         )}
                       />
                     </Link>
+                    {coordOpen && (
+                      <div className="absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                        {COORDINATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                          const isActiveSub = pathname.startsWith('/dashboard/coordination') && activeCoordinationSub === code
+                          return (
+                            <Link key={code} href={href} onClick={() => setCoordOpen(false)} className={cn('mx-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-100', isActiveSub ? 'bg-dmc-primary/8 text-dmc-primary' : 'text-[#1d1d1f] hover:bg-[#f2f2f7]')}>
+                              <ItemIcon size={14} strokeWidth={isActiveSub ? 2.5 : 2} className="shrink-0 text-[#6e6e73]" />
+                              <span>{label}</span>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               }
@@ -319,6 +347,7 @@ export function DashboardShell({ user, children }: Props) {
                 return (
                   <div
                     key="administration"
+                    className="relative"
                     onMouseEnter={openAdministrationDropdown}
                     onMouseLeave={scheduleCloseAdministration}
                   >
@@ -345,6 +374,19 @@ export function DashboardShell({ user, children }: Props) {
                         )}
                       />
                     </Link>
+                    {administrationOpen && (
+                      <div className="absolute left-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                        {ADMINISTRATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                          const isActiveSub = pathname.startsWith('/dashboard/administration') && activeAdministrationSub === code
+                          return (
+                            <Link key={code} href={href} onClick={() => setAdministrationOpen(false)} className={cn('mx-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-100', isActiveSub ? 'bg-dmc-primary/8 text-dmc-primary' : 'text-[#1d1d1f] hover:bg-[#f2f2f7]')}>
+                              <ItemIcon size={14} strokeWidth={isActiveSub ? 2.5 : 2} className="shrink-0 text-[#6e6e73]" />
+                              <span>{label}</span>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               }
@@ -354,6 +396,7 @@ export function DashboardShell({ user, children }: Props) {
                 return (
                   <div
                     key="admin"
+                    className="relative"
                     onMouseEnter={openAdminDropdown}
                     onMouseLeave={scheduleCloseAdmin}
                   >
@@ -380,6 +423,19 @@ export function DashboardShell({ user, children }: Props) {
                         )}
                       />
                     </Link>
+                    {adminOpen && (
+                      <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                        {ADMIN_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                          const isActiveSub = pathname.startsWith(href)
+                          return (
+                            <Link key={code} href={href} onClick={() => setAdminOpen(false)} className={cn('mx-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-100', isActiveSub ? 'bg-dmc-primary/8 text-dmc-primary' : 'text-[#1d1d1f] hover:bg-[#f2f2f7]')}>
+                              <ItemIcon size={14} strokeWidth={isActiveSub ? 2.5 : 2} className="shrink-0 text-[#6e6e73]" />
+                              <span>{label}</span>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               }
@@ -389,6 +445,7 @@ export function DashboardShell({ user, children }: Props) {
                 return (
                   <div
                     key="report"
+                    className="relative"
                     onMouseEnter={openDropdown}
                     onMouseLeave={scheduleClose}
                   >
@@ -415,6 +472,20 @@ export function DashboardShell({ user, children }: Props) {
                         )}
                       />
                     </Link>
+                    {reportOpen && (
+                      <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                        {REPORT_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                          const isActiveSub = pathname.startsWith('/dashboard/report') &&
+                            (code === 'production' ? !pathname.includes('?') || href.includes('production') : href.includes(code))
+                          return (
+                            <Link key={code} href={href} onClick={() => setReportOpen(false)} className={cn('mx-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-100', isActiveSub ? 'bg-dmc-primary/8 text-dmc-primary' : 'text-[#1d1d1f] hover:bg-[#f2f2f7]')}>
+                              <ItemIcon size={14} strokeWidth={isActiveSub ? 2.5 : 2} className="shrink-0 text-[#6e6e73]" />
+                              <span>{label}</span>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               }
@@ -441,7 +512,7 @@ export function DashboardShell({ user, children }: Props) {
           </div>
 
           {/* ── Maintenance dropdown — anchored to center column bottom ── */}
-          {allowedTabs.includes('maintenance') && (
+          {false && allowedTabs.includes('maintenance') && (
             <div
               onMouseEnter={openMaintDropdown}
               onMouseLeave={scheduleCloseMaint}
@@ -489,7 +560,7 @@ export function DashboardShell({ user, children }: Props) {
           )}
 
           {/* ── Coordination dropdown — anchored to center column bottom ── */}
-          {allowedTabs.includes('coordination') && (
+          {false && allowedTabs.includes('coordination') && (
             <div
               onMouseEnter={openCoordDropdown}
               onMouseLeave={scheduleCloseCoord}
@@ -537,7 +608,7 @@ export function DashboardShell({ user, children }: Props) {
           )}
 
           {/* ── Administration/HR dropdown — anchored to center column bottom ── */}
-          {allowedTabs.includes('administration') && (
+          {false && allowedTabs.includes('administration') && (
             <div
               onMouseEnter={openAdministrationDropdown}
               onMouseLeave={scheduleCloseAdministration}
@@ -585,7 +656,7 @@ export function DashboardShell({ user, children }: Props) {
           )}
 
           {/* ── Admin dropdown — anchored to center column bottom ── */}
-          {allowedTabs.includes('admin') && (
+          {false && allowedTabs.includes('admin') && (
             <div
               onMouseEnter={openAdminDropdown}
               onMouseLeave={scheduleCloseAdmin}
@@ -633,7 +704,7 @@ export function DashboardShell({ user, children }: Props) {
           )}
 
           {/* ── Report dropdown — anchored to center column bottom ── */}
-          {allowedTabs.includes('report') && (
+          {false && allowedTabs.includes('report') && (
             <div
               onMouseEnter={openDropdown}
               onMouseLeave={scheduleClose}

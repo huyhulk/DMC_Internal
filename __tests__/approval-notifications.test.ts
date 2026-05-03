@@ -39,7 +39,7 @@ describe('approval notification feed', () => {
         key: 'overtime',
         label: 'Tăng ca chờ duyệt',
         count: 1,
-        href: '/dashboard/administration?sub=overtime',
+        href: '/dashboard/administration?sub=overtime&view=approvals',
       },
       {
         key: 'maintenance',
@@ -54,7 +54,7 @@ describe('approval notification feed', () => {
       iconLabel: 'OT',
       title: 'DMC3 gửi yêu cầu tăng ca',
       description: 'LSX03/26-01125 · Minh Long · 4 người · 12.0 giờ',
-      href: '/dashboard/administration?sub=overtime',
+      href: '/dashboard/administration?sub=overtime&view=approvals',
       accent: 'blue',
     })
     expect(feed.sections[1].items[0]).toMatchObject({

@@ -47,7 +47,7 @@ export type ApprovalNotificationFeed = {
   sections: ApprovalNotificationSection[]
 }
 
-const OVERTIME_HREF = '/dashboard/administration?sub=overtime'
+const OVERTIME_HREF = '/dashboard/administration?sub=overtime&view=approvals'
 const MAINTENANCE_HREF = '/dashboard/maintenance?sub=schedule'
 
 function compact(parts: Array<string | null | undefined>): string {
