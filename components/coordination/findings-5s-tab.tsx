@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, CheckCircle, Trash2 } from 'lucide-react'
-import { cn, formatDate, getTodayLocal } from '@/lib/utils'
+import { cn, formatDate, getLocalDateAfterDays, getTodayLocal } from '@/lib/utils'
 import {
   finding5sCreateSchema, finding5sResolveSchema,
   FIVE_S_CATEGORIES, SEVERITIES, SEVERITY_LABELS,
@@ -78,7 +78,7 @@ export function Findings5sTab({ user, dept }: Props) {
       finding_date: getTodayLocal(),
       department:   dept,
       severity:     'medium',
-      due_date:     new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+      due_date:     getLocalDateAfterDays(7),
       workshop:     'DMC1',
     },
   })
@@ -91,7 +91,7 @@ export function Findings5sTab({ user, dept }: Props) {
   async function onCreateSubmit(values: Finding5sCreateInput) {
     setSubmitting(true)
     const res = await createFinding5sAction(values)
-    if (res.success) { toast.success(res.message); setShowCreate(false); createForm.reset({ finding_date: getTodayLocal(), department: dept, severity: 'medium', due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10), workshop: 'DMC1' }); void load() }
+    if (res.success) { toast.success(res.message); setShowCreate(false); createForm.reset({ finding_date: getTodayLocal(), department: dept, severity: 'medium', due_date: getLocalDateAfterDays(7), workshop: 'DMC1' }); void load() }
     else toast.error(res.message)
     setSubmitting(false)
   }

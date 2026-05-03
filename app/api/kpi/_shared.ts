@@ -49,7 +49,7 @@ export function parseKpiParams(searchParams: URLSearchParams, defaultDepartment?
     if (isKpiWorkshop(workshopValue)) {
       workshop = workshopValue
     } else {
-      errors.push('workshop phải là ALL, DMC1, DMC3, DMC4, DMC5 hoặc PKT-SX')
+      errors.push('workshop phải là ALL, DMC1, DMC3, DMC4 hoặc DMC5')
     }
   }
 

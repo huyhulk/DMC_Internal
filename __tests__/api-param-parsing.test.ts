@@ -28,6 +28,12 @@ describe('API parameter parsing', () => {
     expect(parseKpiParams(params).errors).toContain('anchorDate phải là ngày hợp lệ YYYY-MM-DD')
   })
 
+  it('rejects invalid KPI workshops with the current allowed list', () => {
+    const params = new URLSearchParams({ workshop: 'PKT-SX' })
+
+    expect(parseKpiParams(params).errors).toContain('workshop phải là ALL, DMC1, DMC3, DMC4 hoặc DMC5')
+  })
+
   it('rejects impossible report calendar dates', () => {
     const params = new URLSearchParams({ from: '2026-02-31', to: '2026-03-01' })
 

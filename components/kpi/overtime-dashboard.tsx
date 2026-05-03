@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { KpiPeriodSelector } from './kpi-period-selector'
+import { getTodayLocal } from '@/lib/utils'
 import {
   WORKSHOPS, WORKSHOP_COLORS, OT_CATEGORY_LABELS, OT_REASON_LABELS,
   type WorkshopCode, type PeriodType, type OvertimeSummary, type TopOvertimeEmployee,
@@ -17,7 +18,7 @@ interface OvertimeApiData {
 }
 
 export function OvertimeDashboard() {
-  const today = new Date().toISOString().substring(0, 10)
+  const today = getTodayLocal()
   const [period, setPeriod] = useState<PeriodType>('monthly')
   const [anchor, setAnchor] = useState(today)
   const [data, setData]     = useState<OvertimeApiData | null>(null)

@@ -14,6 +14,7 @@ import { KpiInsightCard } from '@/components/kpi/comparison/KpiInsightCard'
 import { KpiMatrixTable } from '@/components/kpi/comparison/KpiMatrixTable'
 import { KpiRadarCompare } from '@/components/kpi/comparison/KpiRadarCompare'
 import { KpiViewModeToggle, type ProductionKpiViewMode } from '@/components/kpi/comparison/KpiViewModeToggle'
+import { getTodayLocal } from '@/lib/utils'
 import type { KpiComparisonResponse, KpiResultRow, KpiSummary, KpiTrendPoint, KpiWorkshop } from '@/lib/kpi/types'
 
 interface KpiRowsPayload { rows: KpiResultRow[]; summary: KpiSummary; trends?: Record<string, KpiTrendPoint[]> }
@@ -21,13 +22,8 @@ interface ApiResponse<T> { success: boolean; data?: T; error?: string }
 
 const EMPTY_SUMMARY: KpiSummary = { total: 0, achieved: 0, failed: 0, achievementRate: 0, avgAchievement: 0, dataPoints: 0 }
 
-function todayLocal() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 export function ProductionKpiDashboard() {
-  const [period, setPeriod]     = useState<PeriodSelectorValue>(() => ({ periodType: 'monthly', anchorDate: todayLocal() }))
+  const [period, setPeriod]     = useState<PeriodSelectorValue>(() => ({ periodType: 'monthly', anchorDate: getTodayLocal() }))
   const [viewMode, setViewMode] = useState<ProductionKpiViewMode>('workshop')
   const [workshop, setWorkshop] = useState<KpiWorkshop | 'ALL'>('ALL')
   const [rowsData, setRowsData] = useState<KpiRowsPayload>({ rows: [], summary: EMPTY_SUMMARY, trends: {} })

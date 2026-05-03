@@ -8,6 +8,7 @@ import { KpiDetailTable } from '@/components/kpi/KpiDetailTable'
 import { KpiMetricCard } from '@/components/kpi/KpiMetricCard'
 import { KpiSummaryStrip } from '@/components/kpi/KpiSummaryStrip'
 import { DEPARTMENT_LABELS } from '@/lib/kpi/constants'
+import { getTodayLocal } from '@/lib/utils'
 import type { KpiDepartment, KpiResultRow, KpiSummary, KpiWorkshop } from '@/lib/kpi/types'
 
 interface Props {
@@ -20,13 +21,8 @@ interface Payload { rows: KpiResultRow[]; summary: KpiSummary }
 
 const EMPTY_SUMMARY: KpiSummary = { total: 0, achieved: 0, failed: 0, achievementRate: 0, avgAchievement: 0, dataPoints: 0 }
 
-function todayLocal() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 export function DepartmentKpiDashboard({ department, endpoint }: Props) {
-  const [period, setPeriod]     = useState<PeriodSelectorValue>(() => ({ periodType: 'monthly', anchorDate: todayLocal() }))
+  const [period, setPeriod]     = useState<PeriodSelectorValue>(() => ({ periodType: 'monthly', anchorDate: getTodayLocal() }))
   const [workshop, setWorkshop] = useState<KpiWorkshop | 'ALL'>('ALL')
   const [payload, setPayload]   = useState<Payload>({ rows: [], summary: EMPTY_SUMMARY })
   const [loading, setLoading]   = useState(false)

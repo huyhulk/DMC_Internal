@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, Send, Trash2 } from 'lucide-react'
-import { cn, formatDate, getTodayLocal } from '@/lib/utils'
+import { cn, formatDate, getLocalCompactDate, getLocalDateAfterDays, getTodayLocal } from '@/lib/utils'
 import { getDrawingListFilter } from '@/lib/maintenance/workflow'
 import {
   drawingCreateSchema, drawingCompleteSchema,
@@ -26,8 +26,7 @@ const inputCls = 'w-full h-9 px-2.5 rounded-lg text-[12px] font-medium text-[#1d
 const labelCls = 'block text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73] mb-1'
 
 function genDrawingCode() {
-  const d = new Date()
-  const yyyymmdd = d.toISOString().slice(0, 10).replace(/-/g, '')
+  const yyyymmdd = getLocalCompactDate()
   const nnn = String(Math.floor(Math.random() * 900) + 100)
   return `BV-${yyyymmdd}-${nnn}`
 }
@@ -77,7 +76,7 @@ export function DrawingsTab({ user }: Props) {
     defaultValues: {
       drawing_code: genDrawingCode(),
       request_date: getTodayLocal(),
-      due_date:     new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+      due_date:     getLocalDateAfterDays(7),
     },
   })
 
@@ -91,7 +90,7 @@ export function DrawingsTab({ user }: Props) {
   async function onCreateSubmit(values: DrawingCreateInput) {
     setSubmitting(true)
     const res = await createDrawingAction(values)
-    if (res.success) { toast.success(res.message); setShowCreate(false); createForm.reset({ drawing_code: genDrawingCode(), request_date: getTodayLocal(), due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10) }); void load() }
+    if (res.success) { toast.success(res.message); setShowCreate(false); createForm.reset({ drawing_code: genDrawingCode(), request_date: getTodayLocal(), due_date: getLocalDateAfterDays(7) }); void load() }
     else toast.error(res.message)
     setSubmitting(false)
   }

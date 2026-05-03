@@ -11,7 +11,6 @@ import {
   type Finding5sCreateInput, type Finding5sResolveInput,
   type StatReportCreateInput, type StatReportBulkInput, type StatReportSubmitInput,
   type IsoCreateInput, type IsoUpdateProgressInput, type IsoCompleteInput,
-  REPORT_TYPES,
 } from '@/lib/validations/coordination'
 import logger from '@/lib/logger'
 
@@ -760,5 +759,3 @@ export async function listVehicleCodesAction(): Promise<string[]> {
     return []
   }
 }
-
-export { REPORT_TYPES }

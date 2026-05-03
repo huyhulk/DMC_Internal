@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, Truck, CheckCircle, X, Trash2 } from 'lucide-react'
-import { cn, formatDate, getTodayLocal } from '@/lib/utils'
+import { cn, formatDate, getLocalCompactDate, getTodayLocal } from '@/lib/utils'
 import {
   deliveryCreateSchema, deliveryCompleteSchema, deliveryBaselineSchema,
   DELIVERY_STATUSES, DELIVERY_STATUS_LABELS,
@@ -30,8 +30,7 @@ const inputCls = 'w-full h-9 px-2.5 rounded-lg text-[12px] font-medium text-[#1d
 const labelCls = 'block text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73] mb-1'
 
 function genDeliveryCode() {
-  const d = new Date()
-  const yymmdd = d.toISOString().slice(2, 10).replace(/-/g, '')
+  const yymmdd = getLocalCompactDate().slice(2)
   const nnn = String(Math.floor(Math.random() * 900) + 100)
   return `GH-${yymmdd}-${nnn}`
 }

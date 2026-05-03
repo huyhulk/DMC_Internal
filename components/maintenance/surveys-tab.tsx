@@ -5,7 +5,7 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react'
-import { cn, formatDate, getTodayLocal } from '@/lib/utils'
+import { cn, formatDate, getLocalCompactDate, getTodayLocal } from '@/lib/utils'
 import {
   surveyCreateSchema, type SurveyCreateInput,
 } from '@/lib/validations/maintenance'
@@ -22,8 +22,7 @@ const inputCls = 'w-full h-9 px-2.5 rounded-lg text-[12px] font-medium text-[#1d
 const labelCls = 'block text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73] mb-1'
 
 function genSurveyCode() {
-  const d = new Date()
-  const yyyymmdd = d.toISOString().slice(0, 10).replace(/-/g, '')
+  const yyyymmdd = getLocalCompactDate()
   const nnn = String(Math.floor(Math.random() * 900) + 100)
   return `KS-${yyyymmdd}-${nnn}`
 }

@@ -6,6 +6,7 @@ import { ArrowRight, RefreshCw } from 'lucide-react'
 import { PeriodSelector, type PeriodSelectorValue } from '@/components/forms/PeriodSelector'
 import { KpiDetailTable } from '@/components/kpi/KpiDetailTable'
 import { KpiSummaryStrip } from '@/components/kpi/KpiSummaryStrip'
+import { getTodayLocal } from '@/lib/utils'
 import type { KpiDepartmentSummary } from '@/lib/kpi/types'
 
 interface ApiResponse<T> { success: boolean; data?: T; error?: string }
@@ -17,13 +18,8 @@ const DEPARTMENT_LINK: Record<KpiDepartmentSummary['department'], string> = {
   COORDINATION: '/dashboard/report/kpi/coordination',
 }
 
-function todayLocal() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 export function MasterKpiDashboard() {
-  const [period, setPeriod] = useState<PeriodSelectorValue>(() => ({ periodType: 'monthly', anchorDate: todayLocal() }))
+  const [period, setPeriod] = useState<PeriodSelectorValue>(() => ({ periodType: 'monthly', anchorDate: getTodayLocal() }))
   const [payload, setPayload] = useState<Payload>({ departments: [] })
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
