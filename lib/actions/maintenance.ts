@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import {
   breakdownCreateSchema, breakdownUpdateSchema, breakdownResolveSchema,
   scheduleCreateSchema, scheduleBulkCreateSchema, scheduleCompleteSchema,
@@ -16,7 +16,7 @@ import {
 } from '@/lib/validations/maintenance'
 import logger from '@/lib/logger'
 import { isBreakdownEndAfterStart } from '@/lib/maintenance/workflow'
-import { getUserWorkspaces, isWorkspaceAllowed } from '@/lib/utils'
+import { canAccessWorkspace, canApproveRequests, canApproveWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
 
 // ─── Types from DB ────────────────────────────────────────────────────────────
 
@@ -33,6 +33,9 @@ export type ScheduleRow = {
   maintenance_type: string; scheduled_date: string; actual_date: string | null
   is_completed: boolean; is_on_time: boolean | null; checklist_items: unknown | null
   technician: string | null; notes: string | null; created_at: string
+  approval_status: 'pending' | 'approved' | 'rejected'
+  requested_by: string | null; approved_by: string | null
+  approved_at: string | null; approval_note: string | null
 }
 
 export type DrawingRow = {
@@ -77,7 +80,7 @@ function revalidate() {
 }
 
 function canAccessWorkshop(profile: { role: string; workspace: string }, workshop: string): boolean {
-  return isWorkspaceAllowed(workshop, profile.role, getUserWorkspaces(profile.workspace ?? ''))
+  return canAccessWorkspace(profile.role, profile.workspace, workshop)
 }
 
 // ─── Machine Breakdowns ───────────────────────────────────────────────────────
@@ -234,9 +237,10 @@ export async function listBreakdownsAction(filter: {
     if (filter.status && filter.status !== 'ALL')    query = query.eq('status', filter.status)
     if (filter.failure_type && filter.failure_type !== 'ALL') query = query.eq('failure_type', filter.failure_type)
 
-    const userWorkspaces = getUserWorkspaces(profile.workspace ?? '')
-    if (!['ADMIN', 'MANAGER'].includes(profile.role) && userWorkspaces.length > 0) {
-      query = query.in('workshop', userWorkspaces)
+    const scope = getWorkspaceScopedFilter(profile.role, profile.workspace)
+    if (!scope.unrestricted) {
+      if (scope.workspaces.length === 0) return { success: true, message: '', data: [] }
+      query = query.in('workshop', scope.workspaces)
     }
 
     const { data, error } = await query
@@ -271,6 +275,7 @@ export async function createScheduleAction(input: ScheduleCreateInput): Promise<
       checklist_items:  parsed.data.checklist_items?.length ? parsed.data.checklist_items : null,
       technician:       parsed.data.technician || null,
       notes:            parsed.data.notes || null,
+      requested_by:      user.id,
     }).select('id').single()
 
     if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
@@ -318,6 +323,7 @@ export async function bulkCreateScheduleAction(input: ScheduleBulkCreateInput): 
       checklist_items: checklist_items?.length ? checklist_items : null,
       technician: technician || null,
       notes: notes || null,
+      requested_by: user.id,
     }))
 
     const { error } = await supabase.from('maintenance_schedule').insert(inserts)
@@ -341,7 +347,7 @@ export async function completeScheduleAction(id: string, input: ScheduleComplete
 
     const { data: existing, error: readError } = await supabase
       .from('maintenance_schedule')
-      .select('workshop')
+      .select('workshop, approval_status')
       .eq('id', id)
       .single()
 
@@ -350,7 +356,12 @@ export async function completeScheduleAction(id: string, input: ScheduleComplete
       return { success: false, message: 'Không có quyền thao tác với xưởng này.' }
     }
 
-    const { error } = await supabase.from('maintenance_schedule').update({
+    if (String(existing.approval_status) !== 'approved') {
+      return { success: false, message: 'Lịch bảo trì phải được duyệt trước khi ghi nhận thực hiện.' }
+    }
+
+    const serviceDb = await createServiceClient()
+    const { error } = await serviceDb.from('maintenance_schedule').update({
       actual_date:     parsed.data.actual_date,
       technician:      parsed.data.technician || null,
       notes:           parsed.data.notes || null,
@@ -367,18 +378,85 @@ export async function completeScheduleAction(id: string, input: ScheduleComplete
   }
 }
 
+export async function reviewScheduleAction(
+  id: string,
+  decision: 'approved' | 'rejected',
+  note?: string
+): Promise<ActionResult> {
+  try {
+    const { user, profile, supabase } = await requireAuth()
+    if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
+    if (!canApproveRequests(profile.role)) return { success: false, message: 'Chỉ Manager hoặc Admin được phê duyệt.' }
+    if (!['approved', 'rejected'].includes(decision)) return { success: false, message: 'Trạng thái duyệt không hợp lệ.' }
+
+    const { data: existing, error: readError } = await supabase
+      .from('maintenance_schedule')
+      .select('approval_status,workshop')
+      .eq('id', id)
+      .single()
+
+    if (readError || !existing) return { success: false, message: readError?.message ?? 'Không tìm thấy lịch bảo trì.' }
+    if (!canApproveWorkspace(profile.role, profile.workspace, String(existing.workshop))) {
+      return { success: false, message: 'Không có quyền duyệt lịch của xưởng này.' }
+    }
+    if (String(existing.approval_status) !== 'pending') {
+      return { success: false, message: 'Lịch bảo trì này đã được duyệt hoặc từ chối.' }
+    }
+
+    const { error } = await supabase
+      .from('maintenance_schedule')
+      .update({
+        approval_status: decision,
+        approved_by: user.id,
+        approved_at: new Date().toISOString(),
+        approval_note: note || null,
+      })
+      .eq('id', id)
+
+    if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
+
+    revalidate()
+    return {
+      success: true,
+      message: decision === 'approved'
+        ? 'Đã duyệt lịch bảo trì.'
+        : 'Đã từ chối lịch bảo trì.',
+    }
+  } catch (err) {
+    logger.error({ err }, 'reviewScheduleAction error')
+    return { success: false, message: 'Lỗi không xác định: ' + String(err) }
+  }
+}
+
 export async function updateScheduleAction(id: string, input: Partial<ScheduleCreateInput>): Promise<ActionResult> {
   try {
+    const parsed = scheduleCreateSchema.partial().safeParse(input)
+    if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
 
+    const { data: existing, error: readError } = await supabase
+      .from('maintenance_schedule')
+      .select('workshop')
+      .eq('id', id)
+      .single()
+
+    if (readError || !existing) return { success: false, message: readError?.message ?? 'Không tìm thấy lịch bảo trì.' }
+    if (!canAccessWorkshop(profile, String(existing.workshop))) {
+      return { success: false, message: 'Không có quyền cập nhật lịch của xưởng này.' }
+    }
+    if (parsed.data.workshop && !canAccessWorkshop(profile, parsed.data.workshop)) {
+      return { success: false, message: 'Không có quyền chuyển lịch sang xưởng này.' }
+    }
+
     const { error } = await supabase.from('maintenance_schedule').update({
-      ...input,
-      machine_name: input.machine_name || null,
-      checklist_items: input.checklist_items?.length ? input.checklist_items : null,
-      technician: input.technician || null,
-      notes: input.notes || null,
+      ...parsed.data,
+      machine_name: parsed.data.machine_name || null,
+      checklist_items: parsed.data.checklist_items?.length ? parsed.data.checklist_items : null,
+      technician: parsed.data.technician || null,
+      notes: parsed.data.notes || null,
     }).eq('id', id)
 
     if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
@@ -410,7 +488,10 @@ export async function deleteScheduleAction(id: string): Promise<ActionResult> {
 
 export async function listScheduleAction(filter: {
   workshop?: string; from?: string; to?: string
-  status?: 'pending' | 'completed' | 'ALL'; maintenance_type?: string; limit?: number
+  status?: 'pending' | 'completed' | 'ALL'
+  completion_status?: 'pending' | 'completed' | 'ALL'
+  approval_status?: 'pending' | 'approved' | 'rejected' | 'ALL'
+  maintenance_type?: string; limit?: number
 }): Promise<ActionResult<ScheduleRow[]>> {
   try {
     const { user, profile, supabase } = await requireAuth()
@@ -427,12 +508,17 @@ export async function listScheduleAction(filter: {
     if (filter.maintenance_type && filter.maintenance_type !== 'ALL') {
       query = query.eq('maintenance_type', filter.maintenance_type)
     }
-    if (filter.status === 'completed')  query = query.not('actual_date', 'is', null)
-    if (filter.status === 'pending')    query = query.is('actual_date', null)
+    const completionStatus = filter.completion_status ?? filter.status
+    if (completionStatus === 'completed')  query = query.not('actual_date', 'is', null)
+    if (completionStatus === 'pending')    query = query.is('actual_date', null)
+    if (filter.approval_status && filter.approval_status !== 'ALL') {
+      query = query.eq('approval_status', filter.approval_status)
+    }
 
-    const userWorkspaces = getUserWorkspaces(profile.workspace ?? '')
-    if (!['ADMIN', 'MANAGER'].includes(profile.role) && userWorkspaces.length > 0) {
-      query = query.in('workshop', userWorkspaces)
+    const scope = getWorkspaceScopedFilter(profile.role, profile.workspace)
+    if (!scope.unrestricted) {
+      if (scope.workspaces.length === 0) return { success: true, message: '', data: [] }
+      query = query.in('workshop', scope.workspaces)
     }
 
     const { data, error } = await query

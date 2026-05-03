@@ -71,9 +71,12 @@ export async function loginAction(formData: FormData) {
 
 export async function logoutAction() {
   const supabase = await createSSRClient()
-  await supabase.auth.signOut()
+  const { error } = await supabase.auth.signOut({ scope: 'local' })
+  if (error) {
+    logger.warn({ supabaseError: error.message }, 'Logout signOut reported an error')
+  }
   revalidatePath('/', 'layout')
-  redirect('/login')
+  return { success: true }
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -138,4 +141,3 @@ export async function changePasswordAction(formData: FormData) {
   logger.info({ userId: user.id }, 'changePassword: success')
   return { success: true }
 }
-

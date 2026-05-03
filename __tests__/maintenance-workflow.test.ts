@@ -23,6 +23,8 @@ describe('maintenance workflow helpers', () => {
     expect(getMaintenanceWorkshopOptions('MANAGER', 'ALL', true)).toEqual(['ALL', 'DMC1', 'DMC3', 'DMC4', 'DMC5'])
     expect(getMaintenanceWorkshopOptions('SUPERVISOR', 'DMC3', true)).toEqual(['DMC3'])
     expect(getMaintenanceWorkshopOptions('USER', 'DMC1,DMC5', true)).toEqual(['DMC1', 'DMC5'])
+    expect(getMaintenanceWorkshopOptions('USER', '', true)).toEqual([])
+    expect(getMaintenanceWorkshopOptions('SUPERVISOR', null, true)).toEqual([])
   })
 
   it('rejects breakdown end times that are not after the start time', () => {

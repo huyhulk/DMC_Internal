@@ -1,8 +1,8 @@
 # Database Schema — DMC Production Manager
 
 > **Source of truth:** Supabase project `hzuyucyxyohppxfwresq` (production)
-> **Snapshot updated:** 2026-04-29
-> **Migration cuối cùng:** `015_audit_log.sql` (staging branch, chưa merge main)
+> **Snapshot updated:** 2026-05-03
+> **Migration cuối cùng:** `022_staging_security_scope_hardening.sql` (staging branch, chưa merge main)
 
 ## 🚨 QUAN TRỌNG — Column Case
 
@@ -134,7 +134,7 @@ supabase.from('v_data').select('pcode, workshop, quantity')
 | `workspace` | TEXT | Mã xưởng được giao, hoặc `"ALL"` |
 | `created_at` | TIMESTAMPTZ | Auto |
 
-**Note:** `hr_daily` table **KHÔNG tồn tại** trong bất kỳ migration nào. Không được reference.
+**Note:** `hr_daily` hiện đã tồn tại trong staging từ migration 018. Production main cũ có thể chưa có nếu chưa promote staging.
 
 ---
 
@@ -225,6 +225,18 @@ Columns: `table_name`, `record_id`, `action` (INSERT/UPDATE/DELETE), `old_data` 
 
 **Triggers hiện có:** kpi_targets, overtime_records, employees, deliveries
 
+### 26. `human_resource` / `hr_daily` — Nhân sự theo xưởng (migration 018)
+`human_resource`: danh sách nhân sự vận hành theo factory/workshop.
+`hr_daily`: tổng quân số và danh sách vắng theo `factory + pdate`.
+
+### 27. `overtime_requests` / `overtime_request_participants` — Duyệt tăng ca (migration 020)
+Request tăng ca chờ duyệt; khi approved, RPC `rpc_review_overtime_request` ghi sang `overtime_records`.
+
+### 28. Security hardening staging (migration 022)
+- Drop `profiles_update_own` để chặn user tự đổi `role/workspace`.
+- Tighten RLS theo workspace cho `overtime_requests`, `overtime_request_participants`, `maintenance_schedule`, `human_resource`, `hr_daily`.
+- `rpc_review_overtime_request` kiểm tra workspace của reviewer trước khi approve/reject.
+
 ---
 
 ## 📋 Views (migration 014)
@@ -304,8 +316,15 @@ GRANT SELECT TO authenticated.
 | `013_kpi_rpc_functions.sql` | rpc_calculate_kpi, rpc_kpi_trend, rpc_overtime_summary, rpc_top_overtime_employees, rpc_kpi_workshop_matrix, get_period_range() | staging | ⏳ Staging only |
 | `014_normalize_data_columns.sql` | View v_data (lowercase alias) | staging | ⏳ Staging only |
 | `015_audit_log.sql` | audit_log table + log_table_change() trigger | staging | ⏳ Staging only |
+| `016_sx01_from_production.sql` | SX-01 KPI từ Production | staging | ⏳ Staging only |
+| `017_machines.sql` | Machine inventory | staging | ⏳ Staging only |
+| `018_human_resource.sql` | human_resource + hr_daily | staging | ⏳ Staging only |
+| `019_cleanup_overtime_hr.sql` | Cleanup overtime/HR policies + constraints | staging | ⏳ Staging only |
+| `020_overtime_requests_maintenance_approval.sql` | Overtime request + maintenance approval workflow | staging | ⏳ Staging only |
+| `021_grant_overtime_request_access.sql` | Grants for overtime request tables | staging | ⏳ Staging only |
+| `022_staging_security_scope_hardening.sql` | Workspace/RLS/profile hardening for staging | staging | ⏳ Staging only |
 
-**Staging DB:** `vfzjweyzwjczrxphnvaa` — đã apply đủ 001-015
+**Staging DB:** `vfzjweyzwjczrxphnvaa` — repo có migration 001-022; 022 cần apply qua staging CI/approved staging DB flow
 **Production DB:** `hzuyucyxyohppxfwresq` — chỉ có 001-006
 
 ---

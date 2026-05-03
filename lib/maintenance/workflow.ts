@@ -18,10 +18,10 @@ export function getMaintenanceWorkshopOptions(
   workspace: string | null | undefined,
   includeAll: boolean
 ): string[] {
-  const unrestricted = role === 'ADMIN' || role === 'MANAGER' || !workspace || workspace.trim().toUpperCase() === 'ALL'
+  const unrestricted = role === 'ADMIN' || role === 'MANAGER' || workspace?.trim().toUpperCase() === 'ALL'
   const options = unrestricted
     ? [...MAINTENANCE_WORKSHOPS]
-    : getUserWorkspaces(workspace)
+    : getUserWorkspaces(workspace ?? '')
         .filter((ws) => (MAINTENANCE_WORKSHOPS as readonly string[]).includes(ws))
 
   const uniqueOptions = Array.from(new Set(options))

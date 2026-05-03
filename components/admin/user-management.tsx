@@ -12,6 +12,7 @@ import {
   adminResetPasswordAction,
   type UserRow,
 } from '@/lib/actions/admin'
+import { WORKSPACE_OPTIONS, normalizeWorkspaceList } from '@/lib/approval/workflow'
 import type { UserRole } from '@/types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -105,6 +106,22 @@ export function UserManagement({ currentUserId }: Props) {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  const selectedWorkspaces = form.workspace
+    ? form.workspace.split(',').map((w) => w.trim()).filter(Boolean)
+    : []
+
+  function toggleWorkspace(value: string, checked: boolean) {
+    if (value === 'ALL') {
+      setField('workspace', checked ? 'ALL' : '')
+      return
+    }
+
+    const next = new Set(selectedWorkspaces.filter((item) => item !== 'ALL'))
+    if (checked) next.add(value)
+    else next.delete(value)
+    setField('workspace', normalizeWorkspaceList(Array.from(next).join(',')))
+  }
+
   // ── Save (create or update) ─────────────────────────────────────────────────
 
   async function handleSave() {
@@ -116,7 +133,7 @@ export function UserManagement({ currentUserId }: Props) {
           username:  form.username.trim(),
           password:  form.password,
           role:      form.role,
-          workspace: form.workspace.trim(),
+          workspace: normalizeWorkspaceList(form.workspace),
         })
         if (result.error) {
           toast.error(result.error)
@@ -127,13 +144,13 @@ export function UserManagement({ currentUserId }: Props) {
         }
       } else {
         // Update
-        const result = await updateUserAction(selectedId, { role: form.role, workspace: form.workspace.trim() })
+        const result = await updateUserAction(selectedId, { role: form.role, workspace: normalizeWorkspaceList(form.workspace) })
         if (result.error) {
           toast.error(result.error)
         } else {
           toast.success('Đã cập nhật người dùng')
           setUsers((prev) =>
-            prev.map((u) => u.id === selectedId ? { ...u, role: form.role, workspace: form.workspace.trim() } : u)
+            prev.map((u) => u.id === selectedId ? { ...u, role: form.role, workspace: normalizeWorkspaceList(form.workspace) } : u)
           )
         }
       }
@@ -331,16 +348,25 @@ export function UserManagement({ currentUserId }: Props) {
               </FormField>
 
               {/* Workspace */}
-              <FormField label="Phân xưởng">
-                <input
-                  type="text"
-                  value={form.workspace}
-                  onChange={(e) => setField('workspace', e.target.value)}
-                  placeholder="ALL, hoặc DMC1,DMC3 (phân cách bằng dấu phẩy)"
-                  className={INPUT_CLS}
-                />
+              <FormField label="Xưởng / phòng ban">
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-[#d2d2d7]/70 bg-[#f5f5f7] p-2">
+                  {WORKSPACE_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-[12px] font-medium text-[#1d1d1f] border border-[#d2d2d7]/50 cursor-pointer hover:border-[#3b5bdb]/40"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedWorkspaces.includes(opt.value)}
+                        onChange={(e) => toggleWorkspace(opt.value, e.target.checked)}
+                        className="h-3.5 w-3.5 accent-[#3b5bdb]"
+                      />
+                      <span className="truncate">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
                 <p className="text-[11px] text-[#aeaeb2] mt-1">
-                  ALL = toàn quyền · Để trống = chặn tất cả (với SUPERVISOR/USER) · VD: DMC1,DMC3
+                  ALL = toàn quyền. Có thể chọn nhiều xưởng hoặc phòng ban cho Supervisor/User.
                 </p>
               </FormField>
 

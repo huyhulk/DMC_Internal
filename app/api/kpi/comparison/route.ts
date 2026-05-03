@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { parseKpiParams, requireAuth, errResponse, okResponse } from '../_shared'
+import { parseKpiParams, requireAuth, errResponse, okResponse, resolveKpiComparisonAccess } from '../_shared'
 import { queryKpiComparison, queryProductionKpiComparison } from '@/lib/kpi/queries'
 
 export async function GET(req: NextRequest) {
@@ -8,6 +8,8 @@ export async function GET(req: NextRequest) {
 
   const { department, periodType, anchorDate, errors } = parseKpiParams(req.nextUrl.searchParams, 'PRODUCTION')
   if (errors.length > 0) return errResponse(errors.join('; '))
+  const accessError = resolveKpiComparisonAccess(user)
+  if (accessError) return errResponse(accessError, 403)
 
   const data = department === 'PRODUCTION'
     ? await queryProductionKpiComparison({ periodType, anchorDate })

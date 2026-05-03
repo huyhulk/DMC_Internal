@@ -385,7 +385,7 @@ export async function queryOEE(
     const map = new Map<string, typeof withMetrics>()
     for (const r of recs) {
       if (filterWs && r.workshop !== filterWs) continue
-      const p = toPeriodKey(r.pdate, groupBy)
+      const p = getPeriodKey(r, groupBy)
       if (!map.has(p)) map.set(p, [])
       map.get(p)!.push(r)
     }

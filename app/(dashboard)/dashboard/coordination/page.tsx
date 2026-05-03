@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import { getSessionUser } from '@/lib/actions/auth'
 import { CoordinationTab } from '@/components/coordination/coordination-tab'
+import { resolveCoordinationSub } from '@/lib/navigation/dashboard'
 
-export const metadata: Metadata = { title: 'Phối Hợp | DMC Production' }
+export const metadata: Metadata = { title: 'Điều Phối | DMC Production' }
 
 export default async function CoordinationPage({
   searchParams,
@@ -12,7 +13,7 @@ export default async function CoordinationPage({
   const [user, params] = await Promise.all([getSessionUser(), searchParams])
   if (!user) return null
 
-  const activeSub = params.sub ?? 'hr'
+  const activeSub = resolveCoordinationSub(params.sub)
 
   return (
     <div className="h-full overflow-hidden">

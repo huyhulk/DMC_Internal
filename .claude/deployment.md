@@ -5,8 +5,8 @@
 | Env | Branch | URL | Supabase Project |
 |-----|--------|-----|------------------|
 | **Production** | `main` | TBD | `hzuyucyxyohppxfwresq` |
-| **Staging** | ❌ Chưa có | - | - |
-| **Preview** | any PR | Vercel preview URL | → production (risk cao, xem SYS-001) |
+| **Staging** | `staging` | Vercel preview/staging | `vfzjweyzwjczrxphnvaa` |
+| **Preview** | any PR | Vercel preview URL | Theo env cấu hình của Vercel/GitHub |
 
 ## 🔑 Environment Variables
 
@@ -69,7 +69,7 @@ NEXT_PUBLIC_APP_URL=https://...
 
 ### Database migration deployment
 
-**⚠️ CRITICAL:** Hiện tại chưa có staging → quy trình tạm thời có risk:
+**⚠️ CRITICAL:** Không apply migration trực tiếp production. Staging đã có project riêng; dùng staging CI/approved staging DB flow trước:
 
 ```
 1. Local test migration
@@ -89,9 +89,12 @@ NEXT_PUBLIC_APP_URL=https://...
 
 5. User approve
 
-6. Apply production:
+6. Apply staging trước:
+   supabase db push --project-ref vfzjweyzwjczrxphnvaa
+   # hoặc qua GitHub Staging CI đã cấu hình
+
+7. Chỉ promote production khi user approve rõ ràng:
    supabase db push --project-ref hzuyucyxyohppxfwresq
-   # HOẶC qua Supabase Dashboard → SQL Editor
 
 7. Verify post-migration:
    - Check column exists

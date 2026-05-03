@@ -1,12 +1,25 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getSessionUser } from '@/lib/actions/auth'
+import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
 import { isKpiDepartment, isKpiWorkshop, isPeriodType } from '@/lib/kpi/constants'
 import type { KpiDepartment, KpiWorkshop, PeriodType } from '@/lib/kpi/types'
+import type { SessionUser } from '@/types'
 
 export async function requireAuth() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user ?? null
+  return getSessionUser()
+}
+
+export function resolveKpiWorkshopAccess(user: SessionUser, workshop: KpiWorkshop | null): string | null {
+  const scope = getWorkspaceScopedFilter(user.role, user.workspace)
+  if (scope.unrestricted) return null
+  if (!workshop) return 'Tài khoản giới hạn xưởng phải chọn workshop cụ thể'
+  if (!canAccessWorkspace(user.role, user.workspace, workshop)) return 'Không có quyền xem KPI xưởng này'
+  return null
+}
+
+export function resolveKpiComparisonAccess(user: SessionUser): string | null {
+  const scope = getWorkspaceScopedFilter(user.role, user.workspace)
+  return scope.unrestricted ? null : 'Tài khoản giới hạn xưởng không có quyền xem so sánh toàn bộ xưởng'
 }
 
 export function errResponse(message: string, status = 400) {
@@ -30,7 +43,7 @@ export function parseKpiParams(searchParams: URLSearchParams, defaultDepartment?
 
   if (!isPeriodType(periodValue))     errors.push('periodType phải là weekly, monthly, quarterly hoặc yearly')
   if (!isKpiDepartment(departmentValue)) errors.push('department phải là PRODUCTION, MAINTENANCE hoặc COORDINATION')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) errors.push('anchorDate phải có định dạng YYYY-MM-DD')
+  if (!isValidDateOnly(anchorDate)) errors.push('anchorDate phải là ngày hợp lệ YYYY-MM-DD')
 
   if (workshopValue && workshopValue !== 'ALL') {
     if (isKpiWorkshop(workshopValue)) {
@@ -49,4 +62,11 @@ function todayLocal() {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day   = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function isValidDateOnly(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }

@@ -1,15 +1,23 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getSessionUser } from '@/lib/actions/auth'
+import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
 import type { WorkshopCode, ReportMode, GroupBy, FilterBy } from '@/lib/reports/report-types'
 import { WORKSHOP_CODES } from '@/lib/reports/report-types'
+import type { SessionUser } from '@/types'
 
 const VALID_GROUP_BY: GroupBy[] = ['day', 'week', 'month', 'year', 'hour']
 const VALID_FILTER_BY: FilterBy[] = ['deadline', 'initialdate', 'completed_date']
 
 export async function requireAuth() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user ?? null
+  return getSessionUser()
+}
+
+export function resolveReportWorkshopAccess(user: SessionUser, mode: ReportMode, workshopId: WorkshopCode | null): string | null {
+  const scope = getWorkspaceScopedFilter(user.role, user.workspace)
+  if (scope.unrestricted) return null
+  if (mode !== 'detail' || !workshopId) return 'Tài khoản giới hạn xưởng phải chọn mode=detail và workshopId hợp lệ'
+  if (!canAccessWorkspace(user.role, user.workspace, workshopId)) return 'Không có quyền xem dữ liệu xưởng này'
+  return null
 }
 
 export function parseReportParams(searchParams: URLSearchParams) {
@@ -31,7 +39,9 @@ export function parseReportParams(searchParams: URLSearchParams) {
   if (!VALID_FILTER_BY.includes(filterBy)) {
     errors.push(`filterBy không hợp lệ: "${filterBy}". Dùng: ${VALID_FILTER_BY.join(', ')}`)
   }
-  if (from > to) errors.push('from phải nhỏ hơn hoặc bằng to')
+  if (!isValidDateOnly(from)) errors.push('from phải là ngày hợp lệ YYYY-MM-DD')
+  if (!isValidDateOnly(to)) errors.push('to phải là ngày hợp lệ YYYY-MM-DD')
+  if (isValidDateOnly(from) && isValidDateOnly(to) && from > to) errors.push('from phải nhỏ hơn hoặc bằng to')
 
   return {
     mode,
@@ -59,5 +69,15 @@ export function okResponse<T>(data: T, meta: object) {
 function dfltDate(offsetDays: number) {
   const d = new Date()
   d.setDate(d.getDate() + offsetDays)
-  return d.toISOString().substring(0, 10)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function isValidDateOnly(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }

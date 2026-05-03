@@ -1,12 +1,12 @@
 export type UserRole = 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'
 
-export type TabId = 'production' | 'maintenance' | 'coordination' | 'report' | 'admin'
+export type TabId = 'production' | 'maintenance' | 'coordination' | 'administration' | 'report' | 'admin'
 
 export const ROLE_TABS: Record<UserRole, TabId[]> = {
-  ADMIN:      ['production', 'maintenance', 'coordination', 'report', 'admin'],
-  MANAGER:    ['production', 'maintenance', 'coordination', 'report'],
-  SUPERVISOR: ['production', 'coordination', 'report'],
-  USER:       ['production'],
+  ADMIN:      ['production', 'maintenance', 'coordination', 'administration', 'report', 'admin'],
+  MANAGER:    ['production', 'maintenance', 'coordination', 'administration', 'report'],
+  SUPERVISOR: ['production', 'coordination', 'administration', 'report'],
+  USER:       ['production', 'administration'],
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {

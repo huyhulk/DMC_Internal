@@ -4,9 +4,10 @@ import { useEffect, useState, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
-import { Plus, RefreshCw, CheckCircle, Trash2, Repeat } from 'lucide-react'
+import { Plus, RefreshCw, CheckCircle, Trash2, Repeat, XCircle } from 'lucide-react'
 import { cn, formatDate, getTodayLocal } from '@/lib/utils'
 import { getMaintenanceWorkshopOptions } from '@/lib/maintenance/workflow'
+import { canApproveRequests, getMaintenanceScheduleFilter, type ApprovalStatus } from '@/lib/approval/workflow'
 import {
   scheduleBulkCreateSchema, scheduleCompleteSchema,
   MAINTENANCE_TYPES, MAINTENANCE_TYPE_LABELS, KPI_WORKSHOPS,
@@ -14,7 +15,7 @@ import {
 } from '@/lib/validations/maintenance'
 import {
   createScheduleAction, bulkCreateScheduleAction, completeScheduleAction,
-  deleteScheduleAction, listScheduleAction,
+  deleteScheduleAction, listScheduleAction, reviewScheduleAction,
   type ScheduleRow,
 } from '@/lib/actions/maintenance'
 import { Dialog } from '@/components/ui/dialog'
@@ -52,11 +53,19 @@ export function ScheduleTab({ user }: Props) {
   const [bulkMachines,   setBulkMachines]   = useState<Machine[]>([])
   const [selectedMachines, setSelectedMachines] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting]   = useState(false)
+  const [reviewingId, setReviewingId] = useState<string | null>(null)
 
   const allowedWorkshops = getMaintenanceWorkshopOptions(user.role, user.workspace, true)
   const createWorkshopOptions = allowedWorkshops.filter((w) => w !== 'ALL')
   const defaultWorkshop = (createWorkshopOptions[0] ?? KPI_WORKSHOPS[0]) as typeof KPI_WORKSHOPS[number]
-  const [filter, setFilter] = useState({ workshop: allowedWorkshops[0] ?? defaultWorkshop, from: '', to: '', type: 'ALL' })
+  const [filter, setFilter] = useState({
+    workshop: allowedWorkshops[0] ?? defaultWorkshop,
+    from: '',
+    to: '',
+    type: 'ALL',
+    approval: 'pending' as ApprovalStatus,
+  })
+  const approver = canApproveRequests(user.role)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -66,7 +75,8 @@ export function ScheduleTab({ user }: Props) {
         from:     filter.from || undefined,
         to:       filter.to   || undefined,
         maintenance_type: filter.type !== 'ALL' ? filter.type : undefined,
-        status:   mode === 'execute' ? 'pending' : 'ALL',
+        completion_status: getMaintenanceScheduleFilter(mode).completion_status,
+        approval_status: mode === 'execute' ? 'approved' : filter.approval,
       })
       if (res.success) setRows(res.data ?? [])
       else setRows([])
@@ -202,6 +212,17 @@ export function ScheduleTab({ user }: Props) {
     }
   }
 
+  async function onReview(id: string, decision: 'approved' | 'rejected') {
+    setReviewingId(id)
+    try {
+      const res = await reviewScheduleAction(id, decision)
+      if (res.success) { toast.success(res.message); void load() }
+      else toast.error(res.message)
+    } finally {
+      setReviewingId(null)
+    }
+  }
+
   function openComplete(row: ScheduleRow) {
     setCompleteId(row.id)
     completeForm.reset({ actual_date: getTodayLocal() })
@@ -221,6 +242,18 @@ export function ScheduleTab({ user }: Props) {
     if (row.is_completed) return row.is_on_time ? 'Đúng hạn' : 'Trễ hạn'
     if (row.scheduled_date < today) return 'Quá hạn'
     return 'Chưa thực hiện'
+  }
+
+  function approvalStatus(row: ScheduleRow) {
+    if (row.approval_status === 'approved') return 'success'
+    if (row.approval_status === 'rejected') return 'danger'
+    return 'warning'
+  }
+
+  function approvalLabel(row: ScheduleRow) {
+    if (row.approval_status === 'approved') return 'Đã duyệt'
+    if (row.approval_status === 'rejected') return 'Từ chối'
+    return 'Chờ duyệt'
   }
 
   const allSelected  = createMachines.length > 0 && selectedMachines.size === createMachines.length
@@ -279,6 +312,21 @@ export function ScheduleTab({ user }: Props) {
               {MAINTENANCE_TYPES.map((t) => <option key={t} value={t}>{MAINTENANCE_TYPE_LABELS[t]}</option>)}
             </select>
           </div>
+          {mode === 'plan' && (
+            <div className="flex flex-col gap-1">
+              <label className={labelCls}>Duyệt</label>
+              <select
+                value={filter.approval}
+                onChange={(e) => setFilter((f) => ({ ...f, approval: e.target.value as ApprovalStatus }))}
+                className={cn(inputCls, 'w-32')}
+              >
+                <option value="pending">Chờ duyệt</option>
+                <option value="approved">Đã duyệt</option>
+                <option value="rejected">Từ chối</option>
+                <option value="ALL">Tất cả</option>
+              </select>
+            </div>
+          )}
           <div className="flex items-end">
             <button onClick={() => void load()} className="flex items-center gap-1 px-3 py-2 text-[12px] rounded-xl border border-[#d2d2d7] hover:bg-[#f2f2f7]">
               <RefreshCw size={12} className={cn(loading && 'animate-spin')} /> Làm mới
@@ -289,7 +337,7 @@ export function ScheduleTab({ user }: Props) {
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-[#d2d2d7]/60 overflow-hidden">
-        {loading ? <TableSkeleton rows={5} cols={7} /> : rows.length === 0 ? (
+        {loading ? <TableSkeleton rows={5} cols={8} /> : rows.length === 0 ? (
           <EmptyState icon="📅" title="Chưa có lịch bảo trì" subtitle="Thêm lịch hoặc tạo lịch định kỳ" />
         ) : (
           <div className="overflow-x-auto">
@@ -302,6 +350,7 @@ export function ScheduleTab({ user }: Props) {
                   <th className="p-3 text-left">Loại BT</th>
                   <th className="p-3 text-left">Ngày thực hiện</th>
                   <th className="p-3 text-center">Trạng thái</th>
+                  <th className="p-3 text-center">Duyệt</th>
                   <th className="p-3 text-center">Hành động</th>
                 </tr>
               </thead>
@@ -321,9 +370,32 @@ export function ScheduleTab({ user }: Props) {
                     <td className="p-3 text-center">
                       <Badge variant={scheduleStatus(row)}>{scheduleLabel(row)}</Badge>
                     </td>
+                    <td className="p-3 text-center">
+                      <Badge variant={approvalStatus(row)}>{approvalLabel(row)}</Badge>
+                    </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">
-                        {!row.is_completed && (
+                        {approver && row.approval_status === 'pending' && (
+                          <>
+                            <button
+                              onClick={() => onReview(row.id, 'approved')}
+                              disabled={reviewingId === row.id}
+                              title="Duyệt lịch"
+                              className="text-emerald-600 hover:text-emerald-700 disabled:opacity-40"
+                            >
+                              <CheckCircle size={15} />
+                            </button>
+                            <button
+                              onClick={() => onReview(row.id, 'rejected')}
+                              disabled={reviewingId === row.id}
+                              title="Từ chối lịch"
+                              className="text-red-500 hover:text-red-600 disabled:opacity-40"
+                            >
+                              <XCircle size={15} />
+                            </button>
+                          </>
+                        )}
+                        {!row.is_completed && row.approval_status === 'approved' && (
                           <button onClick={() => openComplete(row)} title="Đánh dấu hoàn thành"
                             className="text-emerald-600 hover:text-emerald-700">
                             <CheckCircle size={15} />

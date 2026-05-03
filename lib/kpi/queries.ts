@@ -220,14 +220,10 @@ export async function queryProductionKpiComparison(params: {
   periodType: PeriodType
   anchorDate: string
 }): Promise<KpiComparisonResponse> {
-  // Get period + department metadata from RPC (rows discarded, replaced below)
-  const comparison = await queryKpiComparison({
-    department: 'PRODUCTION',
-    periodType: params.periodType,
-    anchorDate: params.anchorDate,
-  })
-
-  const { start: from, end: to, label } = comparison.period
+  const period = await queryPeriodFromDb(params.periodType, params.anchorDate)
+  const from = period.period_start
+  const to = period.period_end
+  const label = period.period_label
   const periodRef = { period_start: from, period_end: to, period_label: label }
 
   const [dataset, oee, sx01T, sx02T, sx04T, sx05T, sx06T, oeeTarget] = await Promise.all([
@@ -294,7 +290,20 @@ export async function queryProductionKpiComparison(params: {
     })
     .filter((v): v is string => Boolean(v))
 
-  return { ...comparison, rows, summaryByWorkshop, insights }
+  return {
+    department: 'PRODUCTION',
+    period: {
+      type: params.periodType,
+      anchor: params.anchorDate,
+      label,
+      start: from,
+      end: to,
+    },
+    workshops: [...KPI_WORKSHOPS],
+    rows,
+    summaryByWorkshop,
+    insights,
+  }
 }
 
 export async function queryKpiDepartmentSummary(params: {

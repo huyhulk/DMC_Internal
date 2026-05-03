@@ -4,6 +4,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { z } from 'zod'
 import type { UserRole } from '@/types'
+import { isKnownWorkspaceToken, normalizeWorkspaceList } from '@/lib/approval/workflow'
 
 function getAdminDb() {
   return createSupabaseClient(
@@ -25,16 +26,23 @@ export interface UserRow {
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
+const workspaceSchema = z.string()
+  .transform((value) => normalizeWorkspaceList(value))
+  .refine(
+    (value) => value === '' || value.split(',').every(isKnownWorkspaceToken),
+    'Workspace chỉ được chọn trong danh sách xưởng/phòng ban'
+  )
+
 const createUserSchema = z.object({
   username:  z.string().min(2, 'Tên đăng nhập phải có ít nhất 2 ký tự').max(50).regex(/^[a-z0-9_]+$/, 'Chỉ dùng chữ thường, số, dấu gạch dưới'),
   password:  z.string().min(4, 'Mật khẩu phải có ít nhất 4 ký tự'),
   role:      z.enum(['ADMIN', 'MANAGER', 'SUPERVISOR', 'USER']),
-  workspace: z.string(),
+  workspace: workspaceSchema,
 })
 
 const updateUserSchema = z.object({
   role:      z.enum(['ADMIN', 'MANAGER', 'SUPERVISOR', 'USER']),
-  workspace: z.string(),
+  workspace: workspaceSchema,
 })
 
 // ─── Helper: verify caller is ADMIN ──────────────────────────────────────────

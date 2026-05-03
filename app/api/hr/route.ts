@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
   }
   try {
-    const data = await getHRData(date)
+    const data = await getHRData(date, user)
     return NextResponse.json(data)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

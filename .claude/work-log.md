@@ -45,6 +45,153 @@
 
 ## 📜 Entries
 
+## 2026-05-03 (Phien #16 - Staging security remediation)
+**Branch:** codex/hr-admin-overtime-approval
+**Claude model:** gpt-5.5
+**Task:** Audit and fix staging-wide security/data-integrity issues.
+
+### Da lam
+- Added workspace-scoped authorization helpers for approval/report/KPI flows.
+- Hardened HR actions with server-side role/workspace checks and removed the incorrect `Production.totalem` update.
+- Scoped overtime/maintenance approval, listing, and notification actions by workspace.
+- Added migration `022_staging_security_scope_hardening.sql` for profile self-escalation prevention and staging RLS hardening.
+- Fixed KPI/report date validation, local default report dates, production KPI comparison period source, OEE hourly grouping, and cross-midnight duration.
+
+### Verify
+- `npm run type-check` passed.
+- `npm run lint` passed.
+- `npm test` passed: 11 suites / 109 tests.
+- `npm run build` initially blocked by Windows/OneDrive `.next` lock; after clearing `.next`, build passed.
+
+### Files thay doi
+- `app/api/hr/route.ts`
+- `app/api/kpi/*`
+- `app/api/reports/*`
+- `lib/actions/*`
+- `lib/approval/workflow.ts`
+- `lib/kpi/queries.ts`
+- `lib/reports/*`
+- `supabase/migrations/022_staging_security_scope_hardening.sql`
+- `__tests__/*`
+
+### Status cuoi phien
+- [ ] Code committed? N
+- [ ] PR created? N
+- [x] Tests passing? Y
+- [x] Documentation updated? Y
+
+### Next time resume
+- Apply migration 022 through staging CI/approved staging DB flow, then smoke test role/workspace access.
+
+---
+
+## 2026-05-03 (Phien #15 - Auth smoke fixes)
+**Branch:** codex/hr-admin-overtime-approval
+**Claude model:** GPT-5 Codex
+**Task:** Check current project state, then fix user logout hanging and admin login credential mismatch.
+
+### Da lam
+- Checked project progress: no valid GSD `.planning/PROJECT.md`, `ROADMAP.md`, or `STATE.md`; current state is tracked through `CODEX_WORKLOG.md` and this work log.
+- Found active branch `codex/hr-admin-overtime-approval`; latest committed work is `3404e38 fix(db): grant overtime request access`.
+- Fixed logout flow so the server action clears the Supabase session locally and returns control to the client; the dashboard then navigates to `/login` with `router.replace()`.
+- Added regression coverage for logout returning successfully and tolerating Supabase signOut errors without blocking client navigation.
+- Verified staging admin login mismatch and reset the staging admin auth password to the documented smoke-test credential without printing env keys.
+
+### Root cause
+- Logout depended on server-action redirect after `signOut()`, so if the server action redirect path stalled the button spinner could remain active.
+- Staging admin auth password did not match the credential documented in recent local smoke-test notes.
+
+### Files thay doi
+- `lib/actions/auth.ts`
+- `components/layout/dashboard-shell.tsx`
+- `__tests__/auth-actions.test.ts`
+- `CODEX_WORKLOG.md`
+
+### Verify
+- `npm test -- --runTestsByPath __tests__/auth-actions.test.ts` passed.
+- `npm run type-check` passed.
+- `npm run lint` passed.
+- `npm test` passed: 10 suites / 103 tests.
+- Staging Supabase smoke: admin and user login both succeeded.
+- `npm run build` passed after clearing generated `.next` cache locked by the dev server/OneDrive.
+- Dev server restarted at `http://localhost:3000`; `/login` returned 200.
+
+### Status cuoi phien
+- [ ] Code committed? N
+- [ ] PR created? N
+- [x] Tests passing? Y
+- [x] Documentation updated? Y
+
+### Next time resume
+- Browser-smoke the login/logout flow manually on `http://localhost:3000`.
+- Decide commit scope for the dirty approval workflow worktree plus this auth fix.
+
+---
+
+## 2026-05-03 (Phien #14 - Overtime/Maintenance approval)
+**Branch:** codex/hr-admin-overtime-approval
+**Claude model:** GPT-5 Codex
+**Task:** Continue existing overtime request and maintenance schedule approval workflow.
+
+### Da lam
+- Continued the written plan at `docs/superpowers/plans/2026-05-02-overtime-maintenance-approval.md`.
+- Verified and completed the overtime approval flow:
+  - `overtime_requests` and `overtime_request_participants` staging tables in migration 020.
+  - `rpc_review_overtime_request` approves/rejects requests and copies approved records into `overtime_records` plus participants.
+  - `/dashboard/administration` route, nav item, shell tabs, overtime request form/list, and approve/reject actions.
+- Integrated maintenance approval:
+  - New schedules record `requested_by` and use DB default `approval_status = pending`.
+  - Admin/Manager can approve or reject schedules.
+  - Execution mode only lists approved pending schedules and completion rejects unapproved schedules.
+- Fixed a workspace-scope bug in the new flow: empty USER/SUPERVISOR workspace no longer behaves like unrestricted access for maintenance options or approval actions.
+
+### Quyet dinh ky thuat
+- Kept overtime source of truth staged in `overtime_requests`; KPI-facing `overtime_records` only receives approved requests through the review RPC.
+- Added `canAccessWorkspace()` and `getScopedWorkspaceTokens()` so the new workflow can distinguish empty workspace from `ALL`.
+- Left global legacy `getUserWorkspaces()` behavior unchanged to avoid a broad cross-app behavior change in this feature branch.
+
+### Verify
+- `npm test -- --runTestsByPath __tests__/approval-workflow.test.ts __tests__/maintenance-workflow.test.ts` passed.
+- `npm run type-check` passed.
+- `npm run lint` passed.
+- `npm test` passed: 5 suites / 89 tests.
+- `npm run build` passed.
+- Local dev server started at `http://localhost:3000`; `/login` returned 200 and unauthenticated `/dashboard/administration` returned 307 to `/login`.
+
+### Files thay doi
+- `__tests__/approval-workflow.test.ts`
+- `__tests__/maintenance-workflow.test.ts`
+- `app/(dashboard)/dashboard/administration/page.tsx`
+- `components/administration/administration-shell.tsx`
+- `components/administration/overtime-tab.tsx`
+- `components/admin/user-management.tsx`
+- `components/layout/dashboard-shell.tsx`
+- `components/maintenance/schedule-tab.tsx`
+- `docs/superpowers/plans/2026-05-02-overtime-maintenance-approval.md`
+- `lib/actions/admin.ts`
+- `lib/actions/maintenance.ts`
+- `lib/actions/overtime.ts`
+- `lib/approval/workflow.ts`
+- `lib/maintenance/workflow.ts`
+- `lib/validations/overtime.ts`
+- `supabase/migrations/020_overtime_requests_maintenance_approval.sql`
+- `types/database.ts`
+- `types/index.ts`
+- `CODEX_WORKLOG.md`
+- `.claude/work-log.md`
+
+### Status cuoi phien
+- [ ] Code committed? N
+- [ ] PR created? N
+- [x] Tests passing? Y
+- [x] Documentation updated? Y
+
+### Next time resume
+- Review diff, stage only approval-workflow files, then commit/push if user confirms.
+- Apply migration 020 through staging CI or approved staging DB flow; do not apply directly to production.
+
+---
+
 ## 2026-05-02 (Phiên #13 — Verify KPI/HR cleanup worktree)
 **Branch:** staging
 **Claude model:** GPT-5 Codex

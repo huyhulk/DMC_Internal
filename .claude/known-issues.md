@@ -7,6 +7,13 @@
 
 ## 🔴 CRITICAL — Cần fix trước khi production-ready
 
+### SEC-001: Workspace/RLS hardening staging chưa promote production
+- **Description:** Phiên 2026-05-03 đã thêm migration `022_staging_security_scope_hardening.sql` để khóa self-escalation profile và siết workspace cho HR/overtime/maintenance trên staging.
+- **Impact:** Nếu chưa apply/promote migration 022, DB vẫn có nguy cơ policy cũ quá rộng.
+- **Proposed solution:** Apply migration 022 qua staging CI, smoke test role/workspace, sau đó mới xin approve promote production.
+- **Status:** 🟡 Code ready, cần apply staging
+- **Priority:** CRITICAL
+
 ### SYS-002: Apps Script sync code không nằm trong repo
 - **Description:** Logic sync Google Sheet → Supabase là Apps Script, không có version control trong GitHub
 - **Impact:**

@@ -1,27 +1,41 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import {
   Factory, Wrench, Users2, BarChart3,
   KeyRound, LogOut, ChevronDown,
-  TrendingUp, ShieldCheck, Package2, ShieldAlert,
+  TrendingUp, ShieldCheck,
   Settings, Target, Clock, UserCog, SlidersHorizontal,
   Truck, ListChecks, FileText, BookCheck,
-  AlertTriangle, CalendarClock, FileImage, Ruler,
+  AlertTriangle, CalendarClock, FileImage, Ruler, ClipboardList,
+  type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction, changePasswordAction } from '@/lib/actions/auth'
 import { ROLE_TABS, ROLE_LABELS, type SessionUser } from '@/types'
 import { ChangePasswordDialog } from '@/components/shared/change-password-dialog'
+import { ApprovalNotificationBell } from '@/components/layout/approval-notification-bell'
+import {
+  getAdministrationTabs,
+  getCoordinationTabs,
+  getMaintenanceTabs,
+  resolveAdministrationSub,
+  resolveCoordinationSub,
+  resolveMaintenanceSub,
+  type AdministrationTabKey,
+  type CoordinationTabKey,
+  type MaintenanceTabKey,
+} from '@/lib/navigation/dashboard'
 
 const TAB_CONFIG = {
   production:   { label: 'Sản Xuất',  icon: Factory,   href: '/dashboard/production' },
   maintenance:  { label: 'Bảo Trì',   icon: Wrench,    href: '/dashboard/maintenance' },
   coordination: { label: 'Điều Phối',  icon: Users2,    href: '/dashboard/coordination' },
+  administration: { label: 'Hành Chính NS', icon: ClipboardList, href: '/dashboard/administration' },
   report:       { label: 'Báo Cáo',   icon: BarChart3, href: '/dashboard/report' },
   admin:        { label: 'Hệ Thống',  icon: Settings,  href: '/dashboard/admin' },
 } as const
@@ -35,23 +49,44 @@ const REPORT_ITEMS = [
   { code: 'overtime',     label: 'Tăng Ca',             icon: Clock,       href: '/dashboard/report/overtime' },
 ] as const
 
-const COORDINATION_ITEMS = [
-  { code: 'hr',         label: 'Nhân Sự',       icon: Users2,      href: '/dashboard/coordination?sub=hr' },
-  { code: 'delivery',   label: 'Giao Hàng',     icon: Truck,       href: '/dashboard/coordination?sub=delivery' },
-  { code: 'findings5s', label: '5S',             icon: ListChecks,  href: '/dashboard/coordination?sub=findings5s' },
-  { code: 'reports',    label: 'Báo Cáo TK',    icon: FileText,    href: '/dashboard/coordination?sub=reports' },
-  { code: 'iso',        label: 'Quy Trình ISO',  icon: BookCheck,   href: '/dashboard/coordination?sub=iso' },
-  { code: 'kho',        label: 'Kho',            icon: Package2,    href: '/dashboard/coordination?sub=kho' },
-  { code: 'hse',        label: 'An Toàn',        icon: ShieldAlert, href: '/dashboard/coordination?sub=hse' },
-] as const
+const COORDINATION_ICONS: Record<CoordinationTabKey, LucideIcon> = {
+  delivery:   Truck,
+  findings5s: ListChecks,
+  reports:    FileText,
+}
 
-const MAINTENANCE_ITEMS = [
-  { code: 'breakdowns', label: 'Sự Cố Máy',   icon: AlertTriangle, href: '/dashboard/maintenance?sub=breakdowns' },
-  { code: 'schedule',   label: 'Lịch Bảo Trì', icon: CalendarClock, href: '/dashboard/maintenance?sub=schedule' },
-  { code: 'drawings',   label: 'Bản Vẽ KT',   icon: FileImage,     href: '/dashboard/maintenance?sub=drawings' },
-  { code: 'surveys',    label: 'Khảo Sát',    icon: Ruler,         href: '/dashboard/maintenance?sub=surveys' },
-  { code: 'machines',   label: 'Thiết Bị',    icon: Wrench,        href: '/dashboard/maintenance?sub=machines' },
-] as const
+const COORDINATION_ITEMS = getCoordinationTabs().map((item) => ({
+  ...item,
+  code: item.key,
+  icon: COORDINATION_ICONS[item.key],
+}))
+
+const MAINTENANCE_ICONS: Record<MaintenanceTabKey, LucideIcon> = {
+  breakdowns: AlertTriangle,
+  schedule:   CalendarClock,
+  drawings:   FileImage,
+  surveys:    Ruler,
+  machines:   Wrench,
+}
+
+const MAINTENANCE_ITEMS = getMaintenanceTabs().map((item) => ({
+  ...item,
+  code: item.key,
+  icon: MAINTENANCE_ICONS[item.key],
+}))
+
+const ADMINISTRATION_ICONS: Record<AdministrationTabKey, LucideIcon> = {
+  overtime:   Clock,
+  hr:         Users2,
+  findings5s: ListChecks,
+  iso:        BookCheck,
+}
+
+const ADMINISTRATION_ITEMS = getAdministrationTabs().map((item) => ({
+  ...item,
+  code: item.key,
+  icon: ADMINISTRATION_ICONS[item.key],
+}))
 
 const ADMIN_ITEMS = [
   { code: 'users',        label: 'Quản lý người dùng', icon: UserCog,           href: '/dashboard/admin' },
@@ -72,18 +107,26 @@ interface Props {
 
 export function DashboardShell({ user, children }: Props) {
   const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [showChangePass, setShowChangePass]   = useState(false)
   const [loggingOut, setLoggingOut]           = useState(false)
   const [reportOpen, setReportOpen]           = useState(false)
   const [coordOpen, setCoordOpen]             = useState(false)
+  const [administrationOpen, setAdministrationOpen] = useState(false)
   const [adminOpen, setAdminOpen]             = useState(false)
   const [maintOpen, setMaintOpen]             = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const coordTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const administrationTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const adminTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const maintTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const allowedTabs = ROLE_TABS[user.role]
+  const requestedSub = searchParams.get('sub')
+  const activeCoordinationSub = resolveCoordinationSub(requestedSub)
+  const activeMaintenanceSub = resolveMaintenanceSub(requestedSub)
+  const activeAdministrationSub = resolveAdministrationSub(requestedSub)
 
   function openDropdown() {
     if (closeTimer.current) clearTimeout(closeTimer.current)
@@ -101,6 +144,15 @@ export function DashboardShell({ user, children }: Props) {
 
   function scheduleCloseCoord() {
     coordTimer.current = setTimeout(() => setCoordOpen(false), 180)
+  }
+
+  function openAdministrationDropdown() {
+    if (administrationTimer.current) clearTimeout(administrationTimer.current)
+    setAdministrationOpen(true)
+  }
+
+  function scheduleCloseAdministration() {
+    administrationTimer.current = setTimeout(() => setAdministrationOpen(false), 180)
   }
 
   function openAdminDropdown() {
@@ -123,7 +175,14 @@ export function DashboardShell({ user, children }: Props) {
 
   async function handleLogout() {
     setLoggingOut(true)
-    await logoutAction()
+    try {
+      await logoutAction()
+      router.replace('/login')
+      router.refresh()
+    } catch {
+      toast.error('Không thể đăng xuất. Vui lòng thử lại.')
+      setLoggingOut(false)
+    }
   }
 
   async function handleChangePassword(oldPass: string, newPass: string): Promise<string | null> {
@@ -241,13 +300,48 @@ export function DashboardShell({ user, children }: Props) {
                       )}
                     >
                       <Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
-                      <span>Phối Hợp</span>
+                      <span>{cfg.label}</span>
                       <ChevronDown
                         size={10}
                         strokeWidth={2.5}
                         className={cn(
                           'transition-transform duration-200 shrink-0',
                           coordOpen ? 'rotate-180' : 'rotate-0'
+                        )}
+                      />
+                    </Link>
+                  </div>
+                )
+              }
+
+              /* Administration/HR tab — dropdown trigger */
+              if (tabKey === 'administration') {
+                return (
+                  <div
+                    key="administration"
+                    onMouseEnter={openAdministrationDropdown}
+                    onMouseLeave={scheduleCloseAdministration}
+                  >
+                    <Link
+                      href="/dashboard/administration"
+                      onClick={() => setAdministrationOpen(false)}
+                      className={cn(
+                        'flex items-center gap-[5px] px-3.5 py-[7px]',
+                        'rounded-[10px] text-[13px] whitespace-nowrap',
+                        'select-none transition-all duration-200 hover:scale-105',
+                        active
+                          ? 'bg-white text-dmc-primary font-semibold shadow-sm shadow-black/[0.08]'
+                          : 'font-medium text-[#6e6e73] hover:text-[#1d1d1f] active:scale-[0.97]'
+                      )}
+                    >
+                      <Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
+                      <span>{cfg.label}</span>
+                      <ChevronDown
+                        size={10}
+                        strokeWidth={2.5}
+                        className={cn(
+                          'transition-transform duration-200 shrink-0',
+                          administrationOpen ? 'rotate-180' : 'rotate-0'
                         )}
                       />
                     </Link>
@@ -372,7 +466,7 @@ export function DashboardShell({ user, children }: Props) {
               </div>
 
               {MAINTENANCE_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
-                const isActiveSub = pathname.startsWith('/dashboard/maintenance') && href.includes(`sub=${code}`)
+                const isActiveSub = pathname.startsWith('/dashboard/maintenance') && activeMaintenanceSub === code
                 return (
                   <Link
                     key={code}
@@ -415,17 +509,65 @@ export function DashboardShell({ user, children }: Props) {
             >
               <div className="px-3 pb-1.5 pt-1 border-b border-[#d2d2d7]/50 mb-1">
                 <span className="text-[11px] font-semibold text-[#aeaeb2] uppercase tracking-[0.07em]">
-                  Phối hợp
+                  Điều phối
                 </span>
               </div>
 
               {COORDINATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
-                const isActiveSub = pathname.startsWith('/dashboard/coordination') && href.includes(`sub=${code}`)
+                const isActiveSub = pathname.startsWith('/dashboard/coordination') && activeCoordinationSub === code
                 return (
                   <Link
                     key={code}
                     href={href}
                     onClick={() => setCoordOpen(false)}
+                    className={cn(
+                      'flex items-center gap-2.5 px-3 py-2.5 mx-1 rounded-xl',
+                      'text-[13px] font-medium transition-all duration-100',
+                      isActiveSub
+                        ? 'bg-dmc-primary/8 text-dmc-primary'
+                        : 'text-[#1d1d1f] hover:bg-[#f2f2f7]'
+                    )}
+                  >
+                    <ItemIcon size={14} strokeWidth={isActiveSub ? 2.5 : 2} className="shrink-0 text-[#6e6e73]" />
+                    <span>{label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+
+          {/* ── Administration/HR dropdown — anchored to center column bottom ── */}
+          {allowedTabs.includes('administration') && (
+            <div
+              onMouseEnter={openAdministrationDropdown}
+              onMouseLeave={scheduleCloseAdministration}
+              className={cn(
+                'absolute top-full mt-1.5 z-50',
+                'left-1/2 -translate-x-1/2',
+                'w-56',
+                'bg-white/95 backdrop-blur-xl',
+                'border border-[#d2d2d7]/70',
+                'rounded-2xl shadow-apple-lg',
+                'py-1.5 overflow-hidden',
+                'transition-all duration-150 origin-top',
+                administrationOpen
+                  ? 'opacity-100 scale-100 pointer-events-auto translate-y-0'
+                  : 'opacity-0 scale-[0.97] pointer-events-none -translate-y-1'
+              )}
+            >
+              <div className="px-3 pb-1.5 pt-1 border-b border-[#d2d2d7]/50 mb-1">
+                <span className="text-[11px] font-semibold text-[#aeaeb2] uppercase tracking-[0.07em]">
+                  Hành chính nhân sự
+                </span>
+              </div>
+
+              {ADMINISTRATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                const isActiveSub = pathname.startsWith('/dashboard/administration') && activeAdministrationSub === code
+                return (
+                  <Link
+                    key={code}
+                    href={href}
+                    onClick={() => setAdministrationOpen(false)}
                     className={cn(
                       'flex items-center gap-2.5 px-3 py-2.5 mx-1 rounded-xl',
                       'text-[13px] font-medium transition-all duration-100',
@@ -553,6 +695,8 @@ export function DashboardShell({ user, children }: Props) {
           <span className="text-[13px] text-[#6e6e73] hidden md:block px-1">
             {user.username}
           </span>
+
+          <ApprovalNotificationBell user={user} />
 
           <div className="w-px h-4 bg-[#d2d2d7] mx-1 hidden sm:block" />
 

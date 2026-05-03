@@ -5,8 +5,11 @@ export function durationHours(starttime: string, endtime: string): number {
   const [sh, sm] = starttime.split(':').map(Number)
   const [eh, em] = endtime.split(':').map(Number)
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return 0
-  const diff = (eh * 60 + em) - (sh * 60 + sm)
-  return diff > 0 ? diff / 60 : 0
+  const startMinutes = sh * 60 + sm
+  let endMinutes = eh * 60 + em
+  if (endMinutes <= startMinutes) endMinutes += 24 * 60
+  const diff = endMinutes - startMinutes
+  return diff / 60
 }
 
 /**

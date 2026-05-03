@@ -56,7 +56,7 @@ export function MasterKpiDashboard() {
             <div>
               <p className="text-[12px] font-bold uppercase tracking-wide text-dmc-primary">Master KPI Dashboard</p>
               <h1 className="mt-1 text-[22px] font-bold tracking-tight text-[#1d1d1f]">Tổng hợp 19 KPI năm 2026</h1>
-              <p className="mt-1 text-[13px] text-[#6e6e73]">Sản xuất, bảo trì và phối hợp theo cùng kỳ báo cáo.</p>
+              <p className="mt-1 text-[13px] text-[#6e6e73]">Sản xuất, bảo trì và điều phối theo cùng kỳ báo cáo.</p>
             </div>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
               <PeriodSelector value={period} onChange={setPeriod} />

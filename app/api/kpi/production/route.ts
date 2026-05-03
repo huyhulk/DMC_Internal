@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { parseKpiParams, requireAuth, errResponse, okResponse } from '../_shared'
+import { parseKpiParams, requireAuth, errResponse, okResponse, resolveKpiWorkshopAccess } from '../_shared'
 import { queryKpiTrend, queryProductionKpiRows } from '@/lib/kpi/queries'
 import { summarizeKpiRows } from '@/lib/kpi/format'
 
@@ -9,6 +9,8 @@ export async function GET(req: NextRequest) {
 
   const { periodType, anchorDate, workshop, errors } = parseKpiParams(req.nextUrl.searchParams, 'PRODUCTION')
   if (errors.length > 0) return errResponse(errors.join('; '))
+  const accessError = resolveKpiWorkshopAccess(user, workshop)
+  if (accessError) return errResponse(accessError, 403)
 
   const rows = await queryProductionKpiRows({ periodType, anchorDate, workshop })
   const trends = await Promise.all(

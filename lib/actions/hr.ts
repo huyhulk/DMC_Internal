@@ -3,8 +3,10 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { z } from 'zod'
-import { workshopToDataFilters } from '@/lib/utils'
+import { getSessionUser } from '@/lib/actions/auth'
+import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
 import type { HumanResource, HRDayData } from '@/types'
+import type { SessionUser } from '@/types'
 
 // Direct admin client — same pattern as lib/db/queries.ts
 function getDb() {
@@ -20,6 +22,7 @@ function getDb() {
 // Internal-only constant — not exported (use server files cannot export non-async values)
 const FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 type FactoryKey = typeof FACTORIES[number]
+type HRProfile = Pick<SessionUser, 'role' | 'workspace'>
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
@@ -42,10 +45,22 @@ const humanResourceSchema = z.object({
   phone: z.string().nullable().optional(),
 })
 
+async function requireHRUser(): Promise<SessionUser | null> {
+  const user = await getSessionUser()
+  if (!user) return null
+  if (!['ADMIN', 'MANAGER'].includes(user.role)) return null
+  return user
+}
+
+function canAccessFactory(profile: HRProfile, factory: string): boolean {
+  return canAccessWorkspace(profile.role, profile.workspace, factory)
+}
+
 // ─── getHRData ────────────────────────────────────────────────────────────────
 
 export async function getHRData(
-  date: string
+  date: string,
+  scopeUser?: HRProfile
 ): Promise<{ employees: HumanResource[]; dailyData: HRDayData[] }> {
   const parsedDate = dateSchema.safeParse(date)
   if (!parsedDate.success) {
@@ -53,6 +68,14 @@ export async function getHRData(
     return { employees: [], dailyData: [] }
   }
 
+  const profile = scopeUser ?? await getSessionUser()
+  if (!profile) return { employees: [], dailyData: [] }
+  const scope = getWorkspaceScopedFilter(profile.role, profile.workspace)
+  if (!scope.unrestricted && scope.workspaces.length === 0) return { employees: [], dailyData: [] }
+
+  const factories = scope.unrestricted
+    ? FACTORIES
+    : FACTORIES.filter((factory) => scope.workspaces.includes(factory))
   const supabase = getDb()
 
   // Parallel: all employees + today's hr_daily rows
@@ -60,11 +83,13 @@ export async function getHRData(
     supabase
       .from('human_resource')
       .select('id,name,factory,machine,position,phone')
+      .in('factory', [...factories])
       .order('name', { ascending: true }),
     supabase
       .from('hr_daily')
       .select('factory,totalem,absent_ids,pdate')
-      .eq('pdate', date),
+      .eq('pdate', date)
+      .in('factory', [...factories]),
   ])
 
   if (empRes.error) {
@@ -91,7 +116,7 @@ export async function getHRData(
   }
 
   // For factories that have no record today: fetch latest totalem via Promise.allSettled
-  const factoriesWithoutToday = FACTORIES.filter((f) => !todayMap.has(f))
+  const factoriesWithoutToday = factories.filter((f) => !todayMap.has(f))
 
   const latestResults = await Promise.allSettled(
     factoriesWithoutToday.map((factory) =>
@@ -115,7 +140,7 @@ export async function getHRData(
   })
 
   // Build final HRDayData for all 4 factories
-  const dailyData: HRDayData[] = FACTORIES.map((factory) => {
+  const dailyData: HRDayData[] = factories.map((factory) => {
     const todayRow = todayMap.get(factory)
     if (todayRow) {
       return {
@@ -157,6 +182,10 @@ export async function saveHRDaily(
   }
 
   const { date: pdate, factory: fac, totalem: total, absentIds: absent } = parsed.data
+  const user = await requireHRUser()
+  if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
+  if (!canAccessFactory(user, fac)) return { success: false, error: 'Không có quyền cập nhật xưởng này.' }
+
   const supabase = getDb()
 
   // Upsert hr_daily — conflict on (factory, pdate)
@@ -170,35 +199,6 @@ export async function saveHRDaily(
   if (upsertError) {
     logger.error({ err: upsertError.message, factory: fac, date: pdate }, 'saveHRDaily: upsert failed')
     return { success: false, error: upsertError.message }
-  }
-
-  // Also update Production.totalem for matching factory+date rows.
-  // data.WORKSHOP stores long names → use ilike patterns per DMC code.
-  // DMC1 needs two patterns (Phân xưởng 1 + Phân xưởng 2).
-  const filters = workshopToDataFilters(fac)
-  const baseQuery = supabase.from('data').select('PCODE')
-  const { data: dataRows, error: dataErr } = filters.length > 0
-    ? await baseQuery.or(filters.map((f) => `WORKSHOP.ilike.${f}`).join(','))
-    : await baseQuery.eq('WORKSHOP', fac)
-
-  if (dataErr) {
-    logger.warn({ err: dataErr.message }, 'saveHRDaily: data table lookup failed (non-fatal)')
-  }
-
-  if (dataRows && dataRows.length > 0) {
-    const pcodes = (dataRows as Array<{ PCODE: string }>).map((r) => r.PCODE)
-    const { error: prodError } = await supabase
-      .from('Production')
-      .update({ totalem: String(total) })
-      .eq('pdate', pdate)
-      .in('pcode', pcodes)
-
-    if (prodError) {
-      logger.warn(
-        { err: prodError.message, factory: fac, date: pdate },
-        'saveHRDaily: Production.totalem update failed (non-fatal)'
-      )
-    }
   }
 
   logger.info({ factory: fac, date: pdate, totalem: total, absentCount: absent.length }, 'saveHRDaily success')
@@ -223,6 +223,10 @@ export async function createHumanResource(
     const msg = parsed.error.errors[0].message
     return { success: false, error: msg }
   }
+
+  const user = await requireHRUser()
+  if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
+  if (!canAccessFactory(user, parsed.data.factory)) return { success: false, error: 'Không có quyền cập nhật xưởng này.' }
 
   const supabase = getDb()
   const { data, error } = await supabase
@@ -277,7 +281,20 @@ export async function updateHumanResource(
     return { success: false, error: msg }
   }
 
+  const user = await requireHRUser()
+  if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
+
   const supabase = getDb()
+  const { data: existing, error: readError } = await supabase
+    .from('human_resource')
+    .select('factory')
+    .eq('id', id)
+    .single()
+
+  if (readError || !existing) return { success: false, error: readError?.message ?? 'Không tìm thấy nhân sự.' }
+  if (!canAccessFactory(user, String(existing.factory ?? ''))) return { success: false, error: 'Không có quyền cập nhật xưởng này.' }
+  if (!canAccessFactory(user, parsed.data.factory)) return { success: false, error: 'Không có quyền chuyển nhân sự sang xưởng này.' }
+
   const { error } = await supabase
     .from('human_resource')
     .update({
@@ -308,7 +325,19 @@ export async function deleteHumanResource(
     return { success: false, error: 'Invalid id' }
   }
 
+  const user = await requireHRUser()
+  if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
+
   const supabase = getDb()
+  const { data: existing, error: readError } = await supabase
+    .from('human_resource')
+    .select('factory')
+    .eq('id', id)
+    .single()
+
+  if (readError || !existing) return { success: false, error: readError?.message ?? 'Không tìm thấy nhân sự.' }
+  if (!canAccessFactory(user, String(existing.factory ?? ''))) return { success: false, error: 'Không có quyền xóa nhân sự xưởng này.' }
+
   const { error } = await supabase
     .from('human_resource')
     .delete()

@@ -205,6 +205,155 @@ export interface Database {
           updated_at?: string | null
         }
       }
+      overtime_requests: {
+        Row: {
+          id: string
+          ot_date: string
+          customer: string | null
+          pcode: string | null
+          workshop: string
+          original_workshop: string | null
+          ot_category: 'PRODUCTION' | 'DELIVERY' | 'INTERNAL'
+          reasons: Json
+          total_employees: number
+          total_hours: number
+          required_output: number | null
+          planned_hours: number | null
+          notes: string | null
+          approval_status: 'pending' | 'approved' | 'rejected'
+          requested_by: string
+          approved_by: string | null
+          approved_at: string | null
+          approval_note: string | null
+          approved_overtime_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          ot_date: string
+          customer?: string | null
+          pcode?: string | null
+          workshop: string
+          original_workshop?: string | null
+          ot_category: 'PRODUCTION' | 'DELIVERY' | 'INTERNAL'
+          reasons?: Json
+          total_employees?: number
+          total_hours?: number
+          required_output?: number | null
+          planned_hours?: number | null
+          notes?: string | null
+          approval_status?: 'pending' | 'approved' | 'rejected'
+          requested_by: string
+          approved_by?: string | null
+          approved_at?: string | null
+          approval_note?: string | null
+          approved_overtime_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          ot_date: string
+          customer: string | null
+          pcode: string | null
+          workshop: string
+          original_workshop: string | null
+          ot_category: 'PRODUCTION' | 'DELIVERY' | 'INTERNAL'
+          reasons: Json
+          total_employees: number
+          total_hours: number
+          required_output: number | null
+          planned_hours: number | null
+          notes: string | null
+          approval_status: 'pending' | 'approved' | 'rejected'
+          requested_by: string
+          approved_by: string | null
+          approved_at: string | null
+          approval_note: string | null
+          approved_overtime_id: string | null
+          updated_at: string
+        }>
+      }
+      overtime_request_participants: {
+        Row: {
+          id: string
+          request_id: string
+          employee_id: string | null
+          employee_name: string
+          hours: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          request_id: string
+          employee_id?: string | null
+          employee_name: string
+          hours: number
+          created_at?: string
+        }
+        Update: Partial<{
+          request_id: string
+          employee_id: string | null
+          employee_name: string
+          hours: number
+        }>
+      }
+      maintenance_schedule: {
+        Row: {
+          id: string
+          workshop: string
+          machine_code: string
+          machine_name: string | null
+          maintenance_type: string | null
+          scheduled_date: string
+          actual_date: string | null
+          is_completed: boolean
+          is_on_time: boolean | null
+          checklist_items: Json | null
+          technician: string | null
+          notes: string | null
+          approval_status: 'pending' | 'approved' | 'rejected'
+          requested_by: string | null
+          approved_by: string | null
+          approved_at: string | null
+          approval_note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workshop: string
+          machine_code: string
+          machine_name?: string | null
+          maintenance_type?: string | null
+          scheduled_date: string
+          actual_date?: string | null
+          checklist_items?: Json | null
+          technician?: string | null
+          notes?: string | null
+          approval_status?: 'pending' | 'approved' | 'rejected'
+          requested_by?: string | null
+          approved_by?: string | null
+          approved_at?: string | null
+          approval_note?: string | null
+          created_at?: string
+        }
+        Update: Partial<{
+          workshop: string
+          machine_code: string
+          machine_name: string | null
+          maintenance_type: string | null
+          scheduled_date: string
+          actual_date: string | null
+          checklist_items: Json | null
+          technician: string | null
+          notes: string | null
+          approval_status: 'pending' | 'approved' | 'rejected'
+          requested_by: string | null
+          approved_by: string | null
+          approved_at: string | null
+          approval_note: string | null
+        }>
+      }
       production_defects: {
         Row: {
           id: string
