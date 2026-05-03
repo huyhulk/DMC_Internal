@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { KPI_DEPARTMENTS } from '@/lib/kpi/constants'
 import { queryKpiDepartmentSummary } from '@/lib/kpi/queries'
-import { parseKpiParams, requireAuth, errResponse, okResponse } from '../_shared'
+import { parseKpiParams, requireAuth, errResponse, okResponse, resolveKpiComparisonAccess } from '../_shared'
 
 export async function GET(req: NextRequest) {
   const user = await requireAuth()
@@ -9,6 +9,8 @@ export async function GET(req: NextRequest) {
 
   const { periodType, anchorDate, errors } = parseKpiParams(req.nextUrl.searchParams)
   if (errors.length > 0) return errResponse(errors.join('; '))
+  const accessError = resolveKpiComparisonAccess(user)
+  if (accessError) return errResponse(accessError, 403)
 
   const departments = await Promise.all(
     KPI_DEPARTMENTS.map((department) => queryKpiDepartmentSummary({ department, periodType, anchorDate }))
