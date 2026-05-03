@@ -277,7 +277,7 @@ export function DashboardShell({ user, children }: Props) {
                       />
                     </Link>
                     {maintOpen && (
-                      <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                      <div className="hidden absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
                         {MAINTENANCE_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
                           const isActiveSub = pathname.startsWith('/dashboard/maintenance') && activeMaintenanceSub === code
                           return (
@@ -326,7 +326,7 @@ export function DashboardShell({ user, children }: Props) {
                       />
                     </Link>
                     {coordOpen && (
-                      <div className="absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                      <div className="hidden absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
                         {COORDINATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
                           const isActiveSub = pathname.startsWith('/dashboard/coordination') && activeCoordinationSub === code
                           return (
@@ -375,7 +375,7 @@ export function DashboardShell({ user, children }: Props) {
                       />
                     </Link>
                     {administrationOpen && (
-                      <div className="absolute left-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                      <div className="hidden absolute left-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
                         {ADMINISTRATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
                           const isActiveSub = pathname.startsWith('/dashboard/administration') && activeAdministrationSub === code
                           return (
@@ -424,7 +424,7 @@ export function DashboardShell({ user, children }: Props) {
                       />
                     </Link>
                     {adminOpen && (
-                      <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                      <div className="hidden absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
                         {ADMIN_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
                           const isActiveSub = pathname.startsWith(href)
                           return (
@@ -473,7 +473,7 @@ export function DashboardShell({ user, children }: Props) {
                       />
                     </Link>
                     {reportOpen && (
-                      <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
+                      <div className="hidden absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
                         {REPORT_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
                           const isActiveSub = pathname.startsWith('/dashboard/report') &&
                             (code === 'production' ? !pathname.includes('?') || href.includes('production') : href.includes(code))
@@ -512,7 +512,7 @@ export function DashboardShell({ user, children }: Props) {
           </div>
 
           {/* ── Maintenance dropdown — anchored to center column bottom ── */}
-          {false && allowedTabs.includes('maintenance') && (
+          {allowedTabs.includes('maintenance') && (
             <div
               onMouseEnter={openMaintDropdown}
               onMouseLeave={scheduleCloseMaint}
@@ -560,7 +560,7 @@ export function DashboardShell({ user, children }: Props) {
           )}
 
           {/* ── Coordination dropdown — anchored to center column bottom ── */}
-          {false && allowedTabs.includes('coordination') && (
+          {allowedTabs.includes('coordination') && (
             <div
               onMouseEnter={openCoordDropdown}
               onMouseLeave={scheduleCloseCoord}
@@ -608,7 +608,7 @@ export function DashboardShell({ user, children }: Props) {
           )}
 
           {/* ── Administration/HR dropdown — anchored to center column bottom ── */}
-          {false && allowedTabs.includes('administration') && (
+          {allowedTabs.includes('administration') && (
             <div
               onMouseEnter={openAdministrationDropdown}
               onMouseLeave={scheduleCloseAdministration}
@@ -656,7 +656,7 @@ export function DashboardShell({ user, children }: Props) {
           )}
 
           {/* ── Admin dropdown — anchored to center column bottom ── */}
-          {false && allowedTabs.includes('admin') && (
+          {allowedTabs.includes('admin') && (
             <div
               onMouseEnter={openAdminDropdown}
               onMouseLeave={scheduleCloseAdmin}
@@ -704,7 +704,7 @@ export function DashboardShell({ user, children }: Props) {
           )}
 
           {/* ── Report dropdown — anchored to center column bottom ── */}
-          {false && allowedTabs.includes('report') && (
+          {allowedTabs.includes('report') && (
             <div
               onMouseEnter={openDropdown}
               onMouseLeave={scheduleClose}
