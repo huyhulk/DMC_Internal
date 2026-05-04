@@ -6,7 +6,7 @@ export type DashboardSubTab<TKey extends string = string> = {
 
 export const COORDINATION_TABS = [
   { key: 'delivery',   label: 'Giao Hàng',  href: '/dashboard/coordination?sub=delivery' },
-  { key: 'findings5s', label: '5S',         href: '/dashboard/coordination?sub=findings5s' },
+  { key: 'findings5s', label: 'Kho nguyên phụ liệu', href: '/dashboard/coordination?sub=findings5s' },
   { key: 'reports',    label: 'Báo Cáo TK', href: '/dashboard/coordination?sub=reports' },
 ] as const satisfies readonly DashboardSubTab[]
 

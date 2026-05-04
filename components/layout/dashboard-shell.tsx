@@ -36,7 +36,7 @@ const TAB_CONFIG = {
   production:   { label: 'Sản Xuất',  icon: Factory,   href: '/dashboard/production' },
   maintenance:  { label: 'Bảo Trì',   icon: Wrench,    href: '/dashboard/maintenance' },
   coordination: { label: 'Điều Phối',  icon: Users2,    href: '/dashboard/coordination' },
-  administration: { label: 'Hành Chính NS', icon: ClipboardList, href: '/dashboard/administration' },
+  administration: { label: 'HC-NS', icon: ClipboardList, href: '/dashboard/administration' },
   report:       { label: 'Báo Cáo',   icon: BarChart3, href: '/dashboard/report' },
   admin:        { label: 'Hệ Thống',  icon: Settings,  href: '/dashboard/admin' },
 } as const
