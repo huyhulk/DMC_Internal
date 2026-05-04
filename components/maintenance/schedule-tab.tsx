@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, CheckCircle, Trash2, Repeat, XCircle } from 'lucide-react'
 import { cn, formatDate, getTodayLocal } from '@/lib/utils'
-import { getMaintenanceWorkshopOptions } from '@/lib/maintenance/workflow'
+import { getMaintenanceWorkshopOptions, generateMaintenanceScheduleDates } from '@/lib/maintenance/workflow'
 import { canApproveRequests, getMaintenanceScheduleFilter, type ApprovalStatus } from '@/lib/approval/workflow'
 import {
   scheduleBulkCreateSchema, scheduleCompleteSchema,
@@ -15,7 +15,7 @@ import {
 } from '@/lib/validations/maintenance'
 import {
   createScheduleAction, bulkCreateScheduleAction, completeScheduleAction,
-  deleteScheduleAction, listScheduleAction, reviewScheduleAction,
+  deleteScheduleAction, listScheduleAction, reviewScheduleAction, listStaffByWorkshopAction,
   type ScheduleRow,
 } from '@/lib/actions/maintenance'
 import { Dialog } from '@/components/ui/dialog'
@@ -28,6 +28,18 @@ const inputCls = 'w-full h-9 px-2.5 rounded-lg text-[12px] font-medium text-[#1d
 const labelCls = 'block text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73] mb-1'
 
 type Machine = { machine_code: string; machine_name: string | null }
+
+function ScheduleMetric({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'danger' }) {
+  return (
+    <div className={cn(
+      'rounded-2xl border px-3 py-2 bg-white',
+      tone === 'danger' ? 'border-red-200' : 'border-[#d2d2d7]/60'
+    )}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73]">{label}</p>
+      <p className={cn('text-xl font-semibold mt-0.5', tone === 'danger' ? 'text-red-600' : 'text-[#1d1d1f]')}>{value}</p>
+    </div>
+  )
+}
 
 // Shared fields for Create dialog — machine(s) come from checkbox state, not the form
 type CreateFields = {
@@ -54,7 +66,9 @@ export function ScheduleTab({ user, canEdit }: Props) {
   const [deleteId, setDeleteId]       = useState<string | null>(null)
   const [createMachines, setCreateMachines] = useState<Machine[]>([])
   const [bulkMachines,   setBulkMachines]   = useState<Machine[]>([])
+  const [pktStaff, setPktStaff] = useState<string[]>([])
   const [selectedMachines, setSelectedMachines] = useState<Set<string>>(new Set())
+  const [selectedBulkMachines, setSelectedBulkMachines] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting]   = useState(false)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
 
@@ -101,11 +115,9 @@ export function ScheduleTab({ user, canEdit }: Props) {
   })
 
   const bulkForm = useForm<ScheduleBulkCreateInput>({
-    resolver: zodResolver(scheduleBulkCreateSchema),
     defaultValues: {
       workshop:         defaultWorkshop,
-      machine_code:     '',
-      machine_name:     '',
+      machines:         [],
       maintenance_type: 'monthly',
       frequency:        'monthly',
       start_date:       getTodayLocal(),
@@ -120,7 +132,9 @@ export function ScheduleTab({ user, canEdit }: Props) {
 
   const createWorkshop  = createForm.watch('workshop')
   const bulkWorkshop    = bulkForm.watch('workshop')
-  const bulkMachineCode = bulkForm.watch('machine_code')
+  const bulkStartDate   = bulkForm.watch('start_date')
+  const bulkEndDate     = bulkForm.watch('end_date')
+  const bulkFrequency   = bulkForm.watch('frequency')
 
   useEffect(() => { void load() }, [load])
 
@@ -135,14 +149,18 @@ export function ScheduleTab({ user, canEdit }: Props) {
 
   // Fetch machine list for Bulk dialog, reset machine selection when workshop changes
   useEffect(() => {
-    bulkForm.setValue('machine_code', '')
-    bulkForm.setValue('machine_name', '')
+    setSelectedBulkMachines(new Set())
+    bulkForm.setValue('machines', [])
     fetch(`/api/machines?location=${bulkWorkshop}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => Array.isArray(data) && setBulkMachines(data))
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bulkWorkshop])
+
+  useEffect(() => {
+    listStaffByWorkshopAction('PKT-SX').then((staff) => setPktStaff(staff.map((s) => s.name)))
+  }, [])
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
@@ -180,11 +198,41 @@ export function ScheduleTab({ user, canEdit }: Props) {
   }
 
   async function onBulkSubmit(values: ScheduleBulkCreateInput) {
+    const machines = bulkMachines
+      .filter((machine) => selectedBulkMachines.has(machine.machine_code))
+      .map((machine) => ({ machine_code: machine.machine_code, machine_name: machine.machine_name ?? '' }))
+
+    if (machines.length === 0) {
+      toast.warning('Chọn ít nhất một thiết bị')
+      return
+    }
+
     setSubmitting(true)
     try {
-      const res = await bulkCreateScheduleAction(values)
-      if (res.success) { toast.success(res.message); setShowBulk(false); bulkForm.reset(); void load() }
-      else toast.error(res.message)
+      const res = await bulkCreateScheduleAction({ ...values, machines })
+      if (res.success) {
+        toast.success(res.message)
+        setShowBulk(false)
+        setSelectedBulkMachines(new Set())
+        bulkForm.reset({
+          workshop: bulkWorkshop,
+          machines: [],
+          maintenance_type: values.maintenance_type,
+          frequency: values.frequency,
+          start_date: values.start_date,
+          end_date: values.end_date,
+        })
+        setFilter((f) => ({
+          ...f,
+          workshop: values.workshop,
+          from: values.start_date,
+          to: values.end_date,
+          type: values.maintenance_type,
+          approval: 'pending',
+        }))
+        setMode('plan')
+        void load()
+      } else toast.error(res.message)
     } finally {
       setSubmitting(false)
     }
@@ -261,6 +309,25 @@ export function ScheduleTab({ user, canEdit }: Props) {
 
   const allSelected  = createMachines.length > 0 && selectedMachines.size === createMachines.length
   const someSelected = selectedMachines.size > 0 && !allSelected
+  const allBulkSelected = bulkMachines.length > 0 && selectedBulkMachines.size === bulkMachines.length
+  const someBulkSelected = selectedBulkMachines.size > 0 && !allBulkSelected
+  const previewMachines = bulkMachines
+    .filter((machine) => selectedBulkMachines.has(machine.machine_code))
+    .map((machine) => ({ machine_code: machine.machine_code, machine_name: machine.machine_name ?? '' }))
+  const previewDates = generateMaintenanceScheduleDates(bulkStartDate, bulkEndDate, bulkFrequency)
+  const previewCount = previewDates.length * previewMachines.length
+  const bulkDateInvalid = Boolean(bulkStartDate && bulkEndDate && new Date(bulkEndDate) < new Date(bulkStartDate))
+  const bulkSubmitDisabled = submitting || selectedBulkMachines.size === 0 || previewDates.length === 0 || bulkDateInvalid || previewCount > 500
+  const rowStats = rows.reduce(
+    (acc, row) => {
+      acc.total++
+      if (row.approval_status === 'pending') acc.pending++
+      if (row.approval_status === 'approved') acc.approved++
+      if (!row.is_completed && row.scheduled_date < today) acc.overdue++
+      return acc
+    },
+    { total: 0, pending: 0, approved: 0, overdue: 0 }
+  )
 
   return (
     <div className="space-y-4">
@@ -275,11 +342,11 @@ export function ScheduleTab({ user, canEdit }: Props) {
             <>
               <button onClick={() => setShowBulk(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-dmc-primary text-dmc-primary rounded-xl hover:bg-dmc-primary/5 transition-colors">
-                <Repeat size={14} /> Tạo định kỳ
+                <Repeat size={14} /> Tạo lịch tự động
               </button>
               <button onClick={() => setShowCreate(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90 transition-opacity">
-                <Plus size={14} /> Thêm lịch
+                <Plus size={14} /> Tạo lịch một lần
               </button>
             </>
           )}
@@ -293,7 +360,7 @@ export function ScheduleTab({ user, canEdit }: Props) {
             <button key={m} onClick={() => setMode(m)}
               className={cn('px-4 py-1.5 text-[12px] font-semibold rounded-full transition-all',
                 mode === m ? 'bg-dmc-primary text-white' : 'border border-[#d2d2d7] text-[#6e6e73] hover:bg-[#f2f2f7]')}>
-              {m === 'plan' ? 'Kế hoạch' : 'Thực hiện'}
+              {m === 'plan' ? 'Kế hoạch chờ duyệt / đã duyệt' : 'Ghi nhận thực hiện'}
             </button>
           ))}
         </div>
@@ -343,6 +410,13 @@ export function ScheduleTab({ user, canEdit }: Props) {
       </div>
 
       {/* Table */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <ScheduleMetric label="Tổng lịch" value={rowStats.total} />
+        <ScheduleMetric label="Chờ duyệt" value={rowStats.pending} />
+        <ScheduleMetric label="Đã duyệt" value={rowStats.approved} />
+        <ScheduleMetric label="Quá hạn" value={rowStats.overdue} tone="danger" />
+      </div>
+
       <div className="bg-white rounded-2xl border border-[#d2d2d7]/60 overflow-hidden">
         {loading ? <TableSkeleton rows={5} cols={8} /> : rows.length === 0 ? (
           <EmptyState icon="📅" title="Chưa có lịch bảo trì" subtitle="Thêm lịch hoặc tạo lịch định kỳ" />
@@ -351,7 +425,7 @@ export function ScheduleTab({ user, canEdit }: Props) {
             <table className="w-full text-[13px]">
               <thead className="bg-[#f5f5f7] text-[11px] uppercase text-[#6e6e73]">
                 <tr>
-                  <th className="p-3 text-left">Ngày lịch</th>
+                  <th className="p-3 text-left">Thời hạn hoàn thành</th>
                   <th className="p-3 text-left">Máy</th>
                   <th className="p-3 text-left">Xưởng</th>
                   <th className="p-3 text-left">Loại BT</th>
@@ -441,12 +515,15 @@ export function ScheduleTab({ user, canEdit }: Props) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Ngày lịch *</label>
-              <input type="date" {...createForm.register('scheduled_date', { required: 'Chọn ngày lịch' })} className={inputCls} />
+              <label className={labelCls}>Thời hạn hoàn thành *</label>
+              <input type="date" {...createForm.register('scheduled_date', { required: 'Chọn thời hạn hoàn thành' })} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Thợ bảo trì</label>
-              <input {...createForm.register('technician')} className={inputCls} />
+              <label className={labelCls}>Nhân sự bảo trì</label>
+              <select {...createForm.register('technician')} className={inputCls}>
+                <option value="">— Chọn —</option>
+                {pktStaff.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
             </div>
           </div>
           <div>
@@ -521,71 +598,141 @@ export function ScheduleTab({ user, canEdit }: Props) {
         </form>
       </Dialog>
 
-      {/* Bulk Create Dialog — single machine + date range */}
-      <Dialog open={showBulk} onClose={() => setShowBulk(false)} title="Tạo lịch định kỳ" size="md">
-        <form onSubmit={bulkForm.handleSubmit(onBulkSubmit)} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+      {/* Bulk Create Dialog — selected machines + date range preview */}
+      <Dialog open={showBulk} onClose={() => setShowBulk(false)} title="Tạo lịch bảo trì tự động" size="lg">
+        <form onSubmit={bulkForm.handleSubmit(onBulkSubmit)} className="space-y-4">
+          <div className="rounded-xl border border-dmc-primary/20 bg-dmc-primary/5 px-3 py-2 text-[12px] text-[#424245]">
+            Chọn xưởng, một hoặc nhiều thiết bị, chu kỳ và khoảng ngày. Hệ thống sẽ tạo lịch lặp lại theo các ngày xem trước bên dưới và bỏ qua lịch đã tồn tại.
+          </div>
+
+          <div className="rounded-2xl border border-[#d2d2d7]/70 p-3 space-y-3">
             <div>
-              <label className={labelCls}>Xưởng *</label>
-              <select {...bulkForm.register('workshop')} className={inputCls}>
-                {createWorkshopOptions.map((w) => <option key={w} value={w}>{w}</option>)}
-              </select>
+              <p className="text-[12px] font-semibold text-[#1d1d1f]">1. Chọn phạm vi</p>
+              <p className="text-[11px] text-[#6e6e73]">Chọn xưởng và các thiết bị cần lập lịch tự động.</p>
             </div>
-            <div>
-              <label className={labelCls}>Tên thiết bị *</label>
-              <select
-                className={inputCls}
-                value={bulkMachineCode ?? ''}
-                onChange={(e) => {
-                  const code = e.target.value
-                  const found = bulkMachines.find((m) => m.machine_code === code)
-                  bulkForm.setValue('machine_name', found?.machine_name ?? '', { shouldValidate: true })
-                  bulkForm.setValue('machine_code', code, { shouldValidate: true })
-                }}
-              >
-                <option value="">— Chọn thiết bị —</option>
-                {bulkMachines.map((m) => (
-                  <option key={m.machine_code} value={m.machine_code}>
-                    {m.machine_name ?? m.machine_code}
-                  </option>
-                ))}
-              </select>
-              {bulkForm.formState.errors.machine_code && (
-                <p className="text-[11px] text-red-500 mt-0.5">{bulkForm.formState.errors.machine_code.message}</p>
-              )}
-            </div>
-            <div>
-              <label className={labelCls}>Loại BT *</label>
-              <select {...bulkForm.register('maintenance_type')} className={inputCls}>
-                {MAINTENANCE_TYPES.map((t) => <option key={t} value={t}>{MAINTENANCE_TYPE_LABELS[t]}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Chu kỳ *</label>
-              <select {...bulkForm.register('frequency')} className={inputCls}>
-                <option value="weekly">Hàng tuần</option>
-                <option value="monthly">Hàng tháng</option>
-                <option value="quarterly">Hàng quý</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Ngày bắt đầu *</label>
-              <input type="date" {...bulkForm.register('start_date')} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Ngày kết thúc *</label>
-              <input type="date" {...bulkForm.register('end_date')} className={inputCls} />
-              {bulkForm.formState.errors.end_date && (
-                <p className="text-[11px] text-red-500 mt-0.5">{bulkForm.formState.errors.end_date.message}</p>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Xưởng *</label>
+                <select {...bulkForm.register('workshop')} className={inputCls}>
+                  {createWorkshopOptions.map((w) => <option key={w} value={w}>{w}</option>)}
+                </select>
+              </div>
+              <div className="rounded-xl border border-[#d2d2d7] overflow-hidden">
+                <label className="flex items-center gap-2.5 px-3 py-2 bg-[#f5f5f7] border-b border-[#d2d2d7] cursor-pointer hover:bg-[#ebebeb]">
+                  <input
+                    type="checkbox"
+                    checked={allBulkSelected}
+                    ref={(el) => { if (el) el.indeterminate = someBulkSelected }}
+                    onChange={(e) =>
+                      setSelectedBulkMachines(
+                        e.target.checked ? new Set(bulkMachines.map((m) => m.machine_code)) : new Set()
+                      )
+                    }
+                    className="w-4 h-4 accent-dmc-primary"
+                  />
+                  <span className="text-[11px] font-semibold text-[#6e6e73] select-none">
+                    Chọn thiết bị ({selectedBulkMachines.size}/{bulkMachines.length})
+                  </span>
+                </label>
+                <div className="max-h-44 overflow-y-auto divide-y divide-[#d2d2d7]/40">
+                  {bulkMachines.length === 0 ? (
+                    <p className="text-[12px] text-[#aeaeb2] px-3 py-5 text-center">Không có thiết bị nào trong xưởng này</p>
+                  ) : bulkMachines.map((m) => (
+                    <label key={m.machine_code} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-[#f5f5f7]">
+                      <input
+                        type="checkbox"
+                        checked={selectedBulkMachines.has(m.machine_code)}
+                        onChange={(e) => {
+                          const next = new Set(selectedBulkMachines)
+                          if (e.target.checked) next.add(m.machine_code)
+                          else next.delete(m.machine_code)
+                          setSelectedBulkMachines(next)
+                        }}
+                        className="w-4 h-4 accent-dmc-primary shrink-0"
+                      />
+                      <span className="text-[12px] text-[#1d1d1f] flex-1 select-none">{m.machine_name ?? m.machine_code}</span>
+                      <span className="text-[10px] text-[#aeaeb2] font-mono">{m.machine_code}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
+
+          <div className="rounded-2xl border border-[#d2d2d7]/70 p-3 space-y-3">
+            <div>
+              <p className="text-[12px] font-semibold text-[#1d1d1f]">2. Chọn chu kỳ</p>
+              <p className="text-[11px] text-[#6e6e73]">Chọn khoảng ngày để tạo các thời hạn hoàn thành; mỗi ngày xem trước bên dưới là một deadline bảo trì.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Loại BT *</label>
+                <select {...bulkForm.register('maintenance_type')} className={inputCls}>
+                  {MAINTENANCE_TYPES.map((t) => <option key={t} value={t}>{MAINTENANCE_TYPE_LABELS[t]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Chu kỳ *</label>
+                <select {...bulkForm.register('frequency')} className={inputCls}>
+                  <option value="weekly">Hàng tuần</option>
+                  <option value="monthly">Hàng tháng</option>
+                  <option value="quarterly">Hàng quý</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Ngày bắt đầu tạo lịch *</label>
+                <input type="date" {...bulkForm.register('start_date')} className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Ngày kết thúc tạo lịch *</label>
+                <input type="date" {...bulkForm.register('end_date')} className={inputCls} />
+                {bulkDateInvalid && <p className="text-[11px] text-red-500 mt-0.5">Ngày kết thúc phải sau ngày bắt đầu</p>}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#d2d2d7]/70 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[12px] font-semibold text-[#1d1d1f]">3. Xem trước lịch sẽ tạo</p>
+                <p className="text-[11px] text-[#6e6e73]">{selectedBulkMachines.size} thiết bị × {previewDates.length} ngày = {previewCount} lịch</p>
+              </div>
+              {previewCount > 500 && <Badge variant="danger">Vượt giới hạn 500</Badge>}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-3">
+              <div className="rounded-xl bg-[#f5f5f7] p-3">
+                <p className="text-[11px] font-semibold uppercase text-[#6e6e73] mb-2">Các thời hạn hoàn thành</p>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {previewDates.length === 0 ? (
+                    <span className="text-[12px] text-[#aeaeb2]">Chưa có ngày hợp lệ</span>
+                  ) : previewDates.map((date) => (
+                    <span key={date} className="px-2 py-1 rounded-lg bg-white border border-[#d2d2d7] text-[11px] font-medium text-[#1d1d1f]">
+                      {formatDate(date)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-xl bg-[#f5f5f7] p-3">
+                <p className="text-[11px] font-semibold uppercase text-[#6e6e73] mb-2">Thiết bị</p>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {selectedBulkMachines.size === 0 ? (
+                    <span className="text-[12px] text-[#aeaeb2]">Chưa chọn thiết bị</span>
+                  ) : bulkMachines.filter((m) => selectedBulkMachines.has(m.machine_code)).map((m) => (
+                    <span key={m.machine_code} className="px-2 py-1 rounded-lg bg-white border border-[#d2d2d7] text-[11px] font-medium text-[#1d1d1f]">
+                      {m.machine_name ?? m.machine_code}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={() => setShowBulk(false)}
               className="flex-1 h-10 rounded-xl border border-[#d2d2d7] text-[13px] text-[#6e6e73] hover:bg-[#f2f2f7]">Hủy</button>
-            <button type="submit" disabled={submitting}
-              className="flex-1 h-10 rounded-xl bg-dmc-primary text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50">
-              {submitting ? 'Đang tạo…' : 'Tạo lịch định kỳ'}
+            <button type="submit" disabled={bulkSubmitDisabled}
+              className="flex-1 h-10 rounded-xl bg-dmc-primary text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
+              {submitting ? 'Đang tạo…' : `Tạo ${previewCount} lịch`}
             </button>
           </div>
         </form>
@@ -600,8 +747,11 @@ export function ScheduleTab({ user, canEdit }: Props) {
               <input type="date" {...completeForm.register('actual_date')} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Thợ bảo trì</label>
-              <input {...completeForm.register('technician')} className={inputCls} />
+              <label className={labelCls}>Nhân sự bảo trì</label>
+              <select {...completeForm.register('technician')} className={inputCls}>
+                <option value="">— Chọn —</option>
+                {pktStaff.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
             </div>
           </div>
           <div>

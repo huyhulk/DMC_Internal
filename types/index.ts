@@ -143,6 +143,8 @@ export interface PcodeStatus {
 
 export const FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 export type FactoryKey = typeof FACTORIES[number]
+export const HUMAN_RESOURCE_FACTORIES = [...FACTORIES, 'PKT-SX', 'DIEU-PHOI', 'Khác'] as const
+export type HumanResourceFactoryKey = typeof HUMAN_RESOURCE_FACTORIES[number]
 
 // Display labels for each factory — used in dropdowns, charts, badges
 export const WORKSHOP_LABELS: Record<FactoryKey, string> = {

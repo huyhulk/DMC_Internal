@@ -112,8 +112,10 @@ export const scheduleCreateSchema = z.object({
 
 export const scheduleBulkCreateSchema = z.object({
   workshop:         z.enum(KPI_WORKSHOPS, { required_error: 'Chọn xưởng' }),
-  machine_code:     z.string().trim().min(1, 'Nhập mã máy').max(50),
-  machine_name:     z.string().trim().max(100).optional().or(z.literal('')),
+  machines:         z.array(z.object({
+    machine_code: z.string().trim().min(1, 'Nhập mã máy').max(50),
+    machine_name: z.string().trim().max(100).optional().or(z.literal('')),
+  })).min(1, 'Chọn ít nhất một thiết bị'),
   maintenance_type: z.enum(MAINTENANCE_TYPES, { required_error: 'Chọn loại bảo trì' }),
   start_date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày bắt đầu không hợp lệ'),
   end_date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày kết thúc không hợp lệ'),

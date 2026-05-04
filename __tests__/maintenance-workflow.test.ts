@@ -1,5 +1,6 @@
 import { getLocalDateTimeInputValue } from '@/lib/utils'
 import {
+  generateMaintenanceScheduleDates,
   getDrawingListFilter,
   getMaintenanceWorkshopOptions,
   isBreakdownEndAfterStart,
@@ -25,6 +26,31 @@ describe('maintenance workflow helpers', () => {
     expect(getMaintenanceWorkshopOptions('TEAM_LEADER', 'DMC1,DMC5', true)).toEqual(['DMC1', 'DMC5'])
     expect(getMaintenanceWorkshopOptions('TEAM_LEADER', '', true)).toEqual([])
     expect(getMaintenanceWorkshopOptions('TEAM_LEADER', null, true)).toEqual([])
+  })
+
+  it('generates maintenance dates by weekly, monthly, and quarterly frequency', () => {
+    expect(generateMaintenanceScheduleDates('2026-05-04', '2026-05-25', 'weekly')).toEqual([
+      '2026-05-04',
+      '2026-05-11',
+      '2026-05-18',
+      '2026-05-25',
+    ])
+    expect(generateMaintenanceScheduleDates('2026-05-04', '2026-08-04', 'monthly')).toEqual([
+      '2026-05-04',
+      '2026-06-04',
+      '2026-07-04',
+      '2026-08-04',
+    ])
+    expect(generateMaintenanceScheduleDates('2026-05-04', '2026-11-04', 'quarterly')).toEqual([
+      '2026-05-04',
+      '2026-08-04',
+      '2026-11-04',
+    ])
+  })
+
+  it('returns no maintenance dates for invalid ranges', () => {
+    expect(generateMaintenanceScheduleDates('2026-05-05', '2026-05-04', 'weekly')).toEqual([])
+    expect(generateMaintenanceScheduleDates('not-date', '2026-05-04', 'weekly')).toEqual([])
   })
 
   it('rejects breakdown end times that are not after the start time', () => {

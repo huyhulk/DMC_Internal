@@ -10,7 +10,7 @@ import {
   deleteHumanResource,
 } from '@/lib/actions/hr'
 import { getTodayLocal } from '@/lib/utils'
-import { FACTORIES, type HumanResource } from '@/types'
+import { HUMAN_RESOURCE_FACTORIES, type HumanResource } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -323,12 +323,9 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
                   disabled={!canEdit}
                   className={cn(inputCls, 'cursor-pointer')}
                 >
-                  {FACTORIES.map((f) => (
+                  {HUMAN_RESOURCE_FACTORIES.map((f) => (
                     <option key={f} value={f}>{f}</option>
                   ))}
-                  <option value="PKT-SX">PKT-SX (Kỹ thuật-SX)</option>
-                  <option value="DIEU-PHOI">DIEU-PHOI (Điều phối)</option>
-                  <option value="Khác">Khác</option>
                 </select>
               </FormField>
 

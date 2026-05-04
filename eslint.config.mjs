@@ -1,6 +1,9 @@
 import coreWebVitals from "eslint-config-next/core-web-vitals";
 
 const config = [
+  {
+    ignores: [".next/**", ".next-build-stale-*/**"],
+  },
   ...coreWebVitals,
   {
     // react-hooks/set-state-in-effect and incompatible-library are React Compiler rules

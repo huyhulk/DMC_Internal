@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { getSessionUser } from '@/lib/actions/auth'
 import { requireTabEdit } from '@/lib/permissions/server'
 import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
-import type { HumanResource, HRDayData } from '@/types'
+import type { HumanResource, HRDayData, HumanResourceFactoryKey } from '@/types'
 import type { SessionUser } from '@/types'
 
 // Direct admin client — same pattern as lib/db/queries.ts
@@ -22,6 +22,7 @@ function getDb() {
 
 // Internal-only constant — not exported (use server files cannot export non-async values)
 const FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
+const HUMAN_RESOURCE_FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5', 'PKT-SX', 'DIEU-PHOI', 'Khác'] as const
 type FactoryKey = typeof FACTORIES[number]
 type HRProfile = Pick<SessionUser, 'role' | 'workspace'>
 
@@ -40,7 +41,7 @@ const saveHRDailySchema = z.object({
 
 const humanResourceSchema = z.object({
   name: z.string().min(1, 'Họ tên không được để trống'),
-  factory: z.string().min(1, 'Nhà máy không được để trống'),
+  factory: z.enum(HUMAN_RESOURCE_FACTORIES, { required_error: 'Nhà máy không được để trống' }),
   machine: z.string().nullable().optional(),
   position: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
@@ -55,6 +56,10 @@ async function requireHREditUser(): Promise<SessionUser | null> {
 
 function canAccessFactory(profile: HRProfile, factory: string): boolean {
   return canAccessWorkspace(profile.role, profile.workspace, factory)
+}
+
+function getVisibleHumanResourceFactories(profile: HRProfile): HumanResourceFactoryKey[] {
+  return HUMAN_RESOURCE_FACTORIES.filter((factory) => canAccessFactory(profile, factory)) as HumanResourceFactoryKey[]
 }
 
 // ─── getHRData ────────────────────────────────────────────────────────────────
@@ -74,9 +79,10 @@ export async function getHRData(
   const scope = getWorkspaceScopedFilter(profile.role, profile.workspace)
   if (!scope.unrestricted && scope.workspaces.length === 0) return { employees: [], dailyData: [] }
 
-  const factories = scope.unrestricted
-    ? FACTORIES
-    : FACTORIES.filter((factory) => scope.workspaces.includes(factory))
+  const factories = getVisibleHumanResourceFactories(profile)
+  const productionFactories = factories.filter((factory): factory is FactoryKey =>
+    FACTORIES.includes(factory as FactoryKey)
+  )
   const supabase = getDb()
 
   // Parallel: all employees + today's hr_daily rows
@@ -90,7 +96,7 @@ export async function getHRData(
       .from('hr_daily')
       .select('factory,totalem,absent_ids,pdate')
       .eq('pdate', date)
-      .in('factory', [...factories]),
+      .in('factory', [...productionFactories]),
   ])
 
   if (empRes.error) {
@@ -117,7 +123,7 @@ export async function getHRData(
   }
 
   // For factories that have no record today: fetch latest totalem via Promise.allSettled
-  const factoriesWithoutToday = factories.filter((f) => !todayMap.has(f))
+  const factoriesWithoutToday = productionFactories.filter((f) => !todayMap.has(f))
 
   const latestResults = await Promise.allSettled(
     factoriesWithoutToday.map((factory) =>
@@ -141,7 +147,7 @@ export async function getHRData(
   })
 
   // Build final HRDayData for all 4 factories
-  const dailyData: HRDayData[] = factories.map((factory) => {
+  const dailyData: HRDayData[] = productionFactories.map((factory) => {
     const todayRow = todayMap.get(factory)
     if (todayRow) {
       return {

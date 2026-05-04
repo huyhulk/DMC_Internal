@@ -17,7 +17,7 @@ import {
 import logger from '@/lib/logger'
 import { requireTabEdit } from '@/lib/permissions/server'
 import type { PermissionKey } from '@/lib/permissions/tabs'
-import { isBreakdownEndAfterStart } from '@/lib/maintenance/workflow'
+import { isBreakdownEndAfterStart, generateMaintenanceScheduleDates } from '@/lib/maintenance/workflow'
 import { canAccessWorkspace, canApproveRequests, canApproveWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
 
 // ─── Types from DB ────────────────────────────────────────────────────────────
@@ -321,41 +321,67 @@ export async function bulkCreateScheduleAction(input: ScheduleBulkCreateInput): 
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
 
-    const { start_date, end_date, frequency, workshop, machine_code, machine_name,
+    const { start_date, end_date, frequency, workshop, machines,
             maintenance_type, checklist_items, technician, notes } = parsed.data
     if (!profile || !canAccessWorkshop(profile, workshop)) {
       return { success: false, message: 'Không có quyền thao tác với xưởng này.' }
     }
 
-    const dates: string[] = []
-    const cur = new Date(start_date)
-    const endD = new Date(end_date)
-
-    while (cur <= endD) {
-      dates.push(cur.toISOString().split('T')[0])
-      if (frequency === 'weekly')    cur.setDate(cur.getDate() + 7)
-      else if (frequency === 'monthly') cur.setMonth(cur.getMonth() + 1)
-      else if (frequency === 'quarterly') cur.setMonth(cur.getMonth() + 3)
-    }
-
+    const dates = generateMaintenanceScheduleDates(start_date, end_date, frequency)
     if (dates.length === 0) return { success: false, message: 'Không tạo được lịch nào trong khoảng ngày này.' }
 
-    const inserts = dates.map((d) => ({
-      workshop, machine_code,
-      machine_name: machine_name || null,
-      maintenance_type,
-      scheduled_date: d,
-      checklist_items: checklist_items?.length ? checklist_items : null,
-      technician: technician || null,
-      notes: notes || null,
-      requested_by: user.id,
-    }))
+    const totalRows = dates.length * machines.length
+    if (totalRows > 500) {
+      return { success: false, message: `Bạn đang tạo ${totalRows} lịch. Vui lòng thu hẹp khoảng ngày hoặc số thiết bị (tối đa 500 lịch/lần).` }
+    }
+
+    const { data: existingRows, error: existingError } = await supabase
+      .from('maintenance_schedule')
+      .select('machine_code,scheduled_date')
+      .eq('workshop', workshop)
+      .eq('maintenance_type', maintenance_type)
+      .in('machine_code', machines.map((m) => m.machine_code))
+      .gte('scheduled_date', start_date)
+      .lte('scheduled_date', end_date)
+
+    if (existingError) return { success: false, message: `Lỗi DB: ${existingError.message}` }
+
+    const existingKeys = new Set(
+      (existingRows ?? []).map((row) => `${row.machine_code}|||${row.scheduled_date}`)
+    )
+
+    const inserts = machines.flatMap((machine) =>
+      dates
+        .filter((d) => !existingKeys.has(`${machine.machine_code}|||${d}`))
+        .map((d) => ({
+          workshop,
+          machine_code: machine.machine_code,
+          machine_name: machine.machine_name || null,
+          maintenance_type,
+          scheduled_date: d,
+          checklist_items: checklist_items?.length ? checklist_items : null,
+          technician: technician || null,
+          notes: notes || null,
+          requested_by: user.id,
+        }))
+    )
+
+    const skipped = totalRows - inserts.length
+    if (inserts.length === 0) {
+      return { success: true, message: `Không tạo lịch mới. ${skipped} lịch đã tồn tại.`, data: 0 }
+    }
 
     const { error } = await supabase.from('maintenance_schedule').insert(inserts)
     if (error) return { success: false, message: `Lỗi DB: ${error.message}` }
 
     revalidate()
-    return { success: true, message: `Đã tạo ${dates.length} lịch bảo trì.`, data: dates.length }
+    return {
+      success: true,
+      message: skipped > 0
+        ? `Đã tạo ${inserts.length} lịch bảo trì, bỏ qua ${skipped} lịch đã tồn tại.`
+        : `Đã tạo ${inserts.length} lịch bảo trì.`,
+      data: inserts.length,
+    }
   } catch (err) {
     logger.error({ err }, 'bulkCreateScheduleAction error')
     return { success: false, message: 'Lỗi không xác định: ' + String(err) }

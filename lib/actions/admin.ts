@@ -179,17 +179,6 @@ export async function deleteUserAction(
 
   const supabase = getAdminDb()
 
-  // Delete profile first (FK constraint), then auth user
-  const { error: profileErr } = await supabase
-    .from('profiles')
-    .delete()
-    .eq('id', targetId)
-
-  if (profileErr) {
-    logger.error({ error: profileErr.message, targetId }, 'deleteUserAction: delete profile failed')
-    return { error: profileErr.message }
-  }
-
   const { error: authErr } = await supabase.auth.admin.deleteUser(targetId)
   if (authErr) {
     logger.error({ error: authErr.message, targetId }, 'deleteUserAction: delete auth user failed')

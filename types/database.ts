@@ -163,7 +163,7 @@ export interface Database {
         Row: {
           id: number
           name: string
-          factory: string | null
+          factory: 'DMC1' | 'DMC3' | 'DMC4' | 'DMC5' | 'PKT-SX' | 'DIEU-PHOI' | 'Khác' | null
           machine: string | null
           position: string | null
           phone: string | null
@@ -172,14 +172,14 @@ export interface Database {
         }
         Insert: {
           name: string
-          factory?: string | null
+          factory?: 'DMC1' | 'DMC3' | 'DMC4' | 'DMC5' | 'PKT-SX' | 'DIEU-PHOI' | 'Khác' | null
           machine?: string | null
           position?: string | null
           phone?: string | null
         }
         Update: {
           name?: string
-          factory?: string | null
+          factory?: 'DMC1' | 'DMC3' | 'DMC4' | 'DMC5' | 'PKT-SX' | 'DIEU-PHOI' | 'Khác' | null
           machine?: string | null
           position?: string | null
           phone?: string | null
