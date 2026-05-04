@@ -123,6 +123,7 @@ export interface Database {
           endtime: string | null
           realnorm: number | null
           log: string | null
+          save_status: 'draft' | 'closed'
           created_at: string
         }
         Insert: {
@@ -139,6 +140,7 @@ export interface Database {
           endtime?: string | null
           realnorm?: number | null
           log?: string | null
+          save_status?: 'draft' | 'closed'
         }
         Update: {
           pdate?: string | null
@@ -154,6 +156,7 @@ export interface Database {
           endtime?: string | null
           realnorm?: number | null
           log?: string | null
+          save_status?: 'draft' | 'closed'
         }
       }
       human_resource: {

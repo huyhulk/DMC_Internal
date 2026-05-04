@@ -4,10 +4,10 @@ import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import { getProductionRowsValidationError } from '@/lib/production/workflow'
-import { requireTabEdit } from '@/lib/permissions/server'
+import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
 import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
-import type { InitData, Order, ProductionReportRow } from '@/types'
+import type { InitData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
 
 // Bust the unstable_cache for Norm + Material tables.
@@ -71,7 +71,7 @@ export async function getInitData(
         .eq('INITIALDATE', selectedDate),
       supabase
         .from('Production')
-        .select('pcode')
+        .select('pcode,save_status')
         .eq('pdate', selectedDate),
     ])
 
@@ -94,9 +94,17 @@ export async function getInitData(
       })
       .map(mapDataRowToOrder)
 
-    const prodRows = (productionRes.data ?? []) as Pick<ProductionRow, 'pcode'>[]
+    const prodRows = (productionRes.data ?? []) as Pick<ProductionRow, 'pcode' | 'save_status'>[]
     const submittedPcodes = [
       ...new Set(prodRows.map((p) => p.pcode).filter(Boolean) as string[]),
+    ]
+    const closedPcodes = [
+      ...new Set(
+        prodRows
+          .filter((p) => p.save_status === 'closed')
+          .map((p) => p.pcode)
+          .filter(Boolean) as string[]
+      ),
     ]
 
     logger.info(
@@ -109,6 +117,7 @@ export async function getInitData(
         ordersFound: orders.length,
         normsFound: norms.length,
         submittedPcodes: submittedPcodes.length,
+        closedPcodes: closedPcodes.length,
         workshopsAvailable: [...new Set(orders.map((o) => o.workshop))],
       },
       'getInitData success'
@@ -116,7 +125,7 @@ export async function getInitData(
 
     return {
       success: true,
-      data: { orders, norms, materials, submittedPcodes },
+      data: { orders, norms, materials, submittedPcodes, closedPcodes },
     }
   } catch (err) {
     logger.error({ err }, 'getInitData error')
@@ -177,6 +186,7 @@ export async function recordProductionAction(rows: Array<{
   endtime: string
   realnorm: number
   log: string
+  save_status?: 'draft' | 'closed'
 }>): Promise<{ success: boolean; message: string }> {
   try {
     const editor = await requireTabEdit('production')
@@ -248,6 +258,87 @@ export async function recordProductionAction(rows: Array<{
   } catch (err) {
     logger.error({ err }, 'recordProductionAction error')
     return { success: false, message: String(err) }
+  }
+}
+
+export async function listProductionInputHistoryAction(filters: {
+  fromDate: string
+  toDate: string
+  query?: string
+}): Promise<{ success: boolean; data?: ProductionInputHistoryRow[]; error?: string }> {
+  try {
+    const viewer = await requireTabView('production.input-history')
+    if (!viewer) return { success: false, error: 'Bạn không có quyền xem lịch sử nhập.' }
+
+    const supabase = await createClient()
+    const fromISO = `${filters.fromDate}T00:00:00+07:00`
+    const toISO = `${filters.toDate}T23:59:59.999+07:00`
+
+    const [prodRes, dataRes] = await Promise.all([
+      supabase
+        .from('Production')
+        .select('id,pdate,pcode,products,poutput,eoutput,routput,workforce,realnorm,starttime,endtime,log,save_status,created_at')
+        .gte('created_at', fromISO)
+        .lte('created_at', toISO)
+        .order('created_at', { ascending: false })
+        .limit(1000),
+      supabase.from('data').select('PCODE,CUSTOMER,WORKSHOP,DESCRIPTION'),
+    ])
+
+    if (prodRes.error) return { success: false, error: prodRes.error.message }
+    if (dataRes.error) return { success: false, error: dataRes.error.message }
+
+    const dataRows = (dataRes.data ?? []) as Pick<DataRow, 'PCODE' | 'CUSTOMER' | 'WORKSHOP' | 'DESCRIPTION'>[]
+    const orderMap = new Map(dataRows.map((row) => [row.PCODE, row]))
+    const userWorkspaces = getUserWorkspaces(viewer.workspace ?? '')
+    const needle = (filters.query ?? '').trim().toLowerCase()
+
+    const rows: ProductionInputHistoryRow[] = ((prodRes.data ?? []) as Pick<
+      ProductionRow,
+      'id' | 'pdate' | 'pcode' | 'products' | 'poutput' | 'eoutput' | 'routput' | 'workforce' | 'realnorm' | 'starttime' | 'endtime' | 'log' | 'save_status' | 'created_at'
+    >[])
+      .map((row) => {
+        const order = orderMap.get(row.pcode ?? '')
+        const workshop = normalizeWorkshop(order?.WORKSHOP ?? '')
+        return {
+          id: row.id,
+          pdate: row.pdate ?? '',
+          pcode: row.pcode ?? '',
+          workshop,
+          customer: order?.CUSTOMER ?? '',
+          product: row.products ?? '',
+          orderDescription: order?.DESCRIPTION ?? '',
+          poutput: row.poutput ?? 0,
+          eoutput: row.eoutput ?? 0,
+          routput: row.routput ?? 0,
+          workforce: row.workforce ?? 0,
+          realnorm: row.realnorm ?? 0,
+          starttime: row.starttime ?? '',
+          endtime: row.endtime ?? '',
+          log: row.log ?? '',
+          save_status: row.save_status,
+          created_at: row.created_at ?? '',
+        }
+      })
+      .filter((row) => isWorkspaceAllowed(row.workshop, viewer.role, userWorkspaces))
+      .filter((row) => {
+        if (!needle) return true
+        const statusLabel = row.save_status === 'closed' ? 'đã đóng da dong closed' : 'lưu tạm luu tam draft'
+        return [
+          row.pcode,
+          row.product,
+          row.workshop,
+          row.customer,
+          row.orderDescription,
+          row.log,
+          statusLabel,
+        ].some((value) => value.toLowerCase().includes(needle))
+      })
+
+    return { success: true, data: rows }
+  } catch (err) {
+    logger.error({ err }, 'listProductionInputHistoryAction error')
+    return { success: false, error: String(err) }
   }
 }
 

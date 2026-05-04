@@ -1,10 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import {
   AlertTriangle,
   ChevronRight,
+  Download,
+  Eye,
+  History,
   Lock,
   RefreshCw,
   Save,
@@ -12,6 +16,7 @@ import {
   Unlock,
   X,
 } from 'lucide-react'
+import { listProductionInputHistoryAction } from '@/lib/actions/data'
 import { useProductionData } from '@/hooks/use-production-data'
 import { OrderInfoCard } from './order-info-card'
 import { ProductLineCard } from './product-line-card'
@@ -21,8 +26,8 @@ import {
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
-import { cn, getTodayLocal } from '@/lib/utils'
-import type { NormItem, Order, ProductLine, SessionUser } from '@/types'
+import { cn, getTodayLocal, workshopCode } from '@/lib/utils'
+import type { NormItem, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
 
 interface Props {
   user: SessionUser
@@ -39,6 +44,7 @@ const inputCls =
 
 export function ProductionTab({ user, canEdit }: Props) {
   const today = getTodayLocal()
+  const [activeView, setActiveView] = useState<'entry' | 'history'>('entry')
   const {
     state, visibleRows,
     loadData, selectOrder,
@@ -53,6 +59,7 @@ export function ProductionTab({ user, canEdit }: Props) {
   const [unlockDateOpen,  setUnlockDateOpen]  = useState(false)
   const [unlockPcodeOpen, setUnlockPcodeOpen] = useState(false)
   const [confirmOpen,     setConfirmOpen]     = useState(false)
+  const [saveStatus,      setSaveStatus]      = useState<'draft' | 'closed'>('draft')
   const [submitting,      setSubmitting]      = useState(false)
   const [refreshing,      setRefreshing]      = useState(false)
 
@@ -60,6 +67,7 @@ export function ProductionTab({ user, canEdit }: Props) {
 
   const allOrders = useMemo(() => state.initData?.orders ?? [], [state.initData?.orders])
   const submittedPcodes = state.initData?.submittedPcodes ?? []
+  const closedPcodes = state.initData?.closedPcodes ?? []
   const orderCatalog = useMemo(
     () => sortProductionOrdersForEntry(filterProductionOrdersByPcode(allOrders, searchQuery)),
     [allOrders, searchQuery]
@@ -68,6 +76,10 @@ export function ProductionTab({ user, canEdit }: Props) {
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
+
+  if (activeView === 'history') {
+    return <ProductionInputHistoryTab onBack={() => setActiveView('entry')} />
+  }
 
   async function handleSearch() {
     const query = searchQuery.trim()
@@ -88,8 +100,9 @@ export function ProductionTab({ user, canEdit }: Props) {
 
   function handleOrderSelect(order: Order) {
     const alreadySubmitted = submittedPcodes.includes(order.pcode)
+    const alreadyClosed = closedPcodes.includes(order.pcode)
     const delivered = getProductionOrderStatusRank(order.status) === 3
-    if (alreadySubmitted && !delivered && !state.pcodeUnlocked) {
+    if ((alreadySubmitted || alreadyClosed) && !delivered && !state.pcodeUnlocked) {
       setUnlockPcodeOpen(true)
       return
     }
@@ -115,7 +128,7 @@ export function ProductionTab({ user, canEdit }: Props) {
     }
 
     setSubmitting(true)
-    const ok = await submitProduction()
+    const ok = await submitProduction(saveStatus)
     setSubmitting(false)
     if (ok) {
       setConfirmOpen(false)
@@ -135,6 +148,14 @@ export function ProductionTab({ user, canEdit }: Props) {
         )}
         <SectionLabel action={
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveView('history')}
+              className="h-8 px-2.5 rounded-lg border border-[#d2d2d7]/70 text-[11px] font-medium text-dmc-primary bg-white hover:bg-[#f2f2f7] active:scale-95 flex items-center gap-1.5 transition-all duration-150"
+            >
+              <History size={11} />
+              <span>Lịch sử nhập</span>
+            </button>
             {hasSubmittedOrders && (
               <LockChip
                 locked={!state.pcodeUnlocked}
@@ -197,6 +218,7 @@ export function ProductionTab({ user, canEdit }: Props) {
           loading={state.loading}
           selectedPcode={state.orderInfo?.pcode ?? ''}
           submittedPcodes={submittedPcodes}
+          closedPcodes={closedPcodes}
           onSelect={handleOrderSelect}
         />
       </div>
@@ -214,7 +236,14 @@ export function ProductionTab({ user, canEdit }: Props) {
         submitting={submitting}
         getNormHint={getNormHint}
         onLineChange={updateLine}
-        onRequestSave={() => setConfirmOpen(true)}
+        onRequestSave={() => {
+          setSaveStatus('draft')
+          setConfirmOpen(true)
+        }}
+        onRequestCloseOrder={() => {
+          setSaveStatus('closed')
+          setConfirmOpen(true)
+        }}
         onClose={() => {
           setEntryOpen(false)
           setConfirmOpen(false)
@@ -244,7 +273,7 @@ export function ProductionTab({ user, canEdit }: Props) {
           />
           <div className="relative w-full max-w-sm bg-white border border-[#d2d2d7]/60 rounded-[20px] p-6 shadow-apple-lg scale-in">
             <h3 className="text-[16px] font-semibold text-[#1d1d1f] mb-4 tracking-[-0.01em]">
-              Xác nhận lưu dữ liệu
+              {saveStatus === 'closed' ? 'Xác nhận đóng lệnh' : 'Xác nhận lưu dữ liệu'}
             </h3>
 
             <div className="space-y-2 mb-5">
@@ -252,6 +281,7 @@ export function ProductionTab({ user, canEdit }: Props) {
                 state.pcodeStatuses[state.selectedPcode]?.pcode ?? state.selectedPcode
               } accent />
               <Row label="Xưởng" value={state.selectedWorkshop} />
+              <Row label="Trạng thái" value={saveStatus === 'closed' ? 'Đã đóng' : 'Lưu tạm'} />
             </div>
 
             <div className="flex gap-2.5">
@@ -284,12 +314,14 @@ function OrderCatalog({
   loading,
   selectedPcode,
   submittedPcodes,
+  closedPcodes,
   onSelect,
 }: {
   orders: Order[]
   loading: boolean
   selectedPcode: string
   submittedPcodes: string[]
+  closedPcodes: string[]
   onSelect: (order: Order) => void
 }) {
   if (loading) {
@@ -318,6 +350,7 @@ function OrderCatalog({
           order={order}
           selected={selectedPcode === order.pcode}
           submitted={submittedPcodes.includes(order.pcode)}
+          closed={closedPcodes.includes(order.pcode)}
           onClick={() => onSelect(order)}
         />
       ))}
@@ -329,11 +362,13 @@ function OrderRow({
   order,
   selected,
   submitted,
+  closed,
   onClick,
 }: {
   order: Order
   selected: boolean
   submitted: boolean
+  closed: boolean
   onClick: () => void
 }) {
   const rank = getProductionOrderStatusRank(order.status)
@@ -359,7 +394,11 @@ function OrderRow({
           <MobileLabel>Lệnh sản xuất</MobileLabel>
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-semibold text-[14px] text-dmc-primary truncate">{order.pcode}</span>
-            {submitted && (
+            {closed ? (
+              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#2f9e44] bg-[#2f9e44]/10">
+                <Lock size={9} /> Đã đóng
+              </span>
+            ) : submitted && (
               <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#b37700] bg-[#ff9500]/10">
                 <Lock size={9} /> Đã nhập
               </span>
@@ -404,6 +443,7 @@ function ProductionEntryDialog({
   getNormHint,
   onLineChange,
   onRequestSave,
+  onRequestCloseOrder,
   onClose,
 }: {
   open: boolean
@@ -419,6 +459,7 @@ function ProductionEntryDialog({
   getNormHint: (product: string) => NormItem | null
   onLineChange: (idx: number, field: keyof ProductLine, value: string | number) => void
   onRequestSave: () => void
+  onRequestCloseOrder: () => void
   onClose: () => void
 }) {
   if (!open) return null
@@ -486,11 +527,243 @@ function ProductionEntryDialog({
               <Save size={14} strokeWidth={2.5} />
               Lưu dữ liệu
             </button>
+            <button
+              type="button"
+              onClick={onRequestCloseOrder}
+              disabled={!canSubmit || submitting}
+              className="flex-1 sm:flex-none h-10 px-5 rounded-xl bg-[#1d1d1f] hover:opacity-90 text-white text-[13px] font-semibold active:scale-[0.98] transition-all disabled:opacity-35 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md shadow-black/10"
+            >
+              <Lock size={14} strokeWidth={2.5} />
+              Đóng lệnh
+            </button>
           </div>
         </div>
       </div>
     </div>
   )
+}
+
+function ProductionInputHistoryTab({ onBack }: { onBack: () => void }) {
+  const today = getTodayLocal()
+  const [fromDate, setFromDate] = useState(today)
+  const [toDate, setToDate] = useState(today)
+  const [query, setQuery] = useState('')
+  const [rows, setRows] = useState<ProductionInputHistoryRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [selectedRow, setSelectedRow] = useState<ProductionInputHistoryRow | null>(null)
+
+  async function loadHistory() {
+    setLoading(true)
+    const result = await listProductionInputHistoryAction({ fromDate, toDate, query: query.trim() })
+    setLoading(false)
+    if (!result.success) {
+      toast.error(result.error ?? 'Không tải được lịch sử nhập')
+      return
+    }
+    setRows(result.data ?? [])
+  }
+
+  useEffect(() => {
+    async function loadInitialHistory() {
+      setLoading(true)
+      const result = await listProductionInputHistoryAction({ fromDate: today, toDate: today, query: '' })
+      setLoading(false)
+      if (!result.success) {
+        toast.error(result.error ?? 'Không tải được lịch sử nhập')
+        return
+      }
+      setRows(result.data ?? [])
+    }
+
+    loadInitialHistory()
+  }, [today])
+
+  function exportExcel() {
+    if (rows.length === 0) {
+      toast.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    const sheetRows = rows.map((row) => ({
+      'Mã LSX': row.pcode,
+      'Thời gian lưu': formatDateTime(row.created_at),
+      'Đơn vị nhập': workshopCode(row.workshop) || row.workshop,
+      'Trạng thái': formatSaveStatus(row.save_status),
+      'Sản phẩm': row.product,
+      'SL nhập': row.poutput,
+      'SL lỗi': row.eoutput,
+      'SL sửa': row.routput,
+      'Nhân lực': row.workforce,
+      'Định mức thực tế': row.realnorm,
+      'Ghi chú': row.log,
+    }))
+    const ws = XLSX.utils.json_to_sheet(sheetRows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'LichSuNhap')
+    XLSX.writeFile(wb, `LichSuNhap_${fromDate}_${toDate}.xlsx`)
+  }
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
+      <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3 bg-white/85 backdrop-blur-sm">
+        <SectionLabel action={
+          <button
+            type="button"
+            onClick={onBack}
+            className="h-8 px-2.5 rounded-lg border border-[#d2d2d7]/70 text-[11px] font-medium text-[#6e6e73] bg-[#f2f2f7] hover:bg-[#e5e5ea] active:scale-95 transition-all"
+          >
+            Quay lại nhập liệu
+          </button>
+        }>
+          Lịch sử nhập
+        </SectionLabel>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[150px_150px_minmax(220px,1fr)_auto_auto] gap-2">
+          <FieldGroup label="Từ ngày">
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputCls} />
+          </FieldGroup>
+          <FieldGroup label="Đến ngày">
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={inputCls} />
+          </FieldGroup>
+          <FieldGroup label="Tìm kiếm">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && loadHistory()}
+              placeholder="Mã LSX, sản phẩm, đơn vị nhập, trạng thái, ghi chú..."
+              className={inputCls}
+            />
+          </FieldGroup>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={loadHistory}
+              disabled={loading}
+              className="h-10 w-full sm:w-auto px-4 rounded-xl bg-dmc-primary text-white text-[13px] font-semibold active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <Search size={14} />
+              Lọc
+            </button>
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={exportExcel}
+              className="h-10 w-full sm:w-auto px-4 rounded-xl border border-dmc-primary/30 bg-white text-dmc-primary text-[13px] font-semibold active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <Download size={14} />
+              Xuất Excel
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto px-3 sm:px-4 py-3">
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <div className="w-7 h-7 border-2 border-dmc-primary/30 border-t-dmc-primary rounded-full animate-spin" />
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-[#d2d2d7]/60 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+            <div className="min-w-[980px]">
+              <div className="grid grid-cols-[130px_150px_110px_110px_minmax(180px,1fr)_90px_minmax(160px,1fr)_70px] gap-3 px-3 py-2 bg-[#f2f2f7] text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73]">
+                <span>Mã LSX</span>
+                <span>Thời gian lưu</span>
+                <span>Đơn vị nhập</span>
+                <span>Trạng thái</span>
+                <span>Sản phẩm</span>
+                <span className="text-right">SL nhập</span>
+                <span>Ghi chú</span>
+                <span></span>
+              </div>
+              {rows.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => setSelectedRow(row)}
+                  className="w-full grid grid-cols-[130px_150px_110px_110px_minmax(180px,1fr)_90px_minmax(160px,1fr)_70px] gap-3 px-3 py-2.5 border-t border-[#d2d2d7]/50 text-left text-[12px] hover:bg-[#f5f5f7] transition-colors"
+                >
+                  <span className="font-semibold text-dmc-primary truncate">{row.pcode}</span>
+                  <span className="text-[#1d1d1f]">{formatDateTime(row.created_at)}</span>
+                  <span className="text-[#6e6e73] truncate">{workshopCode(row.workshop) || row.workshop || '—'}</span>
+                  <SaveStatusBadge status={row.save_status} />
+                  <span className="text-[#1d1d1f] truncate">{row.product || '—'}</span>
+                  <span className="text-right font-semibold text-[#1d1d1f]">{row.poutput}</span>
+                  <span className="text-[#6e6e73] truncate">{row.log || '—'}</span>
+                  <span className="text-dmc-primary inline-flex items-center gap-1 justify-end"><Eye size={13} /> Xem</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {selectedRow && <HistoryDetailModal row={selectedRow} onClose={() => setSelectedRow(null)} />}
+    </div>
+  )
+}
+
+function HistoryDetailModal({ row, onClose }: { row: ProductionInputHistoryRow; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl bg-white border border-[#d2d2d7]/60 rounded-[20px] p-5 shadow-apple-lg scale-in">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73]">Chi tiết lịch sử nhập</p>
+            <h3 className="text-[17px] font-semibold text-[#1d1d1f] truncate">{row.pcode}</h3>
+          </div>
+          <button type="button" onClick={onClose} className="w-9 h-9 rounded-full bg-[#f2f2f7] text-[#6e6e73] hover:text-[#1d1d1f] flex items-center justify-center">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+          <Row label="Thời gian lưu" value={formatDateTime(row.created_at)} />
+          <Row label="Trạng thái" value={formatSaveStatus(row.save_status)} />
+          <Row label="Đơn vị nhập" value={row.workshop || '—'} />
+          <Row label="Khách hàng" value={row.customer || '—'} />
+          <Row label="Sản phẩm" value={row.product || '—'} />
+          <Row label="Ngày sản xuất" value={row.pdate || '—'} />
+          <Row label="Giờ bắt đầu" value={row.starttime || '—'} />
+          <Row label="Giờ kết thúc" value={row.endtime || '—'} />
+          <Row label="SL nhập" value={String(row.poutput)} />
+          <Row label="SL lỗi" value={String(row.eoutput)} />
+          <Row label="SL sửa" value={String(row.routput)} />
+          <Row label="Nhân lực" value={String(row.workforce)} />
+          <Row label="Định mức thực tế" value={String(row.realnorm)} />
+          <Row label="Ghi chú" value={row.log || '—'} />
+        </div>
+        <div className="mt-4 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7]/60 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73] mb-1">Diễn giải lệnh</p>
+          <p className="text-[13px] text-[#1d1d1f] leading-relaxed">{row.orderDescription || '—'}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SaveStatusBadge({ status }: { status: 'draft' | 'closed' }) {
+  const closed = status === 'closed'
+  return (
+    <span className={cn(
+      'inline-flex items-center justify-center text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap',
+      closed
+        ? 'text-[#2f9e44] bg-[#2f9e44]/10 border-[#2f9e44]/20'
+        : 'text-[#b37700] bg-[#ff9500]/10 border-[#ff9500]/20'
+    )}>
+      {formatSaveStatus(status)}
+    </span>
+  )
+}
+
+function formatSaveStatus(status: 'draft' | 'closed'): string {
+  return status === 'closed' ? 'Đã đóng' : 'Lưu tạm'
+}
+
+function formatDateTime(value: string): string {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('vi-VN', { hour12: false })
 }
 
 function SectionLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {

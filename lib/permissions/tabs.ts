@@ -4,6 +4,7 @@ export type PermissionLevel = 'invisible' | 'view' | 'edit'
 
 export type PermissionKey =
   | TabId
+  | 'production.input-history'
   | 'maintenance.breakdowns'
   | 'maintenance.schedule'
   | 'maintenance.drawings'
@@ -35,6 +36,7 @@ export const TOP_LEVEL_PERMISSION_KEYS: TabId[] = [
 
 export const PERMISSION_KEYS: PermissionKey[] = [
   ...TOP_LEVEL_PERMISSION_KEYS,
+  'production.input-history',
   'maintenance.breakdowns',
   'maintenance.schedule',
   'maintenance.drawings',
@@ -53,6 +55,7 @@ export const PERMISSION_KEYS: PermissionKey[] = [
 
 export const PERMISSION_LABELS: Record<PermissionKey, { label: string; group: string }> = {
   production: { label: 'Sản Xuất', group: 'Tab chính' },
+  'production.input-history': { label: 'Lịch sử nhập', group: 'Sản Xuất' },
   maintenance: { label: 'Bảo Trì', group: 'Tab chính' },
   coordination: { label: 'Điều Phối', group: 'Tab chính' },
   administration: { label: 'Hành Chính NS', group: 'Tab chính' },
@@ -84,6 +87,7 @@ export const DEFAULT_ROLE_PERMISSIONS: PermissionMatrixByRole = {
   ADMIN: matrix(Object.fromEntries(PERMISSION_KEYS.map((key) => [key, 'edit'])) as RolePermissionMatrix),
   MANAGER: matrix({
     production: 'edit',
+    'production.input-history': 'edit',
     maintenance: 'edit',
     coordination: 'edit',
     administration: 'edit',
@@ -103,6 +107,7 @@ export const DEFAULT_ROLE_PERMISSIONS: PermissionMatrixByRole = {
   }),
   WORKSHOP_MANAGER: matrix({
     production: 'edit',
+    'production.input-history': 'edit',
     maintenance: 'view',
     coordination: 'view',
     administration: 'view',
@@ -122,6 +127,7 @@ export const DEFAULT_ROLE_PERMISSIONS: PermissionMatrixByRole = {
   }),
   TEAM_LEADER: matrix({
     production: 'edit',
+    'production.input-history': 'edit',
     coordination: 'view',
     administration: 'edit',
     report: 'view',

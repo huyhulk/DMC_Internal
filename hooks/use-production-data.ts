@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { getInitData, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
 import { getProductionRowsValidationError } from '@/lib/production/workflow'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
-import type { InitData, Order, NormItem, SessionUser, ProductLine, PcodeStatus } from '@/types'
+import type { InitData, Order, NormItem, ProductionSaveStatus, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
 export interface ProductionState {
   loading: boolean
@@ -49,14 +49,15 @@ function isDeliveredOrder(order: Pick<Order, 'status'>): boolean {
   return normalizedStatus(order.status).includes('da giao')
 }
 
-function buildPcodeStatuses(orders: Order[], submittedPcodes: string[]): Record<string, PcodeStatus> {
+function buildPcodeStatuses(orders: Order[], submittedPcodes: string[], closedPcodes: string[]): Record<string, PcodeStatus> {
   const statuses: Record<string, PcodeStatus> = {}
   orders.forEach((o) => {
     const isSubmitted = submittedPcodes.includes(o.pcode)
+    const isClosed = closedPcodes.includes(o.pcode)
     const isDelivered = isDeliveredOrder(o)
-    const locked = isSubmitted || isDelivered
-    const reason = isDelivered ? 'delivered' : isSubmitted ? 'submitted' : ''
-    const key = locked ? `${o.pcode} ${isDelivered ? '🔒📦' : '🔒'}` : o.pcode
+    const locked = isSubmitted || isClosed || isDelivered
+    const reason = isDelivered ? 'delivered' : isClosed ? 'closed' : isSubmitted ? 'submitted' : ''
+    const key = locked ? `${o.pcode} ${isDelivered ? '🔒📦' : isClosed ? '🔒✅' : '🔒'}` : o.pcode
     statuses[key] = { pcode: o.pcode, locked, reason: reason as PcodeStatus['reason'] }
   })
   return statuses
@@ -116,6 +117,7 @@ export function useProductionData(user: SessionUser) {
       const isOther = ws.startsWith('Việc khác')
       const orders = state.initData.orders.filter((o) => o.workshop === ws)
       const submitted = state.initData.submittedPcodes
+      const closed = state.initData.closedPcodes
 
       const statuses: Record<string, PcodeStatus> = {}
       if (isOther) {
@@ -124,7 +126,7 @@ export function useProductionData(user: SessionUser) {
           statuses[t] = { pcode: t, locked: false, reason: '' }
         })
       } else {
-        Object.assign(statuses, buildPcodeStatuses(orders, submitted))
+        Object.assign(statuses, buildPcodeStatuses(orders, submitted, closed))
       }
 
       setState((s) => ({
@@ -154,7 +156,7 @@ export function useProductionData(user: SessionUser) {
       }
 
       if (status.locked && !state.pcodeUnlocked) {
-        toast.warning('Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
+        toast.warning(status.reason === 'closed' ? 'Mã LSX này đã đóng. Cần mở khóa để nhập lại.' : 'Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
         return
       }
 
@@ -186,13 +188,14 @@ export function useProductionData(user: SessionUser) {
       }
 
       const submitted = state.initData.submittedPcodes.includes(order.pcode)
-      if (submitted && !state.pcodeUnlocked) {
-        toast.warning('Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
+      const closed = state.initData.closedPcodes.includes(order.pcode)
+      if ((submitted || closed) && !state.pcodeUnlocked) {
+        toast.warning(closed ? 'Mã LSX này đã đóng. Cần mở khóa để nhập lại.' : 'Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
         return false
       }
 
       const orders = state.initData.orders.filter((o) => o.workshop === order.workshop)
-      const statuses = buildPcodeStatuses(orders, state.initData.submittedPcodes)
+      const statuses = buildPcodeStatuses(orders, state.initData.submittedPcodes, state.initData.closedPcodes)
       const displayPcode = Object.keys(statuses).find((key) => statuses[key].pcode === order.pcode) ?? order.pcode
 
       setState((s) => ({
@@ -341,7 +344,7 @@ export function useProductionData(user: SessionUser) {
     return result.order
   }, [])
 
-  const submitProduction = useCallback(async () => {
+  const submitProduction = useCallback(async (saveStatus: ProductionSaveStatus = 'draft') => {
     const { initData, selectedDate, selectedWorkshop, selectedPcode, pcodeStatuses, lines, unlockLog } = state
     const status = pcodeStatuses[selectedPcode]
     const actualPcode = status?.pcode ?? selectedPcode
@@ -367,6 +370,7 @@ export function useProductionData(user: SessionUser) {
           endtime: lines[0].endtime,
           realnorm: 0,
           log: unlockLog.join(' | '),
+          save_status: saveStatus,
         }]
       : lines.slice(0, visibleRows)
           .filter((l) => l.product && !l.product.startsWith('--'))
@@ -384,6 +388,7 @@ export function useProductionData(user: SessionUser) {
             endtime: l.endtime,
             realnorm: l.realnorm,
             log: unlockLog.join(' | '),
+            save_status: saveStatus,
           }))
 
     const validationError = getProductionRowsValidationError(rowsToSave)

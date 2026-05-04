@@ -73,6 +73,7 @@ export interface ProductionRecord {
   endtime: string
   realnorm: number
   log: string
+  save_status?: 'draft' | 'closed'
 }
 
 export interface InitData {
@@ -80,6 +81,7 @@ export interface InitData {
   norms: NormItem[]
   materials: MaterialItem[]
   submittedPcodes: string[]
+  closedPcodes: string[]
 }
 
 export interface ProductionReportRow {
@@ -98,6 +100,29 @@ export interface ProductionReportRow {
   created_at?: string
 }
 
+export type ProductionSaveStatus = 'draft' | 'closed'
+
+export interface ProductionInputHistoryRow {
+  id: number
+  pdate: string
+  pcode: string
+  workshop: string
+  customer: string
+  product: string
+  orderDescription: string
+  poutput: number
+  eoutput: number
+  routput: number
+  workforce: number
+  realnorm: number
+  starttime: string
+  endtime: string
+  log: string
+  save_status: ProductionSaveStatus
+  created_at: string
+  updated_at?: string
+}
+
 export interface ProductLine {
   product: string
   pdate: string
@@ -113,7 +138,7 @@ export interface ProductLine {
 export interface PcodeStatus {
   pcode: string
   locked: boolean
-  reason: 'submitted' | 'delivered' | ''
+  reason: 'submitted' | 'delivered' | 'closed' | ''
 }
 
 export const FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
