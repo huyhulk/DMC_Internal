@@ -85,7 +85,7 @@ export async function updateRoleTabPermissionsAction(
 
   try {
     const rows = updates.map((row) => {
-      if (!['ADMIN', 'MANAGER', 'SUPERVISOR', 'USER'].includes(row.role)) throw new Error('Role không hợp lệ')
+      if (!(USER_ROLES as readonly string[]).includes(row.role)) throw new Error('Role không hợp lệ')
       if (!isPermissionKey(row.permission_key)) throw new Error('Tab không hợp lệ')
       if (!['invisible', 'view', 'edit'].includes(row.level)) throw new Error('Quyền không hợp lệ')
       return {
