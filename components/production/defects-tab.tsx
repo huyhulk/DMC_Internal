@@ -23,6 +23,7 @@ type DefectRow = Database['public']['Tables']['production_defects']['Row']
 interface Props {
   user: SessionUser
   allowedWorkshops: string[]
+  canEdit: boolean
 }
 
 const inputCls =
@@ -43,7 +44,7 @@ const EMPTY_ROW: DefectsBulkInput['rows'][number] = {
   notes:        '',
 }
 
-export function DefectsTab({ allowedWorkshops }: Props) {
+export function DefectsTab({ allowedWorkshops, canEdit }: Props) {
   const [submitting, setSubmitting]       = useState(false)
   const [history, setHistory]             = useState<DefectRow[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -77,6 +78,11 @@ export function DefectsTab({ allowedWorkshops }: Props) {
   useEffect(() => { void loadHistory() }, [])
 
   async function onSubmit(values: DefectsBulkInput) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
+
     setSubmitting(true)
     const res = await submitDefectsAction(values)
     if (res.success) {
@@ -100,6 +106,11 @@ export function DefectsTab({ allowedWorkshops }: Props) {
 
   return (
     <div className="space-y-6">
+      {!canEdit && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
+          Bạn chỉ có quyền xem tab này.
+        </div>
+      )}
       {/* Header */}
       <header className="flex items-start justify-between">
         <div>
@@ -235,7 +246,7 @@ export function DefectsTab({ allowedWorkshops }: Props) {
                     <button
                       type="button"
                       onClick={() => remove(idx)}
-                      disabled={fields.length === 1}
+                      disabled={!canEdit || fields.length === 1}
                       className="text-red-400 hover:text-red-600 disabled:opacity-25 transition-colors"
                       title="Xóa dòng"
                     >
@@ -253,7 +264,8 @@ export function DefectsTab({ allowedWorkshops }: Props) {
           <button
             type="button"
             onClick={() => append({ ...EMPTY_ROW })}
-            className="text-sm text-dmc-primary hover:underline flex items-center gap-1"
+            disabled={!canEdit}
+            className="text-sm text-dmc-primary hover:underline flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
           >
             <Plus size={14} /> Thêm dòng
           </button>
@@ -261,13 +273,14 @@ export function DefectsTab({ allowedWorkshops }: Props) {
             <button
               type="button"
               onClick={() => reset()}
-              className="px-4 py-2 text-sm rounded-xl border border-dmc-border hover:bg-[#f5f5f7] transition-colors"
+              disabled={!canEdit}
+              className="px-4 py-2 text-sm rounded-xl border border-dmc-border hover:bg-[#f5f5f7] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
             >
               Hủy
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={!canEdit || submitting}
               className="px-4 py-2 text-sm rounded-xl bg-dmc-primary text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 transition-opacity"
             >
               {submitting

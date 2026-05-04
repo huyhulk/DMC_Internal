@@ -1,7 +1,9 @@
 import { getSessionUser } from '@/lib/actions/auth'
+import { canEdit, requireTabView } from '@/lib/permissions/server'
 import { createClient } from '@/lib/supabase/server'
 import { DefectsTab } from '@/components/production/defects-tab'
 import { getUserWorkspaces } from '@/lib/utils'
+import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -9,8 +11,11 @@ export const metadata: Metadata = {
 }
 
 export default async function DefectsPage() {
-  const user = await getSessionUser()
-  if (!user) return null
+  const user = await requireTabView('production')
+  if (!user) {
+    const sessionUser = await getSessionUser()
+    redirect(sessionUser ? '/dashboard' : '/login')
+  }
 
   const supabase = await createClient()
   const { data: profile } = await supabase
@@ -25,9 +30,11 @@ export default async function DefectsPage() {
       ? ['DMC1', 'DMC3', 'DMC4', 'DMC5', 'PKT-SX']
       : userWorkspaces
 
+  const canEditTab = await canEdit(user, 'production')
+
   return (
     <div className="h-full overflow-auto p-6">
-      <DefectsTab user={user} allowedWorkshops={allowedWorkshops} />
+      <DefectsTab user={user} allowedWorkshops={allowedWorkshops} canEdit={canEditTab} />
     </div>
   )
 }

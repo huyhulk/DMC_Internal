@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/actions/auth'
+import { getVisiblePermissionKeys, getVisibleTopLevelTabs } from '@/lib/permissions/server'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 
 // No force-dynamic needed: cookies() inside getSessionUser makes this dynamic automatically
@@ -12,5 +13,14 @@ export default async function DashboardLayout({
   const user = await getSessionUser()
   if (!user) redirect('/login')
 
-  return <DashboardShell user={user}>{children}</DashboardShell>
+  const [visibleTabs, visiblePermissionKeys] = await Promise.all([
+    getVisibleTopLevelTabs(user.role),
+    getVisiblePermissionKeys(user.role),
+  ])
+
+  return (
+    <DashboardShell user={user} visibleTabs={visibleTabs} visiblePermissionKeys={visiblePermissionKeys}>
+      {children}
+    </DashboardShell>
+  )
 }

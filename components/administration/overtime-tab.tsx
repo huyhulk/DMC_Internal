@@ -49,12 +49,13 @@ function statusVariant(status: OvertimeRequestRow['approval_status']) {
 
 interface Props {
   user: SessionUser
+  canEdit: boolean
 }
 
-export function OvertimeTab({ user }: Props) {
+export function OvertimeTab({ user, canEdit }: Props) {
   const searchParams = useSearchParams()
   const today = getTodayLocal()
-  const approver = canApproveRequests(user.role)
+  const approver = canEdit && canApproveRequests(user.role)
   const allowedWorkshops = getMaintenanceWorkshopOptions(user.role, user.workspace, true)
   const requestWorkshopOptions = allowedWorkshops.filter((workshop) => workshop !== 'ALL')
   const defaultWorkshop = requestWorkshopOptions[0] ?? 'DMC1'
@@ -290,6 +291,10 @@ export function OvertimeTab({ user }: Props) {
   }
 
   async function submitRequest() {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     if (requestWorkshopOptions.length === 0) {
       toast.error('Tài khoản chưa được gán xưởng để tạo yêu cầu tăng ca')
       return
@@ -329,6 +334,10 @@ export function OvertimeTab({ user }: Props) {
   }
 
   async function review(id: string, decision: 'approved' | 'rejected') {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setReviewingId(id)
     try {
       const res = await reviewOvertimeRequestAction(id, decision)
@@ -402,17 +411,17 @@ export function OvertimeTab({ user }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Ngày OT *</label>
-              <input type="date" value={form.ot_date} onChange={(e) => updateOvertimeDate(e.target.value)} className={inputCls} />
+              <input type="date" value={form.ot_date} onChange={(e) => updateOvertimeDate(e.target.value)} disabled={!canEdit} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Xưởng *</label>
-              <select value={form.workshop} onChange={(e) => updateWorkshop(e.target.value)} className={inputCls}>
+              <select value={form.workshop} onChange={(e) => updateWorkshop(e.target.value)} disabled={!canEdit} className={inputCls}>
                 {requestWorkshopOptions.map((workshop) => <option key={workshop} value={workshop}>{workshop}</option>)}
               </select>
             </div>
             <div>
               <label className={labelCls}>Loại OT *</label>
-              <select value={form.ot_category} onChange={(e) => updateForm('ot_category', e.target.value as typeof form.ot_category)} className={inputCls}>
+              <select value={form.ot_category} onChange={(e) => updateForm('ot_category', e.target.value as typeof form.ot_category)} disabled={!canEdit} className={inputCls}>
                 {OVERTIME_CATEGORIES.map((category) => (
                   <option key={category} value={category}>{OVERTIME_CATEGORY_LABELS[category]}</option>
                 ))}
@@ -423,7 +432,7 @@ export function OvertimeTab({ user }: Props) {
               <select
                 value={form.pcode}
                 onChange={(e) => updatePcode(e.target.value)}
-                disabled={ordersLoading || orderOptions.length === 0}
+                disabled={!canEdit || ordersLoading || orderOptions.length === 0}
                 className={inputCls}
               >
                 <option value="">
@@ -446,11 +455,11 @@ export function OvertimeTab({ user }: Props) {
             </div>
             <div>
               <label className={labelCls}>Giờ kế hoạch</label>
-              <input type="number" min="0" step="0.5" value={form.planned_hours} onChange={(e) => updateForm('planned_hours', e.target.value)} className={inputCls} />
+              <input type="number" min="0" step="0.5" value={form.planned_hours} onChange={(e) => updateForm('planned_hours', e.target.value)} disabled={!canEdit} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Sản lượng cần</label>
-              <input type="number" min="0" step="1" value={form.required_output} onChange={(e) => updateForm('required_output', e.target.value)} className={inputCls} />
+              <input type="number" min="0" step="1" value={form.required_output} onChange={(e) => updateForm('required_output', e.target.value)} disabled={!canEdit} className={inputCls} />
             </div>
           </div>
 
@@ -463,6 +472,7 @@ export function OvertimeTab({ user }: Props) {
                     type="checkbox"
                     checked={Boolean(reasons[reason])}
                     onChange={(e) => setReasons((prev) => ({ ...prev, [reason]: e.target.checked }))}
+                    disabled={!canEdit}
                     className="h-3.5 w-3.5 accent-dmc-primary"
                   />
                   <span>{OVERTIME_REASON_LABELS[reason]}</span>
@@ -474,7 +484,7 @@ export function OvertimeTab({ user }: Props) {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className={labelCls}>Nhân viên tham gia *</label>
-              <button type="button" onClick={addParticipant} className="inline-flex items-center gap-1 text-[12px] font-medium text-dmc-primary">
+              <button type="button" onClick={addParticipant} disabled={!canEdit} className="inline-flex items-center gap-1 text-[12px] font-medium text-dmc-primary disabled:cursor-not-allowed disabled:opacity-40">
                 <Plus size={13} /> Thêm người
               </button>
             </div>
@@ -484,7 +494,7 @@ export function OvertimeTab({ user }: Props) {
                   <select
                     value={participant.human_resource_id}
                     onChange={(e) => updateParticipantEmployee(index, e.target.value)}
-                    disabled={employeesLoading || employeeOptions.length === 0}
+                    disabled={!canEdit || employeesLoading || employeeOptions.length === 0}
                     className={inputCls}
                   >
                     <option value="">
@@ -507,12 +517,13 @@ export function OvertimeTab({ user }: Props) {
                     step="0.5"
                     value={participant.hours}
                     onChange={(e) => updateParticipant(index, 'hours', e.target.value)}
+                    disabled={!canEdit}
                     className={inputCls}
                   />
                   <button
                     type="button"
                     onClick={() => removeParticipant(index)}
-                    disabled={participants.length === 1}
+                    disabled={!canEdit || participants.length === 1}
                     className="h-9 rounded-lg border border-[#d2d2d7] text-[#ff3b30] hover:bg-[#ff3b30]/5 disabled:opacity-30"
                     title="Xóa dòng"
                   >
@@ -525,13 +536,13 @@ export function OvertimeTab({ user }: Props) {
 
           <div>
             <label className={labelCls}>Ghi chú</label>
-            <textarea value={form.notes} onChange={(e) => updateForm('notes', e.target.value)} rows={3} className={cn(inputCls, 'h-auto resize-none')} />
+            <textarea value={form.notes} onChange={(e) => updateForm('notes', e.target.value)} rows={3} disabled={!canEdit} className={cn(inputCls, 'h-auto resize-none')} />
           </div>
 
           <button
             type="button"
             onClick={submitRequest}
-            disabled={submitting || requestWorkshopOptions.length === 0}
+            disabled={!canEdit || submitting || requestWorkshopOptions.length === 0}
             className="w-full h-10 rounded-xl bg-dmc-primary text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             <Send size={14} />

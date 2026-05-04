@@ -13,6 +13,8 @@ import {
   type IsoCreateInput, type IsoUpdateProgressInput, type IsoCompleteInput,
 } from '@/lib/validations/coordination'
 import logger from '@/lib/logger'
+import { requireTabEdit } from '@/lib/permissions/server'
+import type { PermissionKey } from '@/lib/permissions/tabs'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,11 @@ async function requireAuth() {
   return { user, profile: profileData as { role: string; workspace: string } | null, supabase }
 }
 
+async function requireEdit(key: PermissionKey): Promise<ActionResult<never> | null> {
+  const user = await requireTabEdit(key)
+  return user ? null : { success: false, message: 'Bạn chỉ có quyền xem tab này.' }
+}
+
 function revalidate() {
   revalidatePath('/dashboard/coordination')
   revalidatePath('/dashboard/report/kpi')
@@ -74,6 +81,9 @@ function revalidate() {
 
 export async function createDeliveryAction(input: DeliveryCreateInput): Promise<ActionResult<string>> {
   try {
+    const denied = await requireEdit('coordination.delivery')
+    if (denied) return denied
+
     const parsed = deliveryCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -108,6 +118,9 @@ export async function createDeliveryAction(input: DeliveryCreateInput): Promise<
 
 export async function updateDeliveryAction(id: string, input: Partial<DeliveryCreateInput>): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.delivery')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
@@ -133,6 +146,9 @@ export async function updateDeliveryAction(id: string, input: Partial<DeliveryCr
 
 export async function completeDeliveryAction(id: string, input: DeliveryCompleteInput): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.delivery')
+    if (denied) return denied
+
     const parsed = deliveryCompleteSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -162,6 +178,9 @@ export async function completeDeliveryAction(id: string, input: DeliveryComplete
 
 export async function cancelDeliveryAction(id: string, reason?: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.delivery')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
 
@@ -182,6 +201,9 @@ export async function cancelDeliveryAction(id: string, reason?: string): Promise
 
 export async function startDeliveryAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.delivery')
+    if (denied) return denied
+
     const { user, supabase } = await requireAuth()
     if (!user) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
 
@@ -198,6 +220,9 @@ export async function startDeliveryAction(id: string): Promise<ActionResult> {
 
 export async function deleteDeliveryAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.delivery')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
@@ -242,6 +267,9 @@ export async function listDeliveriesAction(filter: {
 
 export async function upsertCostBaselineAction(input: DeliveryBaselineInput): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.delivery')
+    if (denied) return denied
+
     const parsed = deliveryBaselineSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -285,6 +313,9 @@ export async function listCostBaselinesAction(): Promise<ActionResult<BaselineRo
 
 export async function createFinding5sAction(input: Finding5sCreateInput): Promise<ActionResult<string>> {
   try {
+    const denied = await requireEdit('coordination.findings5s')
+    if (denied) return denied
+
     const parsed = finding5sCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -317,6 +348,9 @@ export async function createFinding5sAction(input: Finding5sCreateInput): Promis
 
 export async function resolveFinding5sAction(id: string, input: Finding5sResolveInput): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.findings5s')
+    if (denied) return denied
+
     const parsed = finding5sResolveSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -340,6 +374,9 @@ export async function resolveFinding5sAction(id: string, input: Finding5sResolve
 
 export async function updateFinding5sAction(id: string, input: Partial<Finding5sCreateInput>): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.findings5s')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
@@ -363,6 +400,9 @@ export async function updateFinding5sAction(id: string, input: Partial<Finding5s
 
 export async function deleteFinding5sAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.findings5s')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
@@ -411,6 +451,9 @@ export async function listFindings5sAction(filter: {
 
 export async function createStatReportAction(input: StatReportCreateInput): Promise<ActionResult<string>> {
   try {
+    const denied = await requireEdit('coordination.reports')
+    if (denied) return denied
+
     const parsed = statReportCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -439,6 +482,9 @@ export async function createStatReportAction(input: StatReportCreateInput): Prom
 
 export async function bulkCreateStatReportAction(input: StatReportBulkInput): Promise<ActionResult<number>> {
   try {
+    const denied = await requireEdit('coordination.reports')
+    if (denied) return denied
+
     const parsed = statReportBulkSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -484,6 +530,9 @@ export async function bulkCreateStatReportAction(input: StatReportBulkInput): Pr
 
 export async function submitStatReportAction(id: string, input: StatReportSubmitInput): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.reports')
+    if (denied) return denied
+
     const parsed = statReportSubmitSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -508,6 +557,9 @@ export async function submitStatReportAction(id: string, input: StatReportSubmit
 
 export async function updateStatReportAction(id: string, input: Partial<StatReportCreateInput>): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.reports')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
@@ -532,6 +584,9 @@ export async function updateStatReportAction(id: string, input: Partial<StatRepo
 
 export async function deleteStatReportAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('coordination.reports')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
@@ -576,6 +631,9 @@ export async function listStatReportsAction(filter: {
 
 export async function createIsoAction(input: IsoCreateInput): Promise<ActionResult<string>> {
   try {
+    const denied = await requireEdit('administration.iso')
+    if (denied) return denied
+
     const parsed = isoCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -608,6 +666,9 @@ export async function createIsoAction(input: IsoCreateInput): Promise<ActionResu
 
 export async function updateIsoProgressAction(id: string, progress_pct: number): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('administration.iso')
+    if (denied) return denied
+
     const parsed = isoUpdateProgressSchema.safeParse({ progress_pct })
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -633,6 +694,9 @@ export async function updateIsoProgressAction(id: string, progress_pct: number):
 
 export async function completeIsoAction(id: string, input: IsoCompleteInput): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('administration.iso')
+    if (denied) return denied
+
     const parsed = isoCompleteSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -658,6 +722,9 @@ export async function completeIsoAction(id: string, input: IsoCompleteInput): Pr
 
 export async function updateIsoAction(id: string, input: Partial<IsoCreateInput>): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('administration.iso')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
@@ -681,6 +748,9 @@ export async function updateIsoAction(id: string, input: Partial<IsoCreateInput>
 
 export async function deleteIsoAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('administration.iso')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }

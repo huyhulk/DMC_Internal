@@ -30,9 +30,12 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'neutral
   inactive:    'neutral',
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function MachinesTab({ user }: Props) {
+export function MachinesTab({ user, canEdit }: Props) {
   const [rows, setRows]             = useState<MachineRow[]>([])
   const [loading, setLoading]       = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -41,7 +44,7 @@ export function MachinesTab({ user }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [filterLoc, setFilterLoc]   = useState<string>('ALL')
 
-  const canWrite = user.role === 'ADMIN' || user.role === 'MANAGER'
+  const canWrite = canEdit && (user.role === 'ADMIN' || user.role === 'MANAGER')
 
   const load = useCallback(async () => {
     setLoading(true)

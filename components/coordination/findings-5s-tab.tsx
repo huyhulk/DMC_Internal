@@ -45,9 +45,10 @@ function dueDateColor(dueDate: string, resolvedDate: string | null) {
 interface Props {
   user: SessionUser
   dept: typeof FIVE_S_DEPARTMENTS[number]
+  canEdit: boolean
 }
 
-export function Findings5sTab({ user, dept }: Props) {
+export function Findings5sTab({ user, dept, canEdit }: Props) {
   const [rows, setRows]         = useState<Finding5sRow[]>([])
   const [loading, setLoading]   = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -89,6 +90,10 @@ export function Findings5sTab({ user, dept }: Props) {
   })
 
   async function onCreateSubmit(values: Finding5sCreateInput) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await createFinding5sAction(values)
     if (res.success) { toast.success(res.message); setShowCreate(false); createForm.reset({ finding_date: getTodayLocal(), department: dept, severity: 'medium', due_date: getLocalDateAfterDays(7), workshop: 'DMC1' }); void load() }
@@ -98,6 +103,10 @@ export function Findings5sTab({ user, dept }: Props) {
 
   async function onResolveSubmit(values: Finding5sResolveInput) {
     if (!resolveId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await resolveFinding5sAction(resolveId, values)
     if (res.success) { toast.success(res.message); setResolveId(null); void load() }
@@ -107,6 +116,10 @@ export function Findings5sTab({ user, dept }: Props) {
 
   async function onDelete() {
     if (!deleteId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await deleteFinding5sAction(deleteId)
     if (res.success) { toast.success(res.message); setDeleteId(null); void load() }
@@ -123,10 +136,12 @@ export function Findings5sTab({ user, dept }: Props) {
           <h1 className="text-xl font-semibold text-[#1d1d1f]">5S {deptLabel} (KH-04)</h1>
           <p className="text-[13px] text-[#6e6e73] mt-0.5">Theo dõi phát hiện và xử lý vấn đề 5S</p>
         </div>
-        <button onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
-          <Plus size={14} /> Phát hiện mới
-        </button>
+        {canEdit && (
+          <button onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
+            <Plus size={14} /> Phát hiện mới
+          </button>
+        )}
       </div>
 
       {/* Filter */}
@@ -208,13 +223,13 @@ export function Findings5sTab({ user, dept }: Props) {
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">
-                        {!row.resolved_date && (
+                        {canEdit && !row.resolved_date && (
                           <button onClick={() => { setResolveId(row.id); resolveForm.reset({ resolved_date: getTodayLocal() }) }}
                             title="Xử lý" className="text-emerald-600 hover:text-emerald-700">
                             <CheckCircle size={15} />
                           </button>
                         )}
-                        {user.role === 'ADMIN' && (
+                        {canEdit && user.role === 'ADMIN' && (
                           <button onClick={() => setDeleteId(row.id)} title="Xóa" className="text-red-400 hover:text-red-600">
                             <Trash2 size={14} />
                           </button>

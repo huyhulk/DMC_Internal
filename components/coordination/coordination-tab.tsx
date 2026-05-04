@@ -9,12 +9,13 @@ import { resolveCoordinationSub } from '@/lib/navigation/dashboard'
 interface Props {
   activeSub: string
   user: SessionUser
+  canEdit: boolean
 }
 
-export function CoordinationTab({ activeSub, user }: Props) {
+export function CoordinationTab({ activeSub, user, canEdit }: Props) {
   const sub = resolveCoordinationSub(activeSub)
 
-  if (sub === 'delivery')   return <DeliveryTab user={user} />
-  if (sub === 'findings5s') return <Findings5sTab dept="COORDINATION" user={user} />
-  return <ReportsTab user={user} />
+  if (sub === 'delivery')   return <DeliveryTab user={user} canEdit={canEdit} />
+  if (sub === 'findings5s') return <Findings5sTab dept="COORDINATION" user={user} canEdit={canEdit} />
+  return <ReportsTab user={user} canEdit={canEdit} />
 }

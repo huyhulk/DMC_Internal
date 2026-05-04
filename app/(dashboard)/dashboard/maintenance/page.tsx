@@ -1,7 +1,10 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/actions/auth'
+import { canEdit, canView, requireTabView } from '@/lib/permissions/server'
 import { MaintenanceShell } from '@/components/maintenance/maintenance-shell'
+import { resolveMaintenanceSub } from '@/lib/navigation/dashboard'
+import type { PermissionKey } from '@/lib/permissions/tabs'
 
 export const metadata: Metadata = { title: 'Bảo Trì | DMC Production' }
 
@@ -10,14 +13,20 @@ export default async function MaintenancePage({
 }: {
   searchParams: Promise<{ sub?: string }>
 }) {
-  const [user, params] = await Promise.all([getSessionUser(), searchParams])
-  if (!user) redirect('/login')
+  const [user, params] = await Promise.all([requireTabView('maintenance'), searchParams])
+  if (!user) {
+    const sessionUser = await getSessionUser()
+    redirect(sessionUser ? '/dashboard' : '/login')
+  }
 
-  const activeSub = params.sub ?? 'breakdowns'
+  const activeSub = resolveMaintenanceSub(params.sub)
+  const permissionKey = `maintenance.${activeSub}` as PermissionKey
+  if (!await canView(user, permissionKey)) redirect('/dashboard')
+  const canEditTab = await canEdit(user, permissionKey)
 
   return (
     <div className="h-full overflow-hidden">
-      <MaintenanceShell user={user} activeSub={activeSub} />
+      <MaintenanceShell user={user} activeSub={activeSub} canEdit={canEditTab} />
     </div>
   )
 }

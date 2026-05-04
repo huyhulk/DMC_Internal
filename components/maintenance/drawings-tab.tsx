@@ -39,9 +39,12 @@ function statusVariant(s: string): 'success' | 'info' | 'warning' | 'danger' | '
   return 'neutral'
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function DrawingsTab({ user }: Props) {
+export function DrawingsTab({ user, canEdit }: Props) {
   const [rows, setRows]       = useState<DrawingRow[]>([])
   const [loading, setLoading] = useState(true)
   const [mode, setMode]       = useState<'request' | 'deliver'>('request')
@@ -120,10 +123,12 @@ export function DrawingsTab({ user }: Props) {
           <h1 className="text-xl font-semibold text-[#1d1d1f]">Bản vẽ kỹ thuật (KT-05/06)</h1>
           <p className="text-[13px] text-[#6e6e73] mt-0.5">Quản lý yêu cầu, tiến độ và bàn giao bản vẽ</p>
         </div>
-        <button onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
-          <Plus size={14} /> Thêm yêu cầu
-        </button>
+        {canEdit && (
+          <button onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
+            <Plus size={14} /> Thêm yêu cầu
+          </button>
+        )}
       </div>
 
       {/* Mode + filter */}
@@ -210,13 +215,13 @@ export function DrawingsTab({ user }: Props) {
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">
-                        {row.status !== 'released' && (
+                        {canEdit && row.status !== 'released' && (
                           <button onClick={() => { setDeliverId(row.id); completeForm.reset({ delivered_date: getTodayLocal(), has_errors: false, status: 'released' }) }}
                             title="Bàn giao" className="text-blue-600 hover:text-blue-700">
                             <Send size={14} />
                           </button>
                         )}
-                        {user.role === 'ADMIN' && (
+                        {canEdit && user.role === 'ADMIN' && (
                           <button onClick={() => setDeleteId(row.id)} title="Xóa" className="text-red-400 hover:text-red-600">
                             <Trash2 size={14} />
                           </button>

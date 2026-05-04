@@ -9,6 +9,7 @@ import { updateKpiTargetsAction, type KpiTargetRow } from '@/lib/actions/kpi-set
 
 interface Props {
   initialRows: KpiTargetRow[]
+  canEdit: boolean
 }
 
 type FormValues = {
@@ -53,7 +54,7 @@ function OperatorBadge({ op }: { op: string }) {
   return <Minus size={13} className="text-gray-400 shrink-0" />
 }
 
-export function KpiSettingsTab({ initialRows }: Props) {
+export function KpiSettingsTab({ initialRows, canEdit }: Props) {
   const [saving, setSaving] = useState(false)
 
   const { register, handleSubmit, formState: { isDirty } } = useForm<FormValues>({
@@ -69,6 +70,10 @@ export function KpiSettingsTab({ initialRows }: Props) {
   })
 
   async function onSubmit(values: FormValues) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSaving(true)
     const updates = values.rows.map(r => ({
       kpi_code:         r.kpi_code,
@@ -102,7 +107,7 @@ export function KpiSettingsTab({ initialRows }: Props) {
         </div>
         <button
           type="submit"
-          disabled={saving || !isDirty}
+          disabled={!canEdit || saving || !isDirty}
           className={cn(
             'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all',
             'bg-dmc-primary text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed'
@@ -171,6 +176,7 @@ export function KpiSettingsTab({ initialRows }: Props) {
                             min="0"
                             placeholder="—"
                             {...register(`rows.${formIdx}.target_monthly`, { valueAsNumber: false })}
+                            disabled={!canEdit}
                             className={inputCls}
                           />
                         </td>
@@ -181,6 +187,7 @@ export function KpiSettingsTab({ initialRows }: Props) {
                             min="0"
                             placeholder="—"
                             {...register(`rows.${formIdx}.target_quarterly`, { valueAsNumber: false })}
+                            disabled={!canEdit}
                             className={inputCls}
                           />
                         </td>
@@ -191,6 +198,7 @@ export function KpiSettingsTab({ initialRows }: Props) {
                             min="0"
                             placeholder="—"
                             {...register(`rows.${formIdx}.target_yearly`, { valueAsNumber: false })}
+                            disabled={!canEdit}
                             className={inputCls}
                           />
                         </td>
@@ -200,6 +208,7 @@ export function KpiSettingsTab({ initialRows }: Props) {
                             step="0.01"
                             min="0"
                             {...register(`rows.${formIdx}.target_value`, { valueAsNumber: false })}
+                            disabled={!canEdit}
                             className={cn(inputCls, 'border-violet-200 focus:ring-violet-300/40 focus:border-violet-300')}
                           />
                         </td>

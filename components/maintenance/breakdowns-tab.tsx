@@ -39,9 +39,12 @@ function formatDowntime(minutes: number | null) {
   return `${h}g ${m}p`
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function BreakdownsTab({ user }: Props) {
+export function BreakdownsTab({ user, canEdit }: Props) {
   const [rows, setRows]             = useState<BreakdownRow[]>([])
   const [loading, setLoading]       = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -148,12 +151,14 @@ export function BreakdownsTab({ user }: Props) {
           <h1 className="text-xl font-semibold text-[#1d1d1f]">Sự cố máy (KT-01/02/03)</h1>
           <p className="text-[13px] text-[#6e6e73] mt-0.5">Theo dõi downtime, loại lỗi và xử lý sự cố</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90 transition-opacity"
-        >
-          <Plus size={14} /> Báo cáo sự cố
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90 transition-opacity"
+          >
+            <Plus size={14} /> Báo cáo sự cố
+          </button>
+        )}
       </div>
 
       {/* Filter bar */}
@@ -238,7 +243,7 @@ export function BreakdownsTab({ user }: Props) {
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">
-                        {row.status !== 'resolved' && (
+                        {canEdit && row.status !== 'resolved' && (
                           <button
                             onClick={() => { setResolveId(row.id); resolveForm.reset({ breakdown_end: getLocalDateTimeInputValue() }) }}
                             title="Đánh dấu xong"
@@ -247,7 +252,7 @@ export function BreakdownsTab({ user }: Props) {
                             <CheckCircle size={15} />
                           </button>
                         )}
-                        {user.role === 'ADMIN' && (
+                        {canEdit && user.role === 'ADMIN' && (
                           <button onClick={() => setDeleteId(row.id)} title="Xóa"
                             className="text-red-400 hover:text-red-600 transition-colors">
                             <Trash2 size={14} />

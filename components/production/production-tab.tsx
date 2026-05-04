@@ -24,7 +24,10 @@ import {
 import { cn, getTodayLocal } from '@/lib/utils'
 import type { NormItem, Order, ProductLine, SessionUser } from '@/types'
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
 const inputCls =
   'w-full h-10 px-3 rounded-xl text-[13px] font-medium ' +
@@ -34,7 +37,7 @@ const inputCls =
   'disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 ' +
   'shadow-[0_1px_2px_rgba(0,0,0,0.05)]'
 
-export function ProductionTab({ user }: Props) {
+export function ProductionTab({ user, canEdit }: Props) {
   const today = getTodayLocal()
   const {
     state, visibleRows,
@@ -64,7 +67,7 @@ export function ProductionTab({ user }: Props) {
   const hasSubmittedOrders = submittedPcodes.length > 0
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
-  const canSubmit = Boolean(state.selectedPcode && !state.loading)
+  const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
 
   async function handleSearch() {
     const query = searchQuery.trim()
@@ -106,6 +109,11 @@ export function ProductionTab({ user }: Props) {
   }
 
   async function handleSubmit() {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
+
     setSubmitting(true)
     const ok = await submitProduction()
     setSubmitting(false)
@@ -120,6 +128,11 @@ export function ProductionTab({ user }: Props) {
   return (
     <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
       <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3 bg-white/85 backdrop-blur-sm">
+        {!canEdit && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-700">
+            Bạn chỉ có quyền xem tab này.
+          </div>
+        )}
         <SectionLabel action={
           <div className="flex items-center gap-2">
             {hasSubmittedOrders && (
@@ -196,6 +209,7 @@ export function ProductionTab({ user }: Props) {
         visibleRows={visibleRows}
         lines={state.lines}
         products={productOptions}
+        canEdit={canEdit}
         canSubmit={canSubmit}
         submitting={submitting}
         getNormHint={getNormHint}
@@ -384,6 +398,7 @@ function ProductionEntryDialog({
   visibleRows,
   lines,
   products,
+  canEdit,
   canSubmit,
   submitting,
   getNormHint,
@@ -398,6 +413,7 @@ function ProductionEntryDialog({
   visibleRows: number
   lines: ProductLine[]
   products: string[]
+  canEdit: boolean
   canSubmit: boolean
   submitting: boolean
   getNormHint: (product: string) => NormItem | null
@@ -440,7 +456,7 @@ function ProductionEntryDialog({
               line={lines[i]}
               products={products}
               normHint={getNormHint(lines[i].product)}
-              disabled={!order}
+              disabled={!canEdit || !order}
               onChange={(field, value) => onLineChange(i, field, value)}
             />
           ))}

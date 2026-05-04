@@ -39,9 +39,12 @@ function statusVariant(s: string): 'neutral' | 'warning' | 'info' | 'success' | 
   return 'neutral'
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function IsoTab({ user }: Props) {
+export function IsoTab({ user, canEdit }: Props) {
   const [rows, setRows]         = useState<IsoProcedureRow[]>([])
   const [loading, setLoading]   = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -80,6 +83,10 @@ export function IsoTab({ user }: Props) {
   })
 
   async function onCreateSubmit(values: IsoCreateInput) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await createIsoAction(values)
     if (res.success) {
@@ -93,6 +100,10 @@ export function IsoTab({ user }: Props) {
 
   async function onCompleteSubmit(values: IsoCompleteInput) {
     if (!completeId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await completeIsoAction(completeId, values)
     if (res.success) { toast.success(res.message); setCompleteId(null); void load() }
@@ -102,6 +113,10 @@ export function IsoTab({ user }: Props) {
 
   async function saveProgress() {
     if (!progressId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await updateIsoProgressAction(progressId, progressVal)
     if (res.success) { toast.success(res.message); setProgressId(null); void load() }
@@ -111,6 +126,10 @@ export function IsoTab({ user }: Props) {
 
   async function onDelete() {
     if (!deleteId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await deleteIsoAction(deleteId)
     if (res.success) { toast.success(res.message); setDeleteId(null); void load() }
@@ -127,10 +146,12 @@ export function IsoTab({ user }: Props) {
           <h1 className="text-xl font-semibold text-[#1d1d1f]">Quy trình ISO (KH-06)</h1>
           <p className="text-[13px] text-[#6e6e73] mt-0.5">Xây dựng, cập nhật tiến độ và phát hành quy trình</p>
         </div>
-        <button onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
-          <Plus size={14} /> Thêm quy trình
-        </button>
+        {canEdit && (
+          <button onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
+            <Plus size={14} /> Thêm quy trình
+          </button>
+        )}
       </div>
 
       {/* Filter */}
@@ -224,7 +245,7 @@ export function IsoTab({ user }: Props) {
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">
-                        {row.status !== 'released' && (
+                        {canEdit && row.status !== 'released' && (
                           <>
                             <button
                               onClick={() => { setProgressId(row.id); setProgressVal(Number(row.progress_pct)) }}
@@ -239,7 +260,7 @@ export function IsoTab({ user }: Props) {
                             </button>
                           </>
                         )}
-                        {user.role === 'ADMIN' && (
+                        {canEdit && user.role === 'ADMIN' && (
                           <button onClick={() => setDeleteId(row.id)} title="Xóa" className="text-red-400 hover:text-red-600">
                             <Trash2 size={14} />
                           </button>

@@ -48,11 +48,12 @@ const EMPTY_FORM = { username: '', password: '', role: 'USER' as UserRole, works
 
 interface Props {
   currentUserId: string
+  canEdit: boolean
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function UserManagement({ currentUserId }: Props) {
+export function UserManagement({ currentUserId, canEdit }: Props) {
   const [users, setUsers]           = useState<UserRow[]>([])
   const [search, setSearch]         = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -125,6 +126,10 @@ export function UserManagement({ currentUserId }: Props) {
   // ── Save (create or update) ─────────────────────────────────────────────────
 
   async function handleSave() {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSaving(true)
     try {
       if (selectedId === null) {
@@ -163,6 +168,10 @@ export function UserManagement({ currentUserId }: Props) {
 
   async function handleDelete() {
     if (!selectedId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     if (!confirmDelete) { setConfirmDelete(true); return }
     setDeleting(true)
     try {
@@ -184,6 +193,10 @@ export function UserManagement({ currentUserId }: Props) {
 
   async function handleResetPassword() {
     if (!selectedId || !resetPass) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setResetting(true)
     try {
       const result = await adminResetPasswordAction(selectedId, resetPass)
@@ -223,16 +236,18 @@ export function UserManagement({ currentUserId }: Props) {
             </h1>
             <p className="text-[12px] text-[#6e6e73] mt-0.5">{users.length} tài khoản</p>
           </div>
-          <button
-            onClick={selectNew}
-            className="flex items-center gap-1.5 h-9 px-4 rounded-[10px]
-                       bg-[#3b5bdb] hover:bg-[#2f4ac4] active:scale-[0.98]
-                       text-white text-[13px] font-semibold
-                       transition-all duration-150 shadow-sm"
-          >
-            <UserPlus size={14} strokeWidth={2.5} />
-            Thêm người dùng
-          </button>
+          {canEdit && (
+            <button
+              onClick={selectNew}
+              className="flex items-center gap-1.5 h-9 px-4 rounded-[10px]
+                         bg-[#3b5bdb] hover:bg-[#2f4ac4] active:scale-[0.98]
+                         text-white text-[13px] font-semibold
+                         transition-all duration-150 shadow-sm"
+            >
+              <UserPlus size={14} strokeWidth={2.5} />
+              Thêm người dùng
+            </button>
+          )}
         </div>
       </div>
 
@@ -261,20 +276,22 @@ export function UserManagement({ currentUserId }: Props) {
           {/* List */}
           <div className="flex-1 overflow-y-auto rounded-2xl border border-[#d2d2d7]/60 bg-white divide-y divide-[#f2f2f7]">
             {/* New user item */}
-            <button
-              onClick={selectNew}
-              className={cn(
-                'w-full flex items-center gap-2.5 px-3.5 py-3 text-left transition-all duration-100',
-                selectedId === null
-                  ? 'bg-[#3b5bdb]/5 border-l-2 border-[#3b5bdb]'
-                  : 'hover:bg-[#f5f5f7]'
-              )}
-            >
-              <div className="w-7 h-7 rounded-full bg-[#3b5bdb]/10 flex items-center justify-center shrink-0">
-                <UserPlus size={12} className="text-[#3b5bdb]" strokeWidth={2.5} />
-              </div>
-              <span className="text-[13px] font-semibold text-[#3b5bdb]">Tạo mới</span>
-            </button>
+            {canEdit && (
+              <button
+                onClick={selectNew}
+                className={cn(
+                  'w-full flex items-center gap-2.5 px-3.5 py-3 text-left transition-all duration-100',
+                  selectedId === null
+                    ? 'bg-[#3b5bdb]/5 border-l-2 border-[#3b5bdb]'
+                    : 'hover:bg-[#f5f5f7]'
+                )}
+              >
+                <div className="w-7 h-7 rounded-full bg-[#3b5bdb]/10 flex items-center justify-center shrink-0">
+                  <UserPlus size={12} className="text-[#3b5bdb]" strokeWidth={2.5} />
+                </div>
+                <span className="text-[13px] font-semibold text-[#3b5bdb]">Tạo mới</span>
+              </button>
+            )}
 
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -312,7 +329,7 @@ export function UserManagement({ currentUserId }: Props) {
                   type="text"
                   value={form.username}
                   onChange={(e) => setField('username', e.target.value)}
-                  disabled={selectedId !== null}
+                  disabled={!canEdit || selectedId !== null}
                   placeholder="vd: nguyen_van_a"
                   className={cn(
                     INPUT_CLS,
@@ -329,6 +346,7 @@ export function UserManagement({ currentUserId }: Props) {
                     value={form.password}
                     onChange={(e) => setField('password', e.target.value)}
                     placeholder="Ít nhất 4 ký tự"
+                    disabled={!canEdit}
                     className={INPUT_CLS}
                   />
                 </FormField>
@@ -339,6 +357,7 @@ export function UserManagement({ currentUserId }: Props) {
                 <select
                   value={form.role}
                   onChange={(e) => setField('role', e.target.value as UserRole)}
+                  disabled={!canEdit}
                   className={INPUT_CLS}
                 >
                   {ROLE_OPTIONS.map((opt) => (
@@ -359,6 +378,7 @@ export function UserManagement({ currentUserId }: Props) {
                         type="checkbox"
                         checked={selectedWorkspaces.includes(opt.value)}
                         onChange={(e) => toggleWorkspace(opt.value, e.target.checked)}
+                        disabled={!canEdit}
                         className="h-3.5 w-3.5 accent-[#3b5bdb]"
                       />
                       <span className="truncate">{opt.label}</span>
@@ -376,7 +396,7 @@ export function UserManagement({ currentUserId }: Props) {
             <div className="mt-6 flex items-center gap-2.5 flex-wrap">
               <button
                 onClick={handleSave}
-                disabled={saving || isSelf && selectedId !== null}
+                disabled={!canEdit || saving || isSelf && selectedId !== null}
                 className="flex items-center gap-1.5 h-9 px-5 rounded-[10px]
                            bg-[#3b5bdb] hover:bg-[#2f4ac4] active:scale-[0.98]
                            text-white text-[13px] font-semibold
@@ -388,7 +408,7 @@ export function UserManagement({ currentUserId }: Props) {
               </button>
 
               {/* Reset password (edit mode only, not self) */}
-              {selectedId !== null && !isSelf && (
+              {canEdit && selectedId !== null && !isSelf && (
                 <button
                   onClick={() => { setShowReset((v) => !v); setResetPass('') }}
                   className="flex items-center gap-1.5 h-9 px-4 rounded-[10px]
@@ -402,7 +422,7 @@ export function UserManagement({ currentUserId }: Props) {
               )}
 
               {/* Delete (edit mode only, not self) */}
-              {selectedId !== null && !isSelf && (
+              {canEdit && selectedId !== null && !isSelf && (
                 <button
                   onClick={handleDelete}
                   disabled={deleting}

@@ -4,6 +4,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { z } from 'zod'
 import { getSessionUser } from '@/lib/actions/auth'
+import { requireTabEdit } from '@/lib/permissions/server'
 import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
 import type { HumanResource, HRDayData } from '@/types'
 import type { SessionUser } from '@/types'
@@ -45,8 +46,8 @@ const humanResourceSchema = z.object({
   phone: z.string().nullable().optional(),
 })
 
-async function requireHRUser(): Promise<SessionUser | null> {
-  const user = await getSessionUser()
+async function requireHREditUser(): Promise<SessionUser | null> {
+  const user = await requireTabEdit('administration.hr')
   if (!user) return null
   if (!['ADMIN', 'MANAGER'].includes(user.role)) return null
   return user
@@ -182,7 +183,7 @@ export async function saveHRDaily(
   }
 
   const { date: pdate, factory: fac, totalem: total, absentIds: absent } = parsed.data
-  const user = await requireHRUser()
+  const user = await requireHREditUser()
   if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
   if (!canAccessFactory(user, fac)) return { success: false, error: 'Không có quyền cập nhật xưởng này.' }
 
@@ -224,7 +225,7 @@ export async function createHumanResource(
     return { success: false, error: msg }
   }
 
-  const user = await requireHRUser()
+  const user = await requireHREditUser()
   if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
   if (!canAccessFactory(user, parsed.data.factory)) return { success: false, error: 'Không có quyền cập nhật xưởng này.' }
 
@@ -281,7 +282,7 @@ export async function updateHumanResource(
     return { success: false, error: msg }
   }
 
-  const user = await requireHRUser()
+  const user = await requireHREditUser()
   if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
 
   const supabase = getDb()
@@ -325,7 +326,7 @@ export async function deleteHumanResource(
     return { success: false, error: 'Invalid id' }
   }
 
-  const user = await requireHRUser()
+  const user = await requireHREditUser()
   if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
 
   const supabase = getDb()

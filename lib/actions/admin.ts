@@ -5,6 +5,7 @@ import logger from '@/lib/logger'
 import { z } from 'zod'
 import type { UserRole } from '@/types'
 import { isKnownWorkspaceToken, normalizeWorkspaceList } from '@/lib/approval/workflow'
+import { requireTabEdit } from '@/lib/permissions/server'
 
 function getAdminDb() {
   return createSupabaseClient(
@@ -48,8 +49,7 @@ const updateUserSchema = z.object({
 // ─── Helper: verify caller is ADMIN ──────────────────────────────────────────
 
 async function requireAdmin() {
-  const { getSessionUser } = await import('./auth')
-  const user = await getSessionUser()
+  const user = await requireTabEdit('admin.users')
   return user?.role === 'ADMIN' ? user : null
 }
 

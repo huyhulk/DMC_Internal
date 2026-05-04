@@ -15,6 +15,8 @@ import {
   type MachineCreateInput,
 } from '@/lib/validations/maintenance'
 import logger from '@/lib/logger'
+import { requireTabEdit } from '@/lib/permissions/server'
+import type { PermissionKey } from '@/lib/permissions/tabs'
 import { isBreakdownEndAfterStart } from '@/lib/maintenance/workflow'
 import { canAccessWorkspace, canApproveRequests, canApproveWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
 
@@ -74,6 +76,11 @@ async function requireAuth() {
   return { user, profile: profileData as { role: string; workspace: string } | null, supabase }
 }
 
+async function requireEdit(key: PermissionKey): Promise<ActionResult<never> | null> {
+  const user = await requireTabEdit(key)
+  return user ? null : { success: false, message: 'Bạn chỉ có quyền xem tab này.' }
+}
+
 function revalidate() {
   revalidatePath('/dashboard/maintenance')
   revalidatePath('/dashboard/report/kpi')
@@ -87,6 +94,9 @@ function canAccessWorkshop(profile: { role: string; workspace: string }, worksho
 
 export async function createBreakdownAction(input: BreakdownCreateInput): Promise<ActionResult<string>> {
   try {
+    const denied = await requireEdit('maintenance.breakdowns')
+    if (denied) return denied
+
     const parsed = breakdownCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -129,6 +139,9 @@ export async function createBreakdownAction(input: BreakdownCreateInput): Promis
 
 export async function updateBreakdownAction(id: string, input: Omit<BreakdownUpdateInput, 'id'>): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.breakdowns')
+    if (denied) return denied
+
     const parsed = breakdownUpdateSchema.safeParse({ ...input, id })
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -163,6 +176,9 @@ export async function updateBreakdownAction(id: string, input: Omit<BreakdownUpd
 
 export async function resolveBreakdownAction(id: string, input: BreakdownResolveInput): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.breakdowns')
+    if (denied) return denied
+
     const parsed = breakdownResolveSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -203,6 +219,9 @@ export async function resolveBreakdownAction(id: string, input: BreakdownResolve
 
 export async function deleteBreakdownAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.breakdowns')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
@@ -256,6 +275,9 @@ export async function listBreakdownsAction(filter: {
 
 export async function createScheduleAction(input: ScheduleCreateInput): Promise<ActionResult<string>> {
   try {
+    const denied = await requireEdit('maintenance.schedule')
+    if (denied) return denied
+
     const parsed = scheduleCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -290,6 +312,9 @@ export async function createScheduleAction(input: ScheduleCreateInput): Promise<
 
 export async function bulkCreateScheduleAction(input: ScheduleBulkCreateInput): Promise<ActionResult<number>> {
   try {
+    const denied = await requireEdit('maintenance.schedule')
+    if (denied) return denied
+
     const parsed = scheduleBulkCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -339,6 +364,9 @@ export async function bulkCreateScheduleAction(input: ScheduleBulkCreateInput): 
 
 export async function completeScheduleAction(id: string, input: ScheduleCompleteInput): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.schedule')
+    if (denied) return denied
+
     const parsed = scheduleCompleteSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -384,6 +412,9 @@ export async function reviewScheduleAction(
   note?: string
 ): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.schedule')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (!canApproveRequests(profile.role)) return { success: false, message: 'Chỉ Manager hoặc Admin được phê duyệt.' }
@@ -430,6 +461,9 @@ export async function reviewScheduleAction(
 
 export async function updateScheduleAction(id: string, input: Partial<ScheduleCreateInput>): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.schedule')
+    if (denied) return denied
+
     const parsed = scheduleCreateSchema.partial().safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -471,6 +505,9 @@ export async function updateScheduleAction(id: string, input: Partial<ScheduleCr
 
 export async function deleteScheduleAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.schedule')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
@@ -534,6 +571,9 @@ export async function listScheduleAction(filter: {
 
 export async function createDrawingAction(input: DrawingCreateInput): Promise<ActionResult<string>> {
   try {
+    const denied = await requireEdit('maintenance.drawings')
+    if (denied) return denied
+
     const parsed = drawingCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -569,6 +609,9 @@ export async function createDrawingAction(input: DrawingCreateInput): Promise<Ac
 
 export async function updateDrawingAction(id: string, input: Partial<DrawingCreateInput>): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.drawings')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
@@ -595,6 +638,9 @@ export async function updateDrawingAction(id: string, input: Partial<DrawingCrea
 
 export async function completeDrawingAction(id: string, input: DrawingCompleteInput): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.drawings')
+    if (denied) return denied
+
     const parsed = drawingCompleteSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -622,6 +668,9 @@ export async function completeDrawingAction(id: string, input: DrawingCompleteIn
 
 export async function deleteDrawingAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.drawings')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
@@ -667,6 +716,9 @@ export async function listDrawingsAction(filter: {
 
 export async function createSurveyAction(input: SurveyCreateInput): Promise<ActionResult<string>> {
   try {
+    const denied = await requireEdit('maintenance.surveys')
+    if (denied) return denied
+
     const parsed = surveyCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -697,6 +749,9 @@ export async function createSurveyAction(input: SurveyCreateInput): Promise<Acti
 
 export async function updateSurveyAction(id: string, input: Partial<SurveyCreateInput>): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.surveys')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (!['ADMIN', 'MANAGER'].includes(profile.role)) return { success: false, message: 'Không có quyền cập nhật.' }
@@ -722,6 +777,9 @@ export async function updateSurveyAction(id: string, input: Partial<SurveyCreate
 
 export async function deleteSurveyAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.surveys')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }
@@ -809,6 +867,9 @@ export async function listMachinesAction(location?: string): Promise<ActionResul
 
 export async function createMachineAction(input: MachineCreateInput): Promise<ActionResult<string>> {
   try {
+    const denied = await requireEdit('maintenance.machines')
+    if (denied) return denied
+
     const parsed = machineCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -839,6 +900,9 @@ export async function createMachineAction(input: MachineCreateInput): Promise<Ac
 
 export async function updateMachineAction(id: string, input: MachineCreateInput): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.machines')
+    if (denied) return denied
+
     const parsed = machineCreateSchema.safeParse(input)
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
 
@@ -869,6 +933,9 @@ export async function updateMachineAction(id: string, input: MachineCreateInput)
 
 export async function deleteMachineAction(id: string): Promise<ActionResult> {
   try {
+    const denied = await requireEdit('maintenance.machines')
+    if (denied) return denied
+
     const { user, profile, supabase } = await requireAuth()
     if (!user || !profile) return { success: false, message: 'Phiên đăng nhập hết hạn.' }
     if (profile.role !== 'ADMIN') return { success: false, message: 'Chỉ Admin mới được xóa.' }

@@ -1,4 +1,8 @@
 import {
+  DEFAULT_ROLE_PERMISSIONS,
+  type PermissionKey,
+} from '@/lib/permissions/tabs'
+import {
   getAdministrationTabs,
   getCoordinationTabs,
   getMaintenanceTabs,
@@ -36,5 +40,17 @@ describe('dashboard navigation tabs', () => {
       'surveys',
       'machines',
     ])
+  })
+
+  it('has permission keys for every dropdown sub-tab', () => {
+    const keys: PermissionKey[] = [
+      ...getMaintenanceTabs().map((tab) => `maintenance.${tab.key}` as PermissionKey),
+      ...getCoordinationTabs().map((tab) => `coordination.${tab.key}` as PermissionKey),
+      ...getAdministrationTabs().map((tab) => `administration.${tab.key}` as PermissionKey),
+    ]
+
+    for (const key of keys) {
+      expect(DEFAULT_ROLE_PERMISSIONS.ADMIN[key]).toBe('edit')
+    }
   })
 })
