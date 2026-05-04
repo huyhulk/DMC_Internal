@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createSSRClient } from '@/lib/supabase/server'
 import { loginSchema, changePasswordSchema } from '@/lib/validations/auth'
 import logger from '@/lib/logger'
-import type { SessionUser } from '@/types'
+import type { SessionUser, UserRole } from '@/types'
 
 function getAdminClient() {
   return createClient(
@@ -31,8 +31,7 @@ const fetchSessionUser = cache(async (): Promise<SessionUser | null> => {
 
   if (!profileData) return null
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const profile = profileData as any as { username: string; role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'; workspace: string }
+  const profile = profileData as any as { username: string; role: UserRole; workspace: string }
 
   return {
     id: user.id,
@@ -72,9 +71,12 @@ export async function loginAction(formData: FormData) {
 
 export async function logoutAction() {
   const supabase = await createSSRClient()
-  await supabase.auth.signOut()
+  const { error } = await supabase.auth.signOut({ scope: 'local' })
+  if (error) {
+    logger.warn({ supabaseError: error.message }, 'Logout signOut reported an error')
+  }
   revalidatePath('/', 'layout')
-  redirect('/login')
+  return { success: true }
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -139,4 +141,3 @@ export async function changePasswordAction(formData: FormData) {
   logger.info({ userId: user.id }, 'changePassword: success')
   return { success: true }
 }
-

@@ -61,7 +61,6 @@ async function fetchProdRows(
 }
 
 async function _fetchProdRowsLegacy(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   workshopId: WorkshopCode | null,
   from: string,
@@ -82,7 +81,6 @@ async function _fetchProdRowsLegacy(
     workforce: number | null; starttime: string | null; endtime: string | null
     realnorm: number | null
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query: any = supabase
     .from('Production')
     .select('pcode,pdate,products,poutput,eoutput,routput,workforce,starttime,endtime,realnorm')
@@ -144,7 +142,6 @@ export async function queryProgress(
     ? { orders: [], summary: { workshop: workshopId, total: 0, completed: 0, overdue: 0, dueSoon: 0, progressPct: 0 } }
     : { summaries: WORKSHOP_CODES.map((ws) => ({ workshop: ws, total: 0, completed: 0, overdue: 0, dueSoon: 0, progressPct: 0 })) }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let dataQuery: any = supabase
     .from('data')
     .select('PCODE,WORKSHOP,DESCRIPTION,CUSTOMER,QUANTITY,INITIALDATE,DEADLINEDATE,STATUS')
@@ -388,7 +385,7 @@ export async function queryOEE(
     const map = new Map<string, typeof withMetrics>()
     for (const r of recs) {
       if (filterWs && r.workshop !== filterWs) continue
-      const p = toPeriodKey(r.pdate, groupBy)
+      const p = getPeriodKey(r, groupBy)
       if (!map.has(p)) map.set(p, [])
       map.get(p)!.push(r)
     }

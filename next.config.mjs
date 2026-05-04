@@ -3,6 +3,9 @@ const nextConfig = {
   // Compress responses (gzip) — important for Vercel Hobby cold start transfer time
   compress: true,
   poweredByHeader: false,
+  turbopack: {
+    root: import.meta.dirname,
+  },
 
   // Tree-shake large packages at build time → smaller chunks → faster cold start
   experimental: {

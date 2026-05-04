@@ -8,46 +8,48 @@ import { HRColumn } from './hr-column'
 import { HRAdminModal } from './hr-admin-modal'
 import { saveHRDaily } from '@/lib/actions/hr'
 import { getTodayLocal, getUserWorkspaces } from '@/lib/utils'
-import { FACTORIES, type SessionUser, type HumanResource, type HRDayData, type FactoryKey } from '@/types'
+import { HR_DAILY_GROUPS, type SessionUser, type HumanResource, type HRDayData, type HRDailyGroupKey } from '@/types'
 
-type FactoryState = Record<FactoryKey, { totalem: number | ''; absentIds: number[] }>
+type FactoryState = Record<HRDailyGroupKey, { totalem: number; absentIds: number[]; transferredIds: number[] }>
 
-function buildDefaultState(visibleFactories: readonly FactoryKey[]): FactoryState {
+function buildDefaultState(): FactoryState {
   const base: Partial<FactoryState> = {}
-  for (const f of FACTORIES) {
-    base[f] = { totalem: '', absentIds: [] }
+  for (const f of HR_DAILY_GROUPS) {
+    base[f] = { totalem: 0, absentIds: [], transferredIds: [] }
   }
-  // Ensure all FACTORIES keys exist even if not visible
-  void visibleFactories
   return base as FactoryState
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function HRTab({ user }: Props) {
+export function HRTab({ user, canEdit }: Props) {
   const today = getTodayLocal()
 
-  const visibleFactories = useMemo((): readonly FactoryKey[] => {
-    if (user.role === 'ADMIN') return FACTORIES
+  const visibleFactories = useMemo((): readonly HRDailyGroupKey[] => {
+    if (user.role === 'ADMIN') return HR_DAILY_GROUPS
     const ws = getUserWorkspaces(user.workspace)
-    if (ws.length === 0) return FACTORIES
-    return FACTORIES.filter((f) => ws.includes(f))
+    if (ws.length === 0) return HR_DAILY_GROUPS
+    return HR_DAILY_GROUPS.filter((f) => ws.includes(f))
   }, [user.role, user.workspace])
 
   // ADMIN can edit all. Others can only edit their assigned factories.
   // Empty/ALL workspace → no restriction (edit all visible).
-  const editableFactories = useMemo((): Set<FactoryKey> => {
-    if (user.role === 'ADMIN') return new Set(FACTORIES)
+  const editableFactories = useMemo((): Set<HRDailyGroupKey> => {
+    if (!canEdit) return new Set()
+    if (user.role === 'ADMIN') return new Set(HR_DAILY_GROUPS)
     const ws = getUserWorkspaces(user.workspace)
-    if (ws.length === 0) return new Set(FACTORIES)
-    return new Set(ws.filter((w): w is FactoryKey => (FACTORIES as readonly string[]).includes(w)))
-  }, [user.role, user.workspace])
+    if (ws.length === 0) return new Set(HR_DAILY_GROUPS)
+    return new Set(ws.filter((w): w is HRDailyGroupKey => (HR_DAILY_GROUPS as readonly string[]).includes(w)))
+  }, [canEdit, user.role, user.workspace])
 
   const [date, setDate]               = useState<string>(today)
   const [employees, setEmployees]     = useState<HumanResource[]>([])
-  const [factoryState, setFactoryState] = useState<FactoryState>(() => buildDefaultState(visibleFactories))
-  const [saving, setSaving]           = useState<Record<FactoryKey, boolean>>({
-    DMC1: false, DMC3: false, DMC4: false, DMC5: false,
+  const [factoryState, setFactoryState] = useState<FactoryState>(() => buildDefaultState())
+  const [saving, setSaving]           = useState<Record<HRDailyGroupKey, boolean>>({
+    DMC1: false, DMC3: false, DMC4: false, DMC5: false, 'PKT-SX': false, 'DIEU-PHOI': false,
   })
   const [loading, setLoading] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
@@ -64,11 +66,11 @@ export function HRTab({ user }: Props) {
 
       setEmployees(json.employees)
 
-      const next = buildDefaultState(visibleFactories)
+      const next = buildDefaultState()
       for (const row of json.dailyData) {
-        const key = row.factory as FactoryKey
+        const key = row.factory
         if (key in next) {
-          next[key] = { totalem: row.totalem, absentIds: row.absentIds }
+          next[key] = { totalem: row.totalem, absentIds: row.absentIds, transferredIds: row.transferredIds }
         }
       }
       setFactoryState(next)
@@ -81,29 +83,37 @@ export function HRTab({ user }: Props) {
 
   useEffect(() => { loadData(date) }, [date, loadData])
 
-  const setTotalem = useCallback((factory: FactoryKey, val: number | '') => {
-    setFactoryState((prev) => ({ ...prev, [factory]: { ...prev[factory], totalem: val } }))
-  }, [])
-
-  const toggleAbsent = useCallback((factory: FactoryKey, empId: number) => {
+  const toggleAbsent = useCallback((factory: HRDailyGroupKey, empId: number) => {
     setFactoryState((prev) => {
       const current = prev[factory].absentIds
-      const next = current.includes(empId)
+      const nextAbsent = current.includes(empId)
         ? current.filter((id) => id !== empId)
         : [...current, empId]
-      return { ...prev, [factory]: { ...prev[factory], absentIds: next } }
+      const nextTransferred = prev[factory].transferredIds.filter((id) => id !== empId)
+      return { ...prev, [factory]: { ...prev[factory], absentIds: nextAbsent, transferredIds: nextTransferred } }
     })
   }, [])
 
-  const handleSave = useCallback(async (factory: FactoryKey) => {
-    const { totalem, absentIds } = factoryState[factory]
-    if (totalem === '') {
-      toast.error(`Vui lòng nhập tổng nhân sự cho ${factory}`)
+  const toggleTransferred = useCallback((factory: HRDailyGroupKey, empId: number) => {
+    setFactoryState((prev) => {
+      const current = prev[factory].transferredIds
+      const nextTransferred = current.includes(empId)
+        ? current.filter((id) => id !== empId)
+        : [...current, empId]
+      const nextAbsent = prev[factory].absentIds.filter((id) => id !== empId)
+      return { ...prev, [factory]: { ...prev[factory], absentIds: nextAbsent, transferredIds: nextTransferred } }
+    })
+  }, [])
+
+  const handleSave = useCallback(async (factory: HRDailyGroupKey) => {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
       return
     }
+    const { absentIds, transferredIds } = factoryState[factory]
     setSaving((prev) => ({ ...prev, [factory]: true }))
     try {
-      const result = await saveHRDaily(date, factory, totalem as number, absentIds)
+      const result = await saveHRDaily(date, factory, absentIds, transferredIds)
       if (result.success) {
         toast.success(`Đã lưu nhân sự ${factory}`)
       } else {
@@ -114,7 +124,7 @@ export function HRTab({ user }: Props) {
     } finally {
       setSaving((prev) => ({ ...prev, [factory]: false }))
     }
-  }, [date, factoryState])
+  }, [canEdit, date, factoryState])
 
   function formatDateLabel(d: string): string {
     try {
@@ -141,7 +151,7 @@ export function HRTab({ user }: Props) {
             />
           </div>
 
-          {user.role === 'ADMIN' && (
+          {canEdit && user.role === 'ADMIN' && (
             <button
               onClick={() => setAdminOpen(true)}
               className="h-10 px-4 rounded-[10px] bg-[#3b5bdb] hover:bg-[#2f4ac4]
@@ -160,7 +170,7 @@ export function HRTab({ user }: Props) {
       <div className="shrink-0 px-4 pt-4 pb-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-[#aeaeb2] uppercase tracking-[0.07em]">
-            Nhân sự sản xuất — {formatDateLabel(date)}
+            Nhân sự làm việc trong ngày — {formatDateLabel(date)}
           </span>
           <div className="flex-1 h-px bg-[#d2d2d7]/50" />
         </div>
@@ -181,10 +191,11 @@ export function HRTab({ user }: Props) {
                 employees={employees.filter((e) => e.factory === factory)}
                 totalem={factoryState[factory].totalem}
                 absentIds={factoryState[factory].absentIds}
+                transferredIds={factoryState[factory].transferredIds}
                 saving={saving[factory]}
                 readOnly={!editableFactories.has(factory)}
-                onTotalemChange={(val) => setTotalem(factory, val)}
                 onAbsentToggle={(id) => toggleAbsent(factory, id)}
+                onTransferredToggle={(id) => toggleTransferred(factory, id)}
                 onSave={() => handleSave(factory)}
               />
             ))}
@@ -194,6 +205,7 @@ export function HRTab({ user }: Props) {
 
       <HRAdminModal
         open={adminOpen}
+        canEdit={canEdit}
         onClose={() => setAdminOpen(false)}
         onRefresh={() => loadData(date)}
       />

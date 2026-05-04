@@ -1,19 +1,29 @@
-export type UserRole = 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'
+export const USER_ROLES = ['ADMIN', 'MANAGER', 'WORKSHOP_MANAGER', 'TEAM_LEADER', 'MAINTENANCE', 'COORDINATION', 'SALES', 'HR'] as const
 
-export type TabId = 'production' | 'maintenance' | 'coordination' | 'report' | 'admin'
+export type UserRole = typeof USER_ROLES[number]
+
+export type TabId = 'production' | 'maintenance' | 'coordination' | 'administration' | 'report' | 'admin'
 
 export const ROLE_TABS: Record<UserRole, TabId[]> = {
-  ADMIN:      ['production', 'maintenance', 'coordination', 'report', 'admin'],
-  MANAGER:    ['production', 'maintenance', 'coordination', 'report'],
-  SUPERVISOR: ['production', 'coordination', 'report'],
-  USER:       ['production'],
+  ADMIN:            ['production', 'maintenance', 'coordination', 'administration', 'report', 'admin'],
+  MANAGER:          ['production', 'maintenance', 'coordination', 'administration', 'report'],
+  WORKSHOP_MANAGER: ['production', 'maintenance', 'coordination', 'administration', 'report'],
+  TEAM_LEADER:      ['production', 'coordination', 'administration', 'report'],
+  MAINTENANCE:      ['maintenance', 'report'],
+  COORDINATION:     ['coordination', 'report'],
+  SALES:            ['coordination', 'report'],
+  HR:               ['administration', 'report'],
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  ADMIN:      'Admin',
-  MANAGER:    'Quản lý',
-  SUPERVISOR: 'Tổ trưởng',
-  USER:       'Công nhân',
+  ADMIN: 'Admin',
+  MANAGER: 'Quản lý',
+  WORKSHOP_MANAGER: 'Trưởng xưởng',
+  TEAM_LEADER: 'Tổ trưởng',
+  MAINTENANCE: 'Bảo trì',
+  COORDINATION: 'Điều phối',
+  SALES: 'Kinh doanh',
+  HR: 'Nhân sự',
 }
 
 export interface SessionUser {
@@ -63,6 +73,7 @@ export interface ProductionRecord {
   endtime: string
   realnorm: number
   log: string
+  save_status?: 'draft' | 'closed'
 }
 
 export interface InitData {
@@ -70,6 +81,7 @@ export interface InitData {
   norms: NormItem[]
   materials: MaterialItem[]
   submittedPcodes: string[]
+  closedPcodes: string[]
 }
 
 export interface ProductionReportRow {
@@ -88,6 +100,29 @@ export interface ProductionReportRow {
   created_at?: string
 }
 
+export type ProductionSaveStatus = 'draft' | 'closed'
+
+export interface ProductionInputHistoryRow {
+  id: number
+  pdate: string
+  pcode: string
+  workshop: string
+  customer: string
+  product: string
+  orderDescription: string
+  poutput: number
+  eoutput: number
+  routput: number
+  workforce: number
+  realnorm: number
+  starttime: string
+  endtime: string
+  log: string
+  save_status: ProductionSaveStatus
+  created_at: string
+  updated_at?: string
+}
+
 export interface ProductLine {
   product: string
   pdate: string
@@ -103,11 +138,15 @@ export interface ProductLine {
 export interface PcodeStatus {
   pcode: string
   locked: boolean
-  reason: 'submitted' | 'delivered' | ''
+  reason: 'submitted' | 'delivered' | 'closed' | ''
 }
 
 export const FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 export type FactoryKey = typeof FACTORIES[number]
+export const HUMAN_RESOURCE_FACTORIES = [...FACTORIES, 'PKT-SX', 'DIEU-PHOI', 'Khác'] as const
+export type HumanResourceFactoryKey = typeof HUMAN_RESOURCE_FACTORIES[number]
+export const HR_DAILY_GROUPS = [...FACTORIES, 'PKT-SX', 'DIEU-PHOI'] as const
+export type HRDailyGroupKey = typeof HR_DAILY_GROUPS[number]
 
 // Display labels for each factory — used in dropdowns, charts, badges
 export const WORKSHOP_LABELS: Record<FactoryKey, string> = {
@@ -115,6 +154,12 @@ export const WORKSHOP_LABELS: Record<FactoryKey, string> = {
   DMC3: 'DMC3 — Tôn Panel & Phụ kiện',
   DMC4: 'DMC4 — Xà gồ, phụ kiện',
   DMC5: 'DMC5 — Tôn, PU & Phụ kiện',
+}
+
+export const HR_DAILY_GROUP_LABELS: Record<HRDailyGroupKey, string> = {
+  ...WORKSHOP_LABELS,
+  'PKT-SX': 'PKT-SX — Phòng kỹ thuật sản xuất',
+  'DIEU-PHOI': 'Điều Phối',
 }
 
 export interface HumanResource {
@@ -127,8 +172,9 @@ export interface HumanResource {
 }
 
 export interface HRDayData {
-  factory: FactoryKey
+  factory: HRDailyGroupKey
   totalem: number
   absentIds: number[]
+  transferredIds: number[]
   isAutoFilled: boolean
 }

@@ -1,0 +1,71 @@
+name: Staging CI
+
+on:
+  push:
+    branches: [staging]
+  pull_request:
+    branches: [staging]
+
+jobs:
+  test:
+    name: Type Check, Lint & Build
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SERVICE_ROLE_KEY }}
+      NEXT_PUBLIC_APP_NAME: 'DMC Production Manager (Staging)'
+      NEXT_PUBLIC_APP_URL: 'https://dmc-pm-staging.vercel.app'
+      NEXT_PUBLIC_ENV: 'staging'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  migrate-staging:
+    name: Apply Migrations to Staging DB
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    # Only run on direct push to staging (not PRs)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # STAGING_DB_URL phải là direct connection URL (port 5432):
+      #   postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+      # KHÔNG dùng transaction pooler (port 6543) — supabase db push dùng extended query
+      # protocol (prepared statement), PostgreSQL reject multi-statement → SQLSTATE 42601.
+      #
+      # supabase db push là idempotent: chỉ chạy migrations chưa có trong
+      # supabase_migrations.schema_migrations. Fresh staging DB cũng OK vì
+      # migration 001 đã được fix đúng schema (lowercase table, UPPERCASE columns).
+      - name: Apply pending migrations to staging
+        run: supabase db push --db-url "${{ secrets.STAGING_DB_URL }}"

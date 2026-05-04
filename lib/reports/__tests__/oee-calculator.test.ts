@@ -12,8 +12,8 @@ describe('durationHours', () => {
   it('tính đúng 2 giờ từ 7:30 đến 9:30', () => {
     expect(durationHours('07:30', '09:30')).toBe(2)
   })
-  it('trả về 0 khi endtime <= starttime', () => {
-    expect(durationHours('09:30', '07:30')).toBe(0)
+  it('tính ca qua nửa đêm bằng cách cộng sang ngày hôm sau', () => {
+    expect(durationHours('22:00', '01:30')).toBe(3.5)
   })
   it('trả về 0 khi chuỗi không hợp lệ', () => {
     expect(durationHours('', '09:30')).toBe(0)

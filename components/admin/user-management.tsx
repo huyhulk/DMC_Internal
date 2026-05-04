@@ -12,7 +12,8 @@ import {
   adminResetPasswordAction,
   type UserRow,
 } from '@/lib/actions/admin'
-import type { UserRole } from '@/types'
+import { WORKSPACE_OPTIONS, normalizeWorkspaceList } from '@/lib/approval/workflow'
+import { ROLE_LABELS, USER_ROLES, type UserRole } from '@/types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -20,38 +21,34 @@ const INPUT_CLS =
   'w-full h-[38px] px-3 rounded-[10px] bg-[#f5f5f7] border border-[#d2d2d7]/80 ' +
   'text-[13px] text-[#1d1d1f] focus:outline-none focus:ring-1 focus:ring-[#3b5bdb]/40 transition-all'
 
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: 'ADMIN',      label: 'Admin' },
-  { value: 'MANAGER',    label: 'Quản lý' },
-  { value: 'SUPERVISOR', label: 'Tổ trưởng' },
-  { value: 'USER',       label: 'Công nhân' },
-]
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = USER_ROLES.map((role) => ({
+  value: role,
+  label: ROLE_LABELS[role],
+}))
 
 const ROLE_BADGE: Record<UserRole, string> = {
-  ADMIN:      'text-[#3b5bdb] bg-[#3b5bdb]/10 border border-[#3b5bdb]/25',
-  MANAGER:    'text-[#2f9e44] bg-[#2f9e44]/10 border border-[#2f9e44]/25',
-  SUPERVISOR: 'text-[#d4870c] bg-[#d4870c]/10 border border-[#d4870c]/25',
-  USER:       'text-[#6e6e73] bg-[#6e6e73]/10 border border-[#6e6e73]/20',
+  ADMIN: 'text-[#3b5bdb] bg-[#3b5bdb]/10 border border-[#3b5bdb]/25',
+  MANAGER: 'text-[#2f9e44] bg-[#2f9e44]/10 border border-[#2f9e44]/25',
+  WORKSHOP_MANAGER: 'text-[#0b7285] bg-[#0b7285]/10 border border-[#0b7285]/25',
+  TEAM_LEADER: 'text-[#d4870c] bg-[#d4870c]/10 border border-[#d4870c]/25',
+  MAINTENANCE: 'text-[#7048e8] bg-[#7048e8]/10 border border-[#7048e8]/25',
+  COORDINATION: 'text-[#0c8599] bg-[#0c8599]/10 border border-[#0c8599]/25',
+  SALES: 'text-[#c2255c] bg-[#c2255c]/10 border border-[#c2255c]/25',
+  HR: 'text-[#5c7cfa] bg-[#5c7cfa]/10 border border-[#5c7cfa]/25',
 }
 
-const ROLE_LABEL: Record<UserRole, string> = {
-  ADMIN:      'Admin',
-  MANAGER:    'Quản lý',
-  SUPERVISOR: 'Tổ trưởng',
-  USER:       'Công nhân',
-}
-
-const EMPTY_FORM = { username: '', password: '', role: 'USER' as UserRole, workspace: '' }
+const EMPTY_FORM = { username: '', password: '', role: 'TEAM_LEADER' as UserRole, workspace: '' }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface Props {
   currentUserId: string
+  canEdit: boolean
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function UserManagement({ currentUserId }: Props) {
+export function UserManagement({ currentUserId, canEdit }: Props) {
   const [users, setUsers]           = useState<UserRow[]>([])
   const [search, setSearch]         = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -105,9 +102,29 @@ export function UserManagement({ currentUserId }: Props) {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  const selectedWorkspaces = form.workspace
+    ? form.workspace.split(',').map((w) => w.trim()).filter(Boolean)
+    : []
+
+  function toggleWorkspace(value: string, checked: boolean) {
+    if (value === 'ALL') {
+      setField('workspace', checked ? 'ALL' : '')
+      return
+    }
+
+    const next = new Set(selectedWorkspaces.filter((item) => item !== 'ALL'))
+    if (checked) next.add(value)
+    else next.delete(value)
+    setField('workspace', normalizeWorkspaceList(Array.from(next).join(',')))
+  }
+
   // ── Save (create or update) ─────────────────────────────────────────────────
 
   async function handleSave() {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSaving(true)
     try {
       if (selectedId === null) {
@@ -116,7 +133,7 @@ export function UserManagement({ currentUserId }: Props) {
           username:  form.username.trim(),
           password:  form.password,
           role:      form.role,
-          workspace: form.workspace.trim(),
+          workspace: normalizeWorkspaceList(form.workspace),
         })
         if (result.error) {
           toast.error(result.error)
@@ -127,13 +144,13 @@ export function UserManagement({ currentUserId }: Props) {
         }
       } else {
         // Update
-        const result = await updateUserAction(selectedId, { role: form.role, workspace: form.workspace.trim() })
+        const result = await updateUserAction(selectedId, { role: form.role, workspace: normalizeWorkspaceList(form.workspace) })
         if (result.error) {
           toast.error(result.error)
         } else {
           toast.success('Đã cập nhật người dùng')
           setUsers((prev) =>
-            prev.map((u) => u.id === selectedId ? { ...u, role: form.role, workspace: form.workspace.trim() } : u)
+            prev.map((u) => u.id === selectedId ? { ...u, role: form.role, workspace: normalizeWorkspaceList(form.workspace) } : u)
           )
         }
       }
@@ -146,6 +163,10 @@ export function UserManagement({ currentUserId }: Props) {
 
   async function handleDelete() {
     if (!selectedId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     if (!confirmDelete) { setConfirmDelete(true); return }
     setDeleting(true)
     try {
@@ -167,6 +188,10 @@ export function UserManagement({ currentUserId }: Props) {
 
   async function handleResetPassword() {
     if (!selectedId || !resetPass) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setResetting(true)
     try {
       const result = await adminResetPasswordAction(selectedId, resetPass)
@@ -206,16 +231,18 @@ export function UserManagement({ currentUserId }: Props) {
             </h1>
             <p className="text-[12px] text-[#6e6e73] mt-0.5">{users.length} tài khoản</p>
           </div>
-          <button
-            onClick={selectNew}
-            className="flex items-center gap-1.5 h-9 px-4 rounded-[10px]
-                       bg-[#3b5bdb] hover:bg-[#2f4ac4] active:scale-[0.98]
-                       text-white text-[13px] font-semibold
-                       transition-all duration-150 shadow-sm"
-          >
-            <UserPlus size={14} strokeWidth={2.5} />
-            Thêm người dùng
-          </button>
+          {canEdit && (
+            <button
+              onClick={selectNew}
+              className="flex items-center gap-1.5 h-9 px-4 rounded-[10px]
+                         bg-[#3b5bdb] hover:bg-[#2f4ac4] active:scale-[0.98]
+                         text-white text-[13px] font-semibold
+                         transition-all duration-150 shadow-sm"
+            >
+              <UserPlus size={14} strokeWidth={2.5} />
+              Thêm người dùng
+            </button>
+          )}
         </div>
       </div>
 
@@ -244,20 +271,22 @@ export function UserManagement({ currentUserId }: Props) {
           {/* List */}
           <div className="flex-1 overflow-y-auto rounded-2xl border border-[#d2d2d7]/60 bg-white divide-y divide-[#f2f2f7]">
             {/* New user item */}
-            <button
-              onClick={selectNew}
-              className={cn(
-                'w-full flex items-center gap-2.5 px-3.5 py-3 text-left transition-all duration-100',
-                selectedId === null
-                  ? 'bg-[#3b5bdb]/5 border-l-2 border-[#3b5bdb]'
-                  : 'hover:bg-[#f5f5f7]'
-              )}
-            >
-              <div className="w-7 h-7 rounded-full bg-[#3b5bdb]/10 flex items-center justify-center shrink-0">
-                <UserPlus size={12} className="text-[#3b5bdb]" strokeWidth={2.5} />
-              </div>
-              <span className="text-[13px] font-semibold text-[#3b5bdb]">Tạo mới</span>
-            </button>
+            {canEdit && (
+              <button
+                onClick={selectNew}
+                className={cn(
+                  'w-full flex items-center gap-2.5 px-3.5 py-3 text-left transition-all duration-100',
+                  selectedId === null
+                    ? 'bg-[#3b5bdb]/5 border-l-2 border-[#3b5bdb]'
+                    : 'hover:bg-[#f5f5f7]'
+                )}
+              >
+                <div className="w-7 h-7 rounded-full bg-[#3b5bdb]/10 flex items-center justify-center shrink-0">
+                  <UserPlus size={12} className="text-[#3b5bdb]" strokeWidth={2.5} />
+                </div>
+                <span className="text-[13px] font-semibold text-[#3b5bdb]">Tạo mới</span>
+              </button>
+            )}
 
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -295,7 +324,7 @@ export function UserManagement({ currentUserId }: Props) {
                   type="text"
                   value={form.username}
                   onChange={(e) => setField('username', e.target.value)}
-                  disabled={selectedId !== null}
+                  disabled={!canEdit || selectedId !== null}
                   placeholder="vd: nguyen_van_a"
                   className={cn(
                     INPUT_CLS,
@@ -312,6 +341,7 @@ export function UserManagement({ currentUserId }: Props) {
                     value={form.password}
                     onChange={(e) => setField('password', e.target.value)}
                     placeholder="Ít nhất 4 ký tự"
+                    disabled={!canEdit}
                     className={INPUT_CLS}
                   />
                 </FormField>
@@ -322,6 +352,7 @@ export function UserManagement({ currentUserId }: Props) {
                 <select
                   value={form.role}
                   onChange={(e) => setField('role', e.target.value as UserRole)}
+                  disabled={!canEdit}
                   className={INPUT_CLS}
                 >
                   {ROLE_OPTIONS.map((opt) => (
@@ -331,16 +362,26 @@ export function UserManagement({ currentUserId }: Props) {
               </FormField>
 
               {/* Workspace */}
-              <FormField label="Phân xưởng">
-                <input
-                  type="text"
-                  value={form.workspace}
-                  onChange={(e) => setField('workspace', e.target.value)}
-                  placeholder="ALL, hoặc DMC1,DMC3 (phân cách bằng dấu phẩy)"
-                  className={INPUT_CLS}
-                />
+              <FormField label="Xưởng / phòng ban">
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-[#d2d2d7]/70 bg-[#f5f5f7] p-2">
+                  {WORKSPACE_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-[12px] font-medium text-[#1d1d1f] border border-[#d2d2d7]/50 cursor-pointer hover:border-[#3b5bdb]/40"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedWorkspaces.includes(opt.value)}
+                        onChange={(e) => toggleWorkspace(opt.value, e.target.checked)}
+                        disabled={!canEdit}
+                        className="h-3.5 w-3.5 accent-[#3b5bdb]"
+                      />
+                      <span className="truncate">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
                 <p className="text-[11px] text-[#aeaeb2] mt-1">
-                  ALL = toàn quyền · Để trống = chặn tất cả (với SUPERVISOR/USER) · VD: DMC1,DMC3
+                  ALL = toàn quyền. Có thể chọn nhiều xưởng hoặc phòng ban cho Supervisor/User.
                 </p>
               </FormField>
 
@@ -350,7 +391,7 @@ export function UserManagement({ currentUserId }: Props) {
             <div className="mt-6 flex items-center gap-2.5 flex-wrap">
               <button
                 onClick={handleSave}
-                disabled={saving || isSelf && selectedId !== null}
+                disabled={!canEdit || saving || isSelf && selectedId !== null}
                 className="flex items-center gap-1.5 h-9 px-5 rounded-[10px]
                            bg-[#3b5bdb] hover:bg-[#2f4ac4] active:scale-[0.98]
                            text-white text-[13px] font-semibold
@@ -362,7 +403,7 @@ export function UserManagement({ currentUserId }: Props) {
               </button>
 
               {/* Reset password (edit mode only, not self) */}
-              {selectedId !== null && !isSelf && (
+              {canEdit && selectedId !== null && !isSelf && (
                 <button
                   onClick={() => { setShowReset((v) => !v); setResetPass('') }}
                   className="flex items-center gap-1.5 h-9 px-4 rounded-[10px]
@@ -376,7 +417,7 @@ export function UserManagement({ currentUserId }: Props) {
               )}
 
               {/* Delete (edit mode only, not self) */}
-              {selectedId !== null && !isSelf && (
+              {canEdit && selectedId !== null && !isSelf && (
                 <button
                   onClick={handleDelete}
                   disabled={deleting}
@@ -488,7 +529,7 @@ function UserListItem({
           'text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0',
           ROLE_BADGE[user.role]
         )}>
-          {ROLE_LABEL[user.role]}
+          {ROLE_LABELS[user.role]}
         </span>
       </div>
 

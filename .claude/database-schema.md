@@ -1,8 +1,8 @@
 # Database Schema — DMC Production Manager
 
 > **Source of truth:** Supabase project `hzuyucyxyohppxfwresq` (production)
-> **Snapshot updated:** 2026-04-23
-> **Migration cuối cùng:** `006_add_overtime_shift.sql`
+> **Snapshot updated:** 2026-05-03
+> **Migration cuối cùng:** `022_staging_security_scope_hardening.sql` (staging branch, chưa merge main)
 
 ## 🚨 QUAN TRỌNG — Column Case
 
@@ -49,6 +49,11 @@ const { data } = await supabase
   .eq('WORKSHOP', 'DMC1');
 ```
 
+**Shortcut:** Migration 014 tạo view `v_data` với column lowercase nếu cần:
+```typescript
+supabase.from('v_data').select('pcode, workshop, quantity')
+```
+
 ---
 
 ## 📋 Tables
@@ -64,7 +69,7 @@ const { data } = await supabase
 | `"PCODE"` | TEXT | UPPER | ✅ | Mã YCSX, unique |
 | `"INITIALDATE"` | DATE | UPPER | ✅ | Ngày lập phiếu |
 | `"CUSTOMER"` | TEXT | UPPER | - | Khách hàng |
-| `"WORKSHOP"` | TEXT | UPPER | - | Xưởng sản xuất (DMC1/DMC3/...) |
+| `"WORKSHOP"` | TEXT | UPPER | - | Xưởng sản xuất (DMC1/DMC3/DMC4/DMC5) |
 | `"DESCRIPTION"` | TEXT | UPPER | - | Diễn giải |
 | `"QUANTITY"` | NUMERIC | UPPER | - | Số lượng |
 | `"DEADLINEDATE"` | TIMESTAMPTZ | UPPER | - | Deadline với +07:00 |
@@ -74,7 +79,7 @@ const { data } = await supabase
 
 ### 2. `Production` — Kết quả sản xuất thực tế
 **Table name có quotes:** `"Production"`
-**Column: lowercase**
+**Columns: lowercase**
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -95,7 +100,7 @@ const { data } = await supabase
 **Quan trọng:**
 - `totalem` (TEXT) = mã xưởng, KHÔNG phải số
 - `workforce` (NUMERIC) = số nhân công
-- `starttime/endtime` là TEXT → parse bằng `fn_classify_shift` hoặc `classifyShift()`
+- `starttime/endtime` là TEXT → parse bằng `fn_classify_shift()` hoặc `classifyShift()`
 
 ### 3. `Norm` — Định mức năng suất
 **Table name có quotes:** `"Norm"`
@@ -129,103 +134,198 @@ const { data } = await supabase
 | `workspace` | TEXT | Mã xưởng được giao, hoặc `"ALL"` |
 | `created_at` | TIMESTAMPTZ | Auto |
 
-**Note:** `hr_daily` table **KHÔNG tồn tại** trong bất kỳ migration nào. Không được reference.
+**Note:** `hr_daily` hiện đã tồn tại trong staging từ migration 018. Production main cũ có thể chưa có nếu chưa promote staging.
+
+---
+
+## 📋 KPI Tables (migrations 008–013)
+
+### 6. `kpi_targets` — Mục tiêu KPI 2026
+19 KPI codes: SX-01..06, KT-01..07, KH-02..07 | RLS: SELECT=authenticated, ALL=ADMIN
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `kpi_code` | TEXT UNIQUE | SX-01, KT-02, KH-07... |
+| `department` | TEXT | PRODUCTION / MAINTENANCE / COORDINATION |
+| `name` | TEXT | Tên KPI |
+| `unit` | TEXT | %, h/ngày, phút/lần, giờ |
+| `target_value` | NUMERIC | Giá trị mục tiêu chuẩn |
+| `target_operator` | TEXT | lte / gte / lt / gt / eq |
+| `default_period` | TEXT | weekly / monthly / quarterly / yearly |
+| `target_weekly/monthly/quarterly/yearly` | NUMERIC | Target theo từng kỳ |
+| `is_active` | BOOLEAN | Default true |
+| `year` | INTEGER | Default 2026 |
+
+### 7. `kpi_baselines` — Baseline tham chiếu (VD: chi phí 2025)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `baseline_key` | TEXT UNIQUE | VD: delivery_cost_per_ton_2025 |
+| `value` | NUMERIC | Giá trị baseline |
+| `effective_year` | INTEGER | Năm áp dụng |
+
+### 8. `production_defects` — SX-01: Lỗi thành phẩm
+Columns: `report_date`, `workshop`, `pcode`, `product_name`, `total_qty`, `defect_qty`, `defect_type`, `shift`
+
+### 9. `order_completion` — SX-02: Tiến độ đơn hàng
+Columns: `pcode`, `workshop`, `planned_date`, `actual_date`, `is_on_time` (GENERATED), `delay_days` (GENERATED), `status`
+
+### 10. `material_usage` — SX-04: Tiêu hao NVL
+Columns: `report_date`, `workshop`, `pcode`, `material_code`, `norm_qty`, `actual_qty`, `variance_pct` (GENERATED)
+
+### 11. `findings_5s` — SX-05/KH-04: Phát hiện 5S
+Columns: `finding_date`, `workshop`, `department` (PRODUCTION/COORDINATION/ALL), `category`, `due_date`, `resolved_date`, `is_resolved` (GENERATED), `is_on_time` (GENERATED)
+
+### 12. `site_progress` — SX-06: Tiến độ công trình
+Columns: `project_code`, `start_date`, `planned_end_date`, `planned_hours`, `actual_hours`, `status`
+
+### 13. `machine_breakdowns` — KT-01/02/03: Sự cố máy
+Columns: `workshop`, `machine_code`, `breakdown_start`, `breakdown_end`, `downtime_minutes` (GENERATED), `is_planned`, `status`
+
+### 14. `maintenance_schedule` — KT-04: Lịch bảo trì
+Columns: `workshop`, `machine_code`, `maintenance_type`, `scheduled_date`, `actual_date`, `is_completed` (GENERATED), `is_on_time` (GENERATED)
+
+### 15. `technical_drawings` — KT-05/06: Bản vẽ kỹ thuật
+Columns: `drawing_code` (UNIQUE), `request_date`, `due_date`, `delivered_date`, `is_on_time` (GENERATED), `has_errors`, `status`
+
+### 16. `site_surveys` — KT-07: Khảo sát công trình
+Columns: `survey_date`, `total_items`, `error_items`, `accuracy_pct` (GENERATED)
+
+### 17. `deliveries` — KH-02/03/07: Giao hàng
+Columns: `delivery_code` (UNIQUE), `pcode`, `customer`, `planned_date`, `actual_date`, `is_on_time` (GENERATED), `total_weight_tons`, `damaged_weight_tons`, `damage_pct` (GENERATED), `delivery_cost`, `cost_per_ton` (GENERATED), `status`
+
+### 18. `delivery_cost_baseline` — KH-03: Baseline chi phí 2025
+### 19. `statistical_reports` — KH-05: Báo cáo thống kê
+### 20. `iso_procedures` — KH-06: Quy trình ISO
+
+---
+
+## 📋 HR & Overtime Tables (migration 012)
+
+### 21. `employees` — Danh sách nhân viên
+Columns: `employee_code`, `full_name`, `workshop`, `position`, `team`, `is_active`
+
+### 22. `overtime_records` — Tăng ca (master)
+Columns: `ot_date`, `customer`, `pcode`, `workshop`, `original_workshop`, `ot_category` (PRODUCTION/DELIVERY/INTERNAL), `reasons` (JSONB), `total_employees`, `total_hours`
+
+**Trigger:** `trg_normalize_ot_workshop_biu` → auto-normalize workshop code (DM1→DMC1, DM2→DMC1, v.v.), lưu raw trong `original_workshop`
+
+### 23. `overtime_participants` — Nhân viên trong ca tăng ca
+Columns: `overtime_id` (FK), `employee_id` (FK nullable), `employee_name`, `hours`
+
+### 24. `overtime_imports` — Lịch sử import CSV tăng ca
+Columns: `source_url`, `import_month`, `rows_imported`, `rows_skipped`, `errors` (JSONB), `status`
+
+---
+
+## 📋 Audit (migration 015)
+
+### 25. `audit_log` — Lịch sử thay đổi
+Columns: `table_name`, `record_id`, `action` (INSERT/UPDATE/DELETE), `old_data` (JSONB), `new_data` (JSONB), `changed_by` (FK profiles), `changed_at`, `ip_address`
+
+**Triggers hiện có:** kpi_targets, overtime_records, employees, deliveries
+
+### 26. `human_resource` / `hr_daily` — Nhân sự theo xưởng (migration 018)
+`human_resource`: danh sách nhân sự vận hành theo factory/workshop.
+`hr_daily`: tổng quân số và danh sách vắng theo `factory + pdate`.
+
+### 27. `overtime_requests` / `overtime_request_participants` — Duyệt tăng ca (migration 020)
+Request tăng ca chờ duyệt; khi approved, RPC `rpc_review_overtime_request` ghi sang `overtime_records`.
+
+### 28. Security hardening staging (migration 022)
+- Drop `profiles_update_own` để chặn user tự đổi `role/workspace`.
+- Tighten RLS theo workspace cho `overtime_requests`, `overtime_request_participants`, `maintenance_schedule`, `human_resource`, `hr_daily`.
+- `rpc_review_overtime_request` kiểm tra workspace của reviewer trước khi approve/reject.
+
+---
+
+## 📋 Views (migration 014)
+
+### `v_data` — Alias lowercase cho `data`
+```sql
+SELECT id, "PCODE" AS pcode, "WORKSHOP" AS workshop, "CUSTOMER" AS customer,
+       "DESCRIPTION" AS description, "QUANTITY" AS quantity,
+       "DEADLINEDATE" AS deadline_date, "INITIALDATE" AS initial_date,
+       "STATUS" AS status, created_at, updated_at
+FROM public.data;
+```
+GRANT SELECT TO authenticated.
 
 ---
 
 ## 🔌 RPC Functions
 
-### `fn_classify_shift(starttime TEXT)` → TEXT
-**Purpose:** Phân loại ca từ giờ bắt đầu
-**Input:** TEXT format "HH:mm" hoặc "H:mm" hoặc NULL
-**Output:** `ca_sang_1` | `ca_sang_2` | `ca_chieu_1` | `ca_chieu_2` | `ca_tang_ca` | `khac`
+### Core (migrations 003–006)
+- **`fn_classify_shift(starttime TEXT)`** → TEXT: Phân loại ca (`ca_sang_1`, `ca_sang_2`, `ca_chieu_1`, `ca_chieu_2`, `ca_tang_ca`, `khac`)
+- **`rpc_fetch_prod_rows(p_from, p_to, p_workshop)`** → TABLE: JOIN Production+data+Norm
+- **`check_production_insert_permission(p_pcode TEXT)`** → BOOLEAN: RLS helper
 
-**Migration 006** đã thêm `ca_tang_ca` (16:30–22:00) cho ca tăng ca.
+### KPI (migration 013)
+- **`get_kpi_target(p_kpi_code, p_period)`** → NUMERIC: Lấy target theo kỳ
+- **`get_period_range(p_period_type, p_anchor_date)`** → TABLE(period_start, period_end, period_label): Tính khoảng ngày của kỳ
+- **`rpc_calculate_kpi(p_department, p_period_type, p_anchor_date, p_workshop?)`** → TABLE: Tính actual vs target cho toàn bộ KPI 1 bộ phận
+- **`rpc_kpi_trend(p_kpi_code, p_period_type, p_anchor_date, p_count?, p_workshop?)`** → TABLE: Time-series KPI trend
+- **`rpc_kpi_workshop_matrix(p_department, p_period_type, p_anchor_date)`** → TABLE: KPI × 4 workshops
+- **`rpc_overtime_summary(p_period_type, p_anchor_date, p_workshop?)`** → TABLE: Tổng hợp tăng ca theo workshop
+- **`rpc_top_overtime_employees(p_period_type, p_anchor_date, p_limit?)`** → TABLE: Top nhân viên tăng ca
 
-```sql
-SELECT fn_classify_shift('07:30');  -- 'ca_sang_1'
-SELECT fn_classify_shift('18:00');  -- 'ca_tang_ca'
-SELECT fn_classify_shift(NULL);     -- 'khac'
-```
-
-### `rpc_fetch_prod_rows(p_from DATE, p_to DATE, p_workshop TEXT)` → TABLE
-**Purpose:** JOIN `Production` + `data` + `Norm` trong 1 query, tránh N+1
-**Input:**
-- `p_from`, `p_to`: khoảng ngày
-- `p_workshop`: `NULL` = all, hoặc mã xưởng cụ thể (DMC1/DMC3/DMC4/DMC5)
-
-**Output columns:** pcode, pdate, workshop, product, poutput, eoutput, routput, workforce, starttime, endtime, realnorm, norm, pspeed
-
-### `check_production_insert_permission(p_pcode TEXT)` → BOOLEAN
-**Purpose:** RLS helper check user có quyền insert vào workshop nào
-**Logic (migration 004):**
-```
-IF user.role = 'ADMIN' THEN TRUE
-IF user.workspace = 'ALL' THEN TRUE
-IF user.workspace IS NULL OR '' THEN FALSE (non-ADMIN)
-ELSE check workshop of pcode in data table against user.workspace
-```
-
-### `handle_updated_at()` TRIGGER
-Auto update `updated_at` khi UPDATE row.
-
-### `handle_new_user()` TRIGGER
-Auto tạo row trong `profiles` khi có user mới sign up.
+### Helpers
+- **`normalize_workshop(p_raw TEXT)`** → TEXT IMMUTABLE: DM1/DM2→DMC1, DM3→DMC3, ...
+- **`handle_updated_at()`** TRIGGER: Auto set updated_at
+- **`handle_new_user()`** TRIGGER: Auto tạo profiles khi signup
+- **`log_table_change()`** TRIGGER: Ghi audit_log
+- **`trg_normalize_ot_workshop()`** TRIGGER: Normalize workshop trong overtime_records
 
 ---
 
-## 🔒 RLS Policies (migration 004)
+## 🔒 RLS Policies
 
-### Tổng quan
-- Mọi table đều bật RLS
-- ADMIN bypass tất cả policy (qua `check_production_insert_permission`)
-- MANAGER/SUPERVISOR/USER check workspace
+| Table | SELECT | INSERT | UPDATE | DELETE |
+|-------|--------|--------|--------|--------|
+| `profiles` | own row | auto (trigger) | own row | - |
+| `data` | authenticated | authenticated | ADMIN/MANAGER/SUPERVISOR(own ws) | - |
+| `"Production"` | authenticated | check_permission | - | - |
+| `"Norm"` | authenticated | - | - | - |
+| `"Material"` | authenticated | - | - | - |
+| KPI tables | authenticated | authenticated | ADMIN/MANAGER | ADMIN |
+| `employees` | authenticated | ADMIN/MANAGER | ADMIN/MANAGER | ADMIN/MANAGER |
+| `overtime_*` | authenticated | authenticated | ADMIN/MANAGER | ADMIN |
+| `kpi_targets` | authenticated | ADMIN | ADMIN | ADMIN |
+| `audit_log` | - | SECURITY DEFINER trigger | - | - |
 
-### `profiles`
-- SELECT: user đọc profile của chính mình (`auth.uid() = id`)
-- UPDATE: user update profile của chính mình
-
-### `data`
-- SELECT: authenticated users
-- INSERT: authenticated users (Apps Script service_role bypass)
-- UPDATE: authenticated users ⚠️ (xem DB-002 trong known-issues.md)
-
-### `Norm`, `Material`
-- SELECT: authenticated users
-
-### `Production`
-- SELECT: authenticated users
-- INSERT: `check_production_insert_permission(pcode)` = TRUE
+**Migration 007** thu hẹp `data` UPDATE: ADMIN/MANAGER unrestricted, SUPERVISOR chỉ update `"WORKSHOP"` = workspace của mình.
 
 ---
 
 ## 📜 Migration History
 
-| File | Nội dung | Trạng thái |
-|------|----------|------------|
-| `001_initial_schema.sql` | CREATE tất cả tables (data, Production, Norm, Material, profiles) + indexes + RLS cơ bản + triggers | ✅ Applied |
-| `002_normalize_workshop_codes.sql` | Normalize `Norm.workshop` → DMC codes | ✅ Applied |
-| `003_production_rls_strict.sql` | Tạo `check_production_insert_permission()` v1 (MANAGER = unrestricted) | ✅ Applied |
-| `004_fix_empty_workspace_rls.sql` | Fix RLS: chỉ ADMIN unrestricted, MANAGER cũng bị workspace-scoped | ✅ Applied |
-| `005_report_rpcs.sql` | Tạo `rpc_fetch_prod_rows` + `fn_classify_shift` v1 | ✅ Applied |
-| `006_add_overtime_shift.sql` | Update `fn_classify_shift` thêm `ca_tang_ca` (16:30–22:00) | ✅ Applied |
+| File | Nội dung | Branch | Trạng thái |
+|------|----------|--------|------------|
+| `001_initial_schema.sql` | Tables: data, Production, Norm, Material, profiles + indexes + RLS + triggers | main | ✅ Production |
+| `002_normalize_workshop_codes.sql` | Normalize Norm.workshop → DMC codes | main | ✅ Production |
+| `003_production_rls_strict.sql` | check_production_insert_permission() v1 | main | ✅ Production |
+| `004_fix_empty_workspace_rls.sql` | Fix RLS workspace logic | main | ✅ Production |
+| `005_report_rpcs.sql` | rpc_fetch_prod_rows + fn_classify_shift v1 | main | ✅ Production |
+| `006_add_overtime_shift.sql` | fn_classify_shift thêm ca_tang_ca | main | ✅ Production |
+| `007_tighten_rls_data_update.sql` | Thu hẹp UPDATE policy trên data | staging | ⏳ Staging only |
+| `008_kpi_targets.sql` | kpi_targets, kpi_baselines, get_kpi_target() | staging | ⏳ Staging only |
+| `009_production_kpi_tables.sql` | production_defects, order_completion, material_usage, findings_5s, site_progress | staging | ⏳ Staging only |
+| `010_maintenance_kpi_tables.sql` | machine_breakdowns, maintenance_schedule, technical_drawings, site_surveys | staging | ⏳ Staging only |
+| `011_coordination_kpi_tables.sql` | deliveries, delivery_cost_baseline, statistical_reports, iso_procedures | staging | ⏳ Staging only |
+| `012_hr_overtime_tables.sql` | employees, overtime_records, overtime_participants, overtime_imports, normalize_workshop() | staging | ⏳ Staging only |
+| `013_kpi_rpc_functions.sql` | rpc_calculate_kpi, rpc_kpi_trend, rpc_overtime_summary, rpc_top_overtime_employees, rpc_kpi_workshop_matrix, get_period_range() | staging | ⏳ Staging only |
+| `014_normalize_data_columns.sql` | View v_data (lowercase alias) | staging | ⏳ Staging only |
+| `015_audit_log.sql` | audit_log table + log_table_change() trigger | staging | ⏳ Staging only |
+| `016_sx01_from_production.sql` | SX-01 KPI từ Production | staging | ⏳ Staging only |
+| `017_machines.sql` | Machine inventory | staging | ⏳ Staging only |
+| `018_human_resource.sql` | human_resource + hr_daily | staging | ⏳ Staging only |
+| `019_cleanup_overtime_hr.sql` | Cleanup overtime/HR policies + constraints | staging | ⏳ Staging only |
+| `020_overtime_requests_maintenance_approval.sql` | Overtime request + maintenance approval workflow | staging | ⏳ Staging only |
+| `021_grant_overtime_request_access.sql` | Grants for overtime request tables | staging | ⏳ Staging only |
+| `022_staging_security_scope_hardening.sql` | Workspace/RLS/profile hardening for staging | staging | ⏳ Staging only |
 
----
-
-## 📊 Indexes đã có (từ migration 001 + 005)
-
-| Index | Table | Column | Mục đích |
-|-------|-------|--------|----------|
-| (UNIQUE) | `data` | `"PCODE"` | Business key uniqueness |
-| `idx_data_pcode` | `data` | `"PCODE"` | Query lookup |
-| `idx_data_initialdate` | `data` | `"INITIALDATE"` | Date range filter |
-| `idx_data_workshop` | `data` | `"WORKSHOP"` | Workshop filter |
-| `idx_norm_products` | `Norm` | `products` | JOIN với Production |
-| `idx_norm_workshop` | `Norm` | `workshop` | Workshop filter |
-| `idx_material_product` | `Material` | `product` | Lookup |
-| `idx_production_pdate` | `Production` | `pdate` | Date range |
-| `idx_production_pcode` | `Production` | `pcode` | JOIN với data |
-| `idx_production_pcode_pdate` | `Production` | `(pcode, pdate)` | Composite từ migration 005 |
+**Staging DB:** `vfzjweyzwjczrxphnvaa` — repo có migration 001-022; 022 cần apply qua staging CI/approved staging DB flow
+**Production DB:** `hzuyucyxyohppxfwresq` — chỉ có 001-006
 
 ---
 
@@ -240,10 +340,11 @@ Auto tạo row trong `profiles` khi có user mới sign up.
 - Có record `INITIALDATE = "0003942"` → không phải date hợp lệ
 - Apps Script skip những record này ở bước cast
 
-### 3. Apps Script sync state
-- Pointer `LAST_SYNCED_ROW` = row number trong Google Sheet
-- KHÔNG lưu trong DB, chỉ trong Script Properties
-- Nếu Apps Script bị reset → full resync
+### 3. Workshop mapping (tăng ca từ CSV)
+- File CSV gốc dùng DM1/DM2/DM3/DM4, DB chuẩn dùng DMC1/DMC3/DMC4/DMC5
+- DM1 và DM2 đều map về DMC1 (cùng phân xưởng vật lý)
+- Function `normalize_workshop()` handle conversion này
+- `overtime_records.original_workshop` giữ giá trị gốc để audit
 
 ---
 
@@ -258,18 +359,17 @@ Mỗi khi phiên bắt đầu, so sánh:
 
 SQL check drift:
 ```sql
--- 1. Columns của data table
-SELECT column_name, data_type, is_nullable
-FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'data'
-ORDER BY ordinal_position;
+-- 1. Migration history hiện tại
+SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version;
 
--- 2. Danh sách RPC
-SELECT routine_name
-FROM information_schema.routines
+-- 2. Columns của data table
+SELECT column_name, data_type FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'data' ORDER BY ordinal_position;
+
+-- 3. Danh sách RPC
+SELECT routine_name FROM information_schema.routines
 WHERE routine_schema = 'public' AND routine_type = 'FUNCTION';
 
--- 3. RLS policies
-SELECT schemaname, tablename, policyname, permissive, cmd, qual
-FROM pg_policies WHERE schemaname = 'public';
+-- 4. RLS policies
+SELECT tablename, policyname, cmd FROM pg_policies WHERE schemaname = 'public' ORDER BY tablename;
 ```

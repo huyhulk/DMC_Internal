@@ -3,7 +3,9 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { z } from 'zod'
-import type { UserRole } from '@/types'
+import { USER_ROLES, type UserRole } from '@/types'
+import { isKnownWorkspaceToken, normalizeWorkspaceList } from '@/lib/approval/workflow'
+import { requireTabEdit } from '@/lib/permissions/server'
 
 function getAdminDb() {
   return createSupabaseClient(
@@ -25,23 +27,29 @@ export interface UserRow {
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
+const workspaceSchema = z.string()
+  .transform((value) => normalizeWorkspaceList(value))
+  .refine(
+    (value) => value === '' || value.split(',').every(isKnownWorkspaceToken),
+    'Workspace chỉ được chọn trong danh sách xưởng/phòng ban'
+  )
+
 const createUserSchema = z.object({
   username:  z.string().min(2, 'Tên đăng nhập phải có ít nhất 2 ký tự').max(50).regex(/^[a-z0-9_]+$/, 'Chỉ dùng chữ thường, số, dấu gạch dưới'),
   password:  z.string().min(4, 'Mật khẩu phải có ít nhất 4 ký tự'),
-  role:      z.enum(['ADMIN', 'MANAGER', 'SUPERVISOR', 'USER']),
-  workspace: z.string(),
+  role:      z.enum(USER_ROLES),
+  workspace: workspaceSchema,
 })
 
 const updateUserSchema = z.object({
-  role:      z.enum(['ADMIN', 'MANAGER', 'SUPERVISOR', 'USER']),
-  workspace: z.string(),
+  role:      z.enum(USER_ROLES),
+  workspace: workspaceSchema,
 })
 
 // ─── Helper: verify caller is ADMIN ──────────────────────────────────────────
 
 async function requireAdmin() {
-  const { getSessionUser } = await import('./auth')
-  const user = await getSessionUser()
+  const user = await requireTabEdit('admin.users')
   return user?.role === 'ADMIN' ? user : null
 }
 
@@ -170,17 +178,6 @@ export async function deleteUserAction(
   if (targetId === admin.id) return { error: 'Không thể xóa tài khoản của mình' }
 
   const supabase = getAdminDb()
-
-  // Delete profile first (FK constraint), then auth user
-  const { error: profileErr } = await supabase
-    .from('profiles')
-    .delete()
-    .eq('id', targetId)
-
-  if (profileErr) {
-    logger.error({ error: profileErr.message, targetId }, 'deleteUserAction: delete profile failed')
-    return { error: profileErr.message }
-  }
 
   const { error: authErr } = await supabase.auth.admin.deleteUser(targetId)
   if (authErr) {

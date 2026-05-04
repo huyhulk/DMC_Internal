@@ -1,0 +1,3 @@
+-- Seed file cho local development (supabase start / supabase db reset)
+-- Staging seed data: xem supabase/staging-setup/seed_test.sql
+-- Production: không seed — data đến từ Google Sheet sync

@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { format, parse, isValid } from 'date-fns'
+import { format, parse, isValid, addDays } from 'date-fns'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -13,6 +13,18 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function getTodayLocal(): string {
   return format(new Date(), 'yyyy-MM-dd')
+}
+
+export function getLocalDateAfterDays(days: number, date = new Date()): string {
+  return format(addDays(date, days), 'yyyy-MM-dd')
+}
+
+export function getLocalCompactDate(date = new Date()): string {
+  return format(date, 'yyyyMMdd')
+}
+
+export function getLocalDateTimeInputValue(date = new Date()): string {
+  return format(date, "yyyy-MM-dd'T'HH:mm")
 }
 
 /**

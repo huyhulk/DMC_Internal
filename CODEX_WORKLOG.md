@@ -1,0 +1,219 @@
+# Codex Work Log
+
+Purpose: keep enough state for another session to continue accurately after context loss, errors, or interruption.
+
+Current status:
+- Active continuation requested by user.
+- Working tree on branch `staging` has existing uncommitted work from before this Codex session:
+  - Modified: `.claude/work-log.md`, `lib/kpi/queries.ts`, `types/database.ts`
+  - Deleted: old KPI component files under `components/kpi/kpi-*.tsx`
+  - Untracked: `.claude/PLAN_DATA_ENTRY_DEFECTS.md`, `.claude/README.md`, `.claude/SNIPPETS_DEFECTS.md`, `.claude/launch.json`, `scripts/copy-production-to-staging.mjs`, `supabase/migrations/019_cleanup_overtime_hr.sql`
+
+Working rules:
+- Before code changes: note the goal, relevant files, and intended edits.
+- During work: record important commands, findings, decisions, blockers, and test results.
+- After work: record changed files, verification performed, remaining risks, and next steps.
+- Do not record secrets from `.env.local` or other private files.
+
+Latest entry:
+- 2026-05-03: Fixed auth smoke blockers reported by user.
+  - Project progress check:
+    - `gsd-sdk` reports no valid `.planning/PROJECT.md`, `.planning/ROADMAP.md`, or `.planning/STATE.md`; current source of truth is `CODEX_WORKLOG.md` plus `.claude/work-log.md`.
+    - Current branch is `codex/hr-admin-overtime-approval`; latest committed work is `3404e38 fix(db): grant overtime request access`.
+    - Existing dirty worktree contains the ongoing overtime/maintenance approval workflow; this auth fix only touched auth/logout files and one new auth test.
+  - Root cause:
+    - Logout depended on a server-action redirect after Supabase `signOut()`, which could leave the client spinner active if the action/redirect path stalled.
+    - Staging admin auth password did not match the documented local smoke-test credential.
+  - Changes:
+    - `logoutAction()` now clears the Supabase session locally, revalidates layout state, and returns control to the client.
+    - Dashboard logout handler now navigates with `router.replace('/login')` and resets the spinner on failure.
+    - Added `__tests__/auth-actions.test.ts` covering non-blocking logout behavior and signOut error tolerance.
+    - Reset staging admin auth password to the documented local smoke-test credential without printing env keys.
+  - Verification:
+    - `npm test -- --runTestsByPath __tests__/auth-actions.test.ts` passed.
+    - `npm run type-check` passed.
+    - `npm run lint` passed.
+    - `npm test` passed: 10 suites / 103 tests.
+    - Staging Supabase smoke: admin and user login both succeeded.
+    - First `npm run build` hit known OneDrive `.next` EPERM; stopped repo dev server, verified `.next` was inside workspace, removed generated cache, reran build successfully.
+    - Restarted dev server at `http://localhost:3000`; `/login` returned 200.
+- 2026-05-03: Continued overtime UI smoke after user reported not seeing created request.
+  - Investigation:
+    - Shell HTTP to `/dashboard/administration?sub=overtime` redirects to login because terminal has no browser auth cookie.
+    - The two earlier smoke requests for `LSX04/26-00110` are now `approved`, so they do not appear under the UI default `Chờ duyệt` filter.
+  - Action:
+    - Created a new pending request through Supabase anon/authenticated user `user@dmc.local` with workspace `DMC1`, not service role.
+    - Request ID `da3a0ef5-ad3c-4e3b-ada1-e0fe90e77918`.
+    - `ot_date=2026-04-03`, `pcode=LSX04/26-00110`, `workshop=DMC1`, customer `Cơ khí Anh Cơ`, status `pending`.
+    - Participant `Bùi Thị Dung`, `hours=2`.
+  - Verification:
+    - Re-ran the same list shape used by the UI (`overtime_requests` with nested `overtime_request_participants`, `workshop=DMC1`, `approval_status=pending`) and confirmed the new request is returned.
+- 2026-05-03: Applied overtime request DB grants through Staging CI and completed smoke insert.
+  - Commit/push:
+    - Committed `3404e38 fix(db): grant overtime request access`.
+    - Pushed `HEAD` to `origin/staging`.
+  - GitHub Actions:
+    - Staging CI run `25273199647` passed.
+    - `Type Check, Lint & Build` passed.
+    - `Apply Migrations to Staging DB` passed, so migrations 020 and 021 were applied through CI using `STAGING_DB_URL`.
+  - Smoke test after migration:
+    - Logged in through Supabase anon client as `user@dmc.local`; profile `{ username: "user", role: "USER", workspace: "DMC1" }`.
+    - Verified order `LSX04/26-00110`, `INITIALDATE=2026-04-03`, customer `Cơ khí Anh Cơ`, status `Chưa SX`, source workshop `Phân xưởng 1- Tôn & Phụ kiện`.
+    - Inserted overtime request `848c4ddd-5202-4f65-8825-ba678b8e3ed6`, `approval_status=pending`, `total_employees=1`, `total_hours=2`.
+    - Inserted participant `Bùi Thị Dung`, `hours=2`, `employee_id=null`.
+    - Verified authenticated user can read back request and participant via PostgREST.
+- 2026-05-03: Added migration grant fix for overtime request access.
+  - Root cause from staging smoke:
+    - `user@dmc.local` with workspace `DMC1` can read `data` and `human_resource`.
+    - The target order exists: `LSX04/26-00110`, `INITIALDATE=2026-04-03`, customer `Cơ khí Anh Cơ`, status `Chưa SX`, source workshop `Phân xưởng 1- Tôn & Phụ kiện` mapped to `DMC1`.
+    - The same authenticated user received `PGRST205 Could not find the table 'public.overtime_requests' in the schema cache` for `overtime_requests` and `overtime_request_participants`, while service role could see both tables.
+    - This indicates migration 020 created tables/RLS but did not grant table privileges to `authenticated` for PostgREST access.
+  - Changes:
+    - Added `supabase/migrations/021_grant_overtime_request_access.sql` with `GRANT` statements for the request tables and `NOTIFY pgrst, 'reload schema'`.
+    - Added `__tests__/migration-grants.test.ts` to require those grants in CI.
+  - Verification:
+    - Regression test failed before migration existed, then passed after adding migration.
+    - `npm test` passed: 9 suites / 101 tests.
+    - `npm run type-check` passed.
+  - Not done:
+    - Did not apply the migration to staging because the local Supabase project is linked to production `hzuyucyxyohppxfwresq`, and no staging DB URL/password is available in env. Do not run `supabase db push` while linked to production.
+- 2026-05-03: Resumed overtime approval UI handoff and re-verified current work.
+  - Source of truth read:
+    - `.planning/HANDOFF.json`
+    - `.planning/.continue-here.md`
+    - `CLAUDE.md` / `.claude/guardrails.md`
+  - Findings:
+    - The LSX date filter and `human_resource` participant dropdown implementation is already present in the working tree.
+    - No new production code changes were made in this resume pass.
+    - Authenticated browser interaction still requires a logged-in browser session; command-line smoke confirms `/login` is reachable and unauthenticated administration route redirects to login.
+  - Fresh verification:
+    - `npm test -- --runTestsByPath __tests__/overtime-workflow.test.ts` passed: 1 suite / 4 tests.
+    - `npm run type-check` passed.
+    - `npm run lint` passed.
+    - `npm test` passed: 8 suites / 100 tests.
+    - First `npm run build` hit generated `.next` EPERM; stopped workspace dev server, verified `.next` was inside workspace, removed it, and reran `npm run build` successfully.
+    - Restarted dev server at `http://localhost:3000`; `/login` returned 200 and unauthenticated `/dashboard/administration?sub=overtime` returned 307 to `/login?sub=overtime`.
+  - Remaining:
+    - Manual authenticated browser smoke test on `/dashboard/administration?sub=overtime`.
+    - Decide whether to stage/commit/push the current dirty worktree.
+- 2026-05-03: Paused for new chat handoff at user request.
+  - User requested: "lưu công việc đang làm mở cửa số chat mới".
+  - Handoff files created/updated:
+    - `.planning/HANDOFF.json`
+    - `.planning/.continue-here.md`
+  - Important: the interrupted turn appears to have completed the overtime LSX/date/staff follow-up before the abort surfaced. Handoff files were corrected to reflect the implemented state, not the earlier design-only state.
+  - Current next step for a new chat:
+    - Read `CODEX_WORKLOG.md` and `.planning/HANDOFF.json`.
+    - Smoke test `/dashboard/administration?sub=overtime`.
+    - Decide commit scope for the dirty/untracked approval workflow files.
+- 2026-05-03: Fixed overtime request form filtering and participant selection.
+  - Root cause:
+    - LSX dropdown was previously stale because the order list only depended on selected workshop; changing OT date did not refresh the source order options.
+    - Participant rows were free-text inputs and did not use the `human_resource` roster maintained in the HR tab.
+  - Changes:
+    - `lib/overtime/workflow.ts`: overtime order helper now carries `initialdate` and filters by selected date; added `getOvertimeEmployeeOptions()` to build sorted participant options from `human_resource`.
+    - `lib/actions/overtime.ts`: `listIncompleteOvertimeOrdersAction(workshop, initialdate)` now selects/filters `data.INITIALDATE`; added `listOvertimeEmployeesByWorkshopAction()` for `human_resource`.
+    - `components/administration/overtime-tab.tsx`: changing OT date or workshop resets selected LSX/customer and reloads order options; changing workshop resets participant rows; participant name input is now a dropdown scoped to selected workshop.
+    - `__tests__/overtime-workflow.test.ts`: added coverage for date-scoped LSX filtering and human_resource participant options.
+  - Verification:
+    - `npm test -- --runTestsByPath __tests__/overtime-workflow.test.ts` passed.
+    - `npm test -- --runTestsByPath __tests__/overtime-workflow.test.ts __tests__/approval-workflow.test.ts __tests__/maintenance-workflow.test.ts` passed.
+    - `npm test` passed: 8 suites / 100 tests.
+    - `npm run type-check` passed.
+    - `npm run lint` passed.
+    - Stopped dev server and removed generated `.next`, then `npm run build` passed.
+    - Restarted dev server at `http://localhost:3000`; `/login` returned 200 and unauthenticated `/dashboard/administration?sub=overtime` returned 307.
+- 2026-05-03: Added Facebook-style approval notifications to the dashboard header after user selected visual option A.
+  - Scope:
+    - New helper `lib/approval/notifications.ts` maps pending overtime and maintenance approvals into grouped notification feed sections.
+    - New server action `lib/actions/approval-notifications.ts` reads pending `overtime_requests` and pending incomplete `maintenance_schedule` rows for approvers.
+    - New UI `components/layout/approval-notification-bell.tsx` renders a bell next to the user area with a red total badge and dropdown grouped by "Tăng ca" and "Bảo trì".
+    - `components/layout/dashboard-shell.tsx` now includes the bell in the right-side user controls.
+    - Test coverage added in `__tests__/approval-notifications.test.ts`.
+  - Verification:
+    - `npm test -- --runTestsByPath __tests__/approval-notifications.test.ts` passed.
+    - `npm test -- --runTestsByPath __tests__/approval-notifications.test.ts __tests__/approval-workflow.test.ts __tests__/maintenance-workflow.test.ts` passed.
+    - `npm test` passed: 8 suites / 98 tests.
+    - `npm run type-check` passed.
+    - `npm run lint` passed.
+    - First `npm run build` hit generated `.next` EPERM on OneDrive reparse cache; removed `.next` after verifying it was inside workspace, then `npm run build` passed.
+    - Dev server started at `http://localhost:3000`; `/login` returned 200 and unauthenticated `/dashboard/administration` returned 307.
+- 2026-05-03: Continued `codex/hr-admin-overtime-approval` from the existing plan `docs/superpowers/plans/2026-05-02-overtime-maintenance-approval.md`.
+  - Implemented/verified approval workflow scope:
+    - New overtime request staging tables and review RPC are represented in migration `020_overtime_requests_maintenance_approval.sql`.
+    - Administration route/nav and overtime request UI exist under `/dashboard/administration`.
+    - Maintenance schedules now have approval status, review action, and execution filtering to approved pending schedules.
+    - Added stricter helper coverage so empty USER/SUPERVISOR workspace no longer behaves like full access in the new approval/maintenance flow.
+  - Additional code touched this session:
+    - `lib/approval/workflow.ts`: added scoped workspace access helpers.
+    - `lib/maintenance/workflow.ts`: fixed empty workspace handling for maintenance workshop options.
+    - `lib/actions/overtime.ts` and `lib/actions/maintenance.ts`: switched new flow checks to scoped workspace helpers and return empty lists for non-admin users with no workspace.
+    - `__tests__/approval-workflow.test.ts` and `__tests__/maintenance-workflow.test.ts`: added regression coverage.
+  - Verification:
+    - `npm test -- --runTestsByPath __tests__/approval-workflow.test.ts __tests__/maintenance-workflow.test.ts` passed.
+    - `npm run type-check` passed.
+    - `npm run lint` passed.
+    - `npm test` passed: 5 suites / 89 tests.
+    - `npm run build` passed.
+    - Started local dev server at `http://localhost:3000`; `/login` returned 200 and `/dashboard/administration` returned 307 to `/login` while unauthenticated.
+  - Not done:
+    - Migration 020 has not been applied to staging from this session.
+    - Changes have not been staged, committed, or pushed.
+    - Existing unrelated untracked `.claude/*` defect-plan files and `scripts/copy-production-to-staging.mjs` remain out of scope.
+- 2026-05-02: Created this work log.
+- 2026-05-02: User asked to continue the current unfinished work. Inspected `git status`, `.claude/work-log.md`, `.claude/PLAN_DATA_ENTRY_DEFECTS.md`, `.claude/SNIPPETS_DEFECTS.md`, and diffs. Inferred active work is KPI/HR cleanup, not the older defects-entry plan:
+  - `lib/kpi/queries.ts`: adds real SX-04/SX-05 calculations from `material_usage` and `findings_5s`; fixes SX-06 to sum `poutput` instead of `eoutput`.
+  - `supabase/migrations/019_cleanup_overtime_hr.sql`: replaces `rpc_overtime_summary`, tightens `hr_daily` write policy, restores updated_at triggers, adds factory validation constraints as `NOT VALID`.
+  - `types/database.ts`: changes `hr_daily.id` type from `number` to `string`.
+  - Old KPI component files are deleted while newer PascalCase/nested KPI components exist.
+  - `scripts/copy-production-to-staging.mjs` copies `data`, `Norm`, and `Production` from prod to staging using a prod service key from env and staging key from `.env.local`; do not run unless explicitly needed because it writes staging data.
+  - Validation performed:
+    - `npm run type-check` passed.
+    - `npm run lint` passed.
+    - First `npm test` and `npm run build` failed due stale/locked generated `.next` cache, not code.
+    - Verified `.next` resolved to `C:\Users\trump\OneDrive\Desktop\DMCSOFTWARE\dmc-nextjs\.next`, no `node` process was running, removed generated `.next`.
+    - Re-ran `npm test`: 4 suites / 83 tests passed.
+    - Re-ran `npm run build`: Next.js production build passed.
+  - Not done yet:
+    - Did not apply `supabase/migrations/019_cleanup_overtime_hr.sql` to staging.
+    - Did not run `scripts/copy-production-to-staging.mjs` because it writes staging data and needs explicit intent/credentials.
+    - Did not stage/commit/push the existing working tree.
+  - Next step: decide commit scope. Likely include `lib/kpi/queries.ts`, `types/database.ts`, `supabase/migrations/019_cleanup_overtime_hr.sql`, KPI component deletions if intentionally replaced, and work logs. Leave old `.claude` plan/snippet files and staging copy script uncommitted unless user wants them.
+- 2026-05-02: User asked to continue. Current plan:
+  - Review `lib/kpi/queries.ts`, migration 019, and KPI component deletions one more time.
+  - Keep untracked old `.claude` plan/snippet files and `scripts/copy-production-to-staging.mjs` out of commit unless needed.
+  - Stage only verified KPI/HR cleanup files and logs.
+  - Commit locally, then decide push/apply migration based on available remote/workflow state.
+- 2026-05-02: Staged selected files only:
+  - `.claude/work-log.md`, `CODEX_WORKLOG.md`, `lib/kpi/queries.ts`, `types/database.ts`, `supabase/migrations/019_cleanup_overtime_hr.sql`
+  - deleted old KPI files: `components/kpi/kpi-card.tsx`, `components/kpi/kpi-department-dashboard.tsx`, `components/kpi/kpi-matrix-table.tsx`, `components/kpi/kpi-radar-chart.tsx`
+  - left untracked old plan/snippet/script files out of scope.
+  - staged secret scan only matched the word `secrets` inside this work-log rule; no credential-like value found.
+- 2026-05-02: Committed and pushed cleanup:
+  - Commit `b855c64 fix(kpi): complete production KPI and HR cleanup`.
+  - Pushed `staging` to `origin/staging`.
+  - GitHub Actions `Staging CI` run `25253092701` passed:
+    - Type Check, Lint & Build passed.
+    - Apply Migrations to Staging DB passed, so migration 019 was applied through CI.
+  - Remaining untracked/out-of-scope files: `.claude/PLAN_DATA_ENTRY_DEFECTS.md`, `.claude/README.md`, `.claude/SNIPPETS_DEFECTS.md`, `.claude/launch.json`, `scripts/copy-production-to-staging.mjs`.
+  - Next useful check: smoke test staging KPI/overtime endpoints or UI.
+- 2026-05-02: Post-push DB smoke on staging using `.env.local` service key without printing secrets:
+  - Project host prefix: `vfzjweyzwjczrxphnvaa`.
+  - `rpc_overtime_summary('monthly', '2026-05-02', NULL)` returned successfully with 0 rows.
+  - `material_usage`, `findings_5s`, and `hr_daily` count queries succeeded; all currently have 0 rows.
+  - This confirms schema/RPC availability, but not real KPI numbers because staging has no rows in these KPI/HR tables.
+- 2026-05-02: User provided `C:\Users\trump\Downloads\INSTALL.md` for "Installing Superpowers for Codex" and asked to install for future runs.
+  - Read `INSTALL.md`; it instructs cloning `https://github.com/obra/superpowers.git` to `~/.codex/superpowers` and creating a Windows junction at `~/.agents/skills/superpowers` pointing to `~/.codex/superpowers/skills`.
+  - Pre-check: Git is installed; neither target path exists yet; no `superpowers` or `bootstrap` block found in `~/.codex/AGENTS.md`.
+  - Next step: clone repo, create junction, verify skills directory, then restart Codex to discover new skills.
+- 2026-05-02: Superpowers install completed:
+  - Cloned `https://github.com/obra/superpowers.git` to `C:\Users\trump\.codex\superpowers` at commit `e7a2d16`.
+  - Created Windows junction `C:\Users\trump\.agents\skills\superpowers` -> `C:\Users\trump\.codex\superpowers\skills`.
+  - Verified 14 skill directories are visible through the junction, including `using-superpowers`, `brainstorming`, `writing-plans`, `executing-plans`, `systematic-debugging`, `verification-before-completion`, `subagent-driven-development`, and `dispatching-parallel-agents`.
+  - Updated `C:\Users\trump\.codex\config.toml` to set `[features].multi_agent = true` for Superpowers subagent skills.
+  - Codex needs restart/relaunch to discover the newly installed skills in future sessions.
+- 2026-05-02: Added compatibility junctions for Codex App skill discovery:
+  - Current Codex App session shows user skills under `C:\Users\trump\.codex\skills\<skill>\SKILL.md`, while Superpowers INSTALL uses `C:\Users\trump\.agents\skills\superpowers\<skill>\SKILL.md`.
+  - Created one direct junction per Superpowers skill under `C:\Users\trump\.codex\skills\`, pointing to the matching folder under `C:\Users\trump\.codex\superpowers\skills\`.
+  - Verified all 14 direct `C:\Users\trump\.codex\skills\<skill>\SKILL.md` paths exist through the junctions.
+  - Still requires Codex restart/relaunch for the active skill list to refresh.
