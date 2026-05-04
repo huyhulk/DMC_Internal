@@ -20,7 +20,8 @@ describe('dashboard navigation tabs', () => {
   })
 
   it('keeps ISO and HR under Administration and HR', () => {
-    expect(getAdministrationTabs().map((tab) => tab.key)).toEqual(['overtime', 'hr', 'findings5s', 'iso'])
+    expect(getAdministrationTabs().map((tab) => tab.key)).toEqual(['overtime', 'hr', 'hr-performance', 'findings5s', 'iso'])
+    expect(getAdministrationTabs().map((tab) => tab.label)).toContain('Hiệu suất NS')
     expect(getAdministrationTabs().map((tab) => tab.label)).toContain('Quy trình ISO')
   })
 

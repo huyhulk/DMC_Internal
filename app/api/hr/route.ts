@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getHRData } from '@/lib/actions/hr'
+import { ensureDefaultHRDailyRows, getHRData } from '@/lib/actions/hr'
 import { getSessionUser } from '@/lib/actions/auth'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
   }
   try {
+    await ensureDefaultHRDailyRows(date, user)
     const data = await getHRData(date, user)
     return NextResponse.json(data)
   } catch (e) {

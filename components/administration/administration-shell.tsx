@@ -2,6 +2,7 @@
 
 import { OvertimeTab } from './overtime-tab'
 import { HRTab } from '@/components/coordination/hr-tab'
+import { HRPerformanceTab } from './hr-performance-tab'
 import { Findings5sTab } from '@/components/coordination/findings-5s-tab'
 import { IsoTab } from '@/components/coordination/iso-tab'
 import type { SessionUser } from '@/types'
@@ -25,6 +26,7 @@ export function AdministrationShell({ user, activeSub, canEdit }: Props) {
       )}
       {sub === 'overtime' && <OvertimeTab user={user} canEdit={canEdit} />}
       {sub === 'hr' && <HRTab user={user} canEdit={canEdit} />}
+      {sub === 'hr-performance' && <HRPerformanceTab canEdit={canEdit} />}
       {sub === 'findings5s' && <Findings5sTab dept="COORDINATION" user={user} canEdit={canEdit} />}
       {sub === 'iso' && <IsoTab user={user} canEdit={canEdit} />}
     </div>

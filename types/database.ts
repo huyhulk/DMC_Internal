@@ -193,6 +193,9 @@ export interface Database {
           pdate: string
           totalem: number | null
           absent_ids: number[] | null
+          transferred_ids: number[] | null
+          auto_filled: boolean
+          auto_filled_at: string | null
           created_at: string
           updated_at: string | null
         }
@@ -201,10 +204,16 @@ export interface Database {
           pdate: string
           totalem?: number | null
           absent_ids?: number[] | null
+          transferred_ids?: number[] | null
+          auto_filled?: boolean
+          auto_filled_at?: string | null
         }
         Update: {
           totalem?: number | null
           absent_ids?: number[] | null
+          transferred_ids?: number[] | null
+          auto_filled?: boolean
+          auto_filled_at?: string | null
           updated_at?: string | null
         }
       }
@@ -224,7 +233,7 @@ export interface Database {
           planned_hours: number | null
           notes: string | null
           approval_status: 'pending' | 'approved' | 'rejected'
-          requested_by: string
+          requested_by: string | null
           approved_by: string | null
           approved_at: string | null
           approval_note: string | null
@@ -247,7 +256,7 @@ export interface Database {
           planned_hours?: number | null
           notes?: string | null
           approval_status?: 'pending' | 'approved' | 'rejected'
-          requested_by: string
+          requested_by: string | null
           approved_by?: string | null
           approved_at?: string | null
           approval_note?: string | null
@@ -269,7 +278,7 @@ export interface Database {
           planned_hours: number | null
           notes: string | null
           approval_status: 'pending' | 'approved' | 'rejected'
-          requested_by: string
+          requested_by: string | null
           approved_by: string | null
           approved_at: string | null
           approval_note: string | null
@@ -316,7 +325,7 @@ export interface Database {
           technician: string | null
           notes: string | null
           approval_status: 'pending' | 'approved' | 'rejected'
-          requested_by: string | null
+          requested_by: string | null | null
           approved_by: string | null
           approved_at: string | null
           approval_note: string | null
@@ -351,7 +360,7 @@ export interface Database {
           technician: string | null
           notes: string | null
           approval_status: 'pending' | 'approved' | 'rejected'
-          requested_by: string | null
+          requested_by: string | null | null
           approved_by: string | null
           approved_at: string | null
           approval_note: string | null

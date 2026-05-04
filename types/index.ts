@@ -145,6 +145,8 @@ export const FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 export type FactoryKey = typeof FACTORIES[number]
 export const HUMAN_RESOURCE_FACTORIES = [...FACTORIES, 'PKT-SX', 'DIEU-PHOI', 'Khác'] as const
 export type HumanResourceFactoryKey = typeof HUMAN_RESOURCE_FACTORIES[number]
+export const HR_DAILY_GROUPS = [...FACTORIES, 'PKT-SX', 'DIEU-PHOI'] as const
+export type HRDailyGroupKey = typeof HR_DAILY_GROUPS[number]
 
 // Display labels for each factory — used in dropdowns, charts, badges
 export const WORKSHOP_LABELS: Record<FactoryKey, string> = {
@@ -152,6 +154,12 @@ export const WORKSHOP_LABELS: Record<FactoryKey, string> = {
   DMC3: 'DMC3 — Tôn Panel & Phụ kiện',
   DMC4: 'DMC4 — Xà gồ, phụ kiện',
   DMC5: 'DMC5 — Tôn, PU & Phụ kiện',
+}
+
+export const HR_DAILY_GROUP_LABELS: Record<HRDailyGroupKey, string> = {
+  ...WORKSHOP_LABELS,
+  'PKT-SX': 'PKT-SX — Phòng kỹ thuật sản xuất',
+  'DIEU-PHOI': 'Điều Phối',
 }
 
 export interface HumanResource {
@@ -164,8 +172,9 @@ export interface HumanResource {
 }
 
 export interface HRDayData {
-  factory: FactoryKey
+  factory: HRDailyGroupKey
   totalem: number
   absentIds: number[]
+  transferredIds: number[]
   isAutoFilled: boolean
 }

@@ -15,6 +15,7 @@ export type PermissionKey =
   | 'coordination.reports'
   | 'administration.overtime'
   | 'administration.hr'
+  | 'administration.hr-performance'
   | 'administration.findings5s'
   | 'administration.iso'
   | 'admin.users'
@@ -47,6 +48,7 @@ export const PERMISSION_KEYS: PermissionKey[] = [
   'coordination.reports',
   'administration.overtime',
   'administration.hr',
+  'administration.hr-performance',
   'administration.findings5s',
   'administration.iso',
   'admin.users',
@@ -71,6 +73,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, { label: string; group: st
   'coordination.reports': { label: 'Báo Cáo TK', group: 'Điều Phối' },
   'administration.overtime': { label: 'Tăng ca', group: 'HC-NS' },
   'administration.hr': { label: 'Nhân sự', group: 'HC-NS' },
+  'administration.hr-performance': { label: 'Hiệu suất NS', group: 'HC-NS' },
   'administration.findings5s': { label: '5S', group: 'HC-NS' },
   'administration.iso': { label: 'Quy trình ISO', group: 'HC-NS' },
   'admin.users': { label: 'Quản lý người dùng', group: 'Hệ Thống' },
@@ -102,6 +105,7 @@ export const DEFAULT_ROLE_PERMISSIONS: PermissionMatrixByRole = {
     'coordination.reports': 'edit',
     'administration.overtime': 'edit',
     'administration.hr': 'edit',
+    'administration.hr-performance': 'edit',
     'administration.findings5s': 'edit',
     'administration.iso': 'edit',
   }),
@@ -122,6 +126,7 @@ export const DEFAULT_ROLE_PERMISSIONS: PermissionMatrixByRole = {
     'coordination.reports': 'view',
     'administration.overtime': 'edit',
     'administration.hr': 'view',
+    'administration.hr-performance': 'view',
     'administration.findings5s': 'edit',
     'administration.iso': 'view',
   }),
@@ -136,6 +141,7 @@ export const DEFAULT_ROLE_PERMISSIONS: PermissionMatrixByRole = {
     'coordination.reports': 'view',
     'administration.overtime': 'edit',
     'administration.hr': 'view',
+    'administration.hr-performance': 'view',
     'administration.findings5s': 'edit',
     'administration.iso': 'view',
   }),
@@ -166,6 +172,7 @@ export const DEFAULT_ROLE_PERMISSIONS: PermissionMatrixByRole = {
     report: 'view',
     'administration.overtime': 'edit',
     'administration.hr': 'edit',
+    'administration.hr-performance': 'edit',
     'administration.findings5s': 'edit',
     'administration.iso': 'edit',
   }),

@@ -77,10 +77,11 @@ const MAINTENANCE_ITEMS = getMaintenanceTabs().map((item) => ({
 }))
 
 const ADMINISTRATION_ICONS: Record<AdministrationTabKey, LucideIcon> = {
-  overtime:   Clock,
-  hr:         Users2,
-  findings5s: ListChecks,
-  iso:        BookCheck,
+  overtime:       Clock,
+  hr:             Users2,
+  'hr-performance': TrendingUp,
+  findings5s:     ListChecks,
+  iso:            BookCheck,
 }
 
 const ADMINISTRATION_ITEMS = getAdministrationTabs().map((item) => ({

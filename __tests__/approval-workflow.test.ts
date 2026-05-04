@@ -46,6 +46,7 @@ describe('approval workflow helpers', () => {
     expect(getAdministrationTabs()).toEqual([
       { key: 'overtime', label: 'Tăng ca' },
       { key: 'hr', label: 'Nhân sự' },
+      { key: 'hr-performance', label: 'Hiệu suất NS' },
       { key: 'findings5s', label: '5S' },
       { key: 'iso', label: 'Quy trình ISO' },
     ])
@@ -54,7 +55,8 @@ describe('approval workflow helpers', () => {
   it('normalizes factory and department workspace tokens', () => {
     expect(normalizeWorkspaceToken(' dmc3 ')).toBe('DMC3')
     expect(normalizeWorkspaceToken('pkt_sx')).toBe('PKT-SX')
-    expect(normalizeWorkspaceToken('phòng điều phối')).toBe('Phòng điều phối')
+    expect(normalizeWorkspaceToken('phòng điều phối')).toBe('DIEU-PHOI')
+    expect(normalizeWorkspaceToken('dieu phoi')).toBe('DIEU-PHOI')
     expect(normalizeWorkspaceToken('PHONG HC-NS')).toBe('Phòng HC-NS')
     expect(normalizeWorkspaceToken('phong kinh doanh')).toBe('Phòng Kinh Doanh')
   })

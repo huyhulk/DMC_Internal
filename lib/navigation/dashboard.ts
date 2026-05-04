@@ -19,10 +19,11 @@ export const MAINTENANCE_TABS = [
 ] as const satisfies readonly DashboardSubTab[]
 
 export const ADMINISTRATION_TABS = [
-  { key: 'overtime',   label: 'Tăng ca',      href: '/dashboard/administration?sub=overtime' },
-  { key: 'hr',         label: 'Nhân sự',      href: '/dashboard/administration?sub=hr' },
-  { key: 'findings5s', label: '5S',           href: '/dashboard/administration?sub=findings5s' },
-  { key: 'iso',        label: 'Quy trình ISO', href: '/dashboard/administration?sub=iso' },
+  { key: 'overtime',       label: 'Tăng ca',      href: '/dashboard/administration?sub=overtime' },
+  { key: 'hr',             label: 'Nhân sự',      href: '/dashboard/administration?sub=hr' },
+  { key: 'hr-performance', label: 'Hiệu suất NS', href: '/dashboard/administration?sub=hr-performance' },
+  { key: 'findings5s',     label: '5S',           href: '/dashboard/administration?sub=findings5s' },
+  { key: 'iso',            label: 'Quy trình ISO', href: '/dashboard/administration?sub=iso' },
 ] as const satisfies readonly DashboardSubTab[]
 
 export type CoordinationTabKey = typeof COORDINATION_TABS[number]['key']

@@ -4,10 +4,19 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { z } from 'zod'
 import { getSessionUser } from '@/lib/actions/auth'
-import { requireTabEdit } from '@/lib/permissions/server'
 import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
-import type { HumanResource, HRDayData, HumanResourceFactoryKey } from '@/types'
-import type { SessionUser } from '@/types'
+import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
+import { calcDurationHours, normalizeWorkshop, workshopCode } from '@/lib/utils'
+import { calculateActualHeadcount, elapsedWorkHours, getVietnamNow, isProductionHRGroup } from '@/lib/hr/workflow'
+import {
+  HR_DAILY_GROUPS,
+  HUMAN_RESOURCE_FACTORIES,
+  type HumanResource,
+  type HRDailyGroupKey,
+  type HRDayData,
+  type HumanResourceFactoryKey,
+  type SessionUser,
+} from '@/types'
 
 // Direct admin client — same pattern as lib/db/queries.ts
 function getDb() {
@@ -20,11 +29,38 @@ function getDb() {
 
 // ─── Constants & Types ────────────────────────────────────────────────────────
 
-// Internal-only constant — not exported (use server files cannot export non-async values)
-const FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
-const HUMAN_RESOURCE_FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5', 'PKT-SX', 'DIEU-PHOI', 'Khác'] as const
-type FactoryKey = typeof FACTORIES[number]
 type HRProfile = Pick<SessionUser, 'role' | 'workspace'>
+const PRODUCTION_GROUPS = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const satisfies readonly HRDailyGroupKey[]
+
+type HRDailyRow = {
+  factory: string
+  totalem: number | null
+  absent_ids: number[] | null
+  transferred_ids: number[] | null
+  auto_filled: boolean | null
+  pdate: string | null
+}
+
+type ProductionEfficiencySourceRow = {
+  pcode: string | null
+  workforce: number | null
+  starttime: string | null
+  endtime: string | null
+}
+
+type DataWorkshopRow = {
+  PCODE: string
+  WORKSHOP: string | null
+}
+
+export interface HREfficiencyRow {
+  factory: HRDailyGroupKey
+  productionLaborHours: number
+  elapsedHours: number
+  actualHeadcount: number
+  efficiency: number | null
+  warnings: string[]
+}
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
@@ -34,9 +70,9 @@ const dateSchema = z
 
 const saveHRDailySchema = z.object({
   date: dateSchema,
-  factory: z.enum(['DMC1', 'DMC3', 'DMC4', 'DMC5']),
-  totalem: z.number().min(0, 'Total employees must be >= 0'),
+  factory: z.enum(HR_DAILY_GROUPS),
   absentIds: z.array(z.number().int().positive()),
+  transferredIds: z.array(z.number().int().positive()),
 })
 
 const humanResourceSchema = z.object({
@@ -62,6 +98,31 @@ function getVisibleHumanResourceFactories(profile: HRProfile): HumanResourceFact
   return HUMAN_RESOURCE_FACTORIES.filter((factory) => canAccessFactory(profile, factory)) as HumanResourceFactoryKey[]
 }
 
+function getVisibleHRDailyGroups(profile: HRProfile): HRDailyGroupKey[] {
+  return HR_DAILY_GROUPS.filter((factory) => canAccessFactory(profile, factory))
+}
+
+function countEmployeesByGroup(employees: HumanResource[]): Map<HRDailyGroupKey, number> {
+  const counts = new Map<HRDailyGroupKey, number>()
+  for (const group of HR_DAILY_GROUPS) counts.set(group, 0)
+  for (const employee of employees) {
+    if ((HR_DAILY_GROUPS as readonly string[]).includes(employee.factory ?? '')) {
+      const group = employee.factory as HRDailyGroupKey
+      counts.set(group, (counts.get(group) ?? 0) + 1)
+    }
+  }
+  return counts
+}
+
+function uniqueIds(ids: number[]): number[] {
+  return Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)))
+}
+
+function shouldEnsureDefaultRows(date: string): boolean {
+  const now = getVietnamNow()
+  return date === now.date && (now.hour > 16 || (now.hour === 16 && now.minute >= 0))
+}
+
 // ─── getHRData ────────────────────────────────────────────────────────────────
 
 export async function getHRData(
@@ -80,12 +141,9 @@ export async function getHRData(
   if (!scope.unrestricted && scope.workspaces.length === 0) return { employees: [], dailyData: [] }
 
   const factories = getVisibleHumanResourceFactories(profile)
-  const productionFactories = factories.filter((factory): factory is FactoryKey =>
-    FACTORIES.includes(factory as FactoryKey)
-  )
+  const dailyGroups = getVisibleHRDailyGroups(profile)
   const supabase = getDb()
 
-  // Parallel: all employees + today's hr_daily rows
   const [empRes, dailyRes] = await Promise.all([
     supabase
       .from('human_resource')
@@ -94,9 +152,9 @@ export async function getHRData(
       .order('name', { ascending: true }),
     supabase
       .from('hr_daily')
-      .select('factory,totalem,absent_ids,pdate')
+      .select('factory,totalem,absent_ids,transferred_ids,auto_filled,pdate')
       .eq('pdate', date)
-      .in('factory', [...productionFactories]),
+      .in('factory', [...dailyGroups]),
   ])
 
   if (empRes.error) {
@@ -115,53 +173,20 @@ export async function getHRData(
     phone: row.phone as string | null,
   }))
 
-  // Build a map of factory → today's daily row
-  type DailyRow = { factory: string; totalem: number | null; absent_ids: number[] | null; pdate: string | null }
-  const todayMap = new Map<string, DailyRow>()
-  for (const row of (dailyRes.data ?? []) as DailyRow[]) {
+  const headcountByGroup = countEmployeesByGroup(employees)
+  const todayMap = new Map<string, HRDailyRow>()
+  for (const row of (dailyRes.data ?? []) as HRDailyRow[]) {
     todayMap.set(row.factory, row)
   }
 
-  // For factories that have no record today: fetch latest totalem via Promise.allSettled
-  const factoriesWithoutToday = productionFactories.filter((f) => !todayMap.has(f))
-
-  const latestResults = await Promise.allSettled(
-    factoriesWithoutToday.map((factory) =>
-      supabase
-        .from('hr_daily')
-        .select('factory,totalem,absent_ids,pdate')
-        .eq('factory', factory)
-        .order('pdate', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    )
-  )
-
-  const latestMap = new Map<string, number>()
-  latestResults.forEach((result, idx) => {
-    const factory = factoriesWithoutToday[idx]
-    if (result.status === 'fulfilled' && result.value.data) {
-      const val = result.value.data as DailyRow
-      latestMap.set(factory, val.totalem ?? 0)
-    }
-  })
-
-  // Build final HRDayData for all 4 factories
-  const dailyData: HRDayData[] = productionFactories.map((factory) => {
+  const dailyData: HRDayData[] = dailyGroups.map((factory) => {
     const todayRow = todayMap.get(factory)
-    if (todayRow) {
-      return {
-        factory,
-        totalem: todayRow.totalem ?? 0,
-        absentIds: todayRow.absent_ids ?? [],
-        isAutoFilled: false,
-      }
-    }
     return {
       factory,
-      totalem: latestMap.get(factory) ?? 0,
-      absentIds: [],
-      isAutoFilled: true,
+      totalem: headcountByGroup.get(factory) ?? 0,
+      absentIds: todayRow?.absent_ids ?? [],
+      transferredIds: todayRow?.transferred_ids ?? [],
+      isAutoFilled: todayRow?.auto_filled ?? !todayRow,
     }
   })
 
@@ -178,28 +203,39 @@ export async function getHRData(
 export async function saveHRDaily(
   date: string,
   factory: string,
-  totalem: number,
-  absentIds: number[]
+  absentIds: number[],
+  transferredIds: number[] = []
 ): Promise<{ success: boolean; error?: string }> {
-  const parsed = saveHRDailySchema.safeParse({ date, factory, totalem, absentIds })
+  const parsed = saveHRDailySchema.safeParse({ date, factory, absentIds, transferredIds })
   if (!parsed.success) {
     const msg = parsed.error.errors[0].message
     logger.warn({ date, factory, zodError: msg }, 'saveHRDaily: validation failed')
     return { success: false, error: msg }
   }
 
-  const { date: pdate, factory: fac, totalem: total, absentIds: absent } = parsed.data
+  const { date: pdate, factory: fac } = parsed.data
+  const absent = uniqueIds(parsed.data.absentIds)
+  const transferred = uniqueIds(parsed.data.transferredIds).filter((id) => !absent.includes(id))
   const user = await requireHREditUser()
   if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
   if (!canAccessFactory(user, fac)) return { success: false, error: 'Không có quyền cập nhật xưởng này.' }
 
   const supabase = getDb()
+  const total = await getHeadcountForGroup(supabase, fac)
 
-  // Upsert hr_daily — conflict on (factory, pdate)
   const { error: upsertError } = await supabase
     .from('hr_daily')
     .upsert(
-      { factory: fac, pdate, totalem: total, absent_ids: absent },
+      {
+        factory: fac,
+        pdate,
+        totalem: total,
+        absent_ids: absent,
+        transferred_ids: transferred,
+        auto_filled: false,
+        auto_filled_at: null,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: 'factory,pdate' }
     )
 
@@ -208,8 +244,171 @@ export async function saveHRDaily(
     return { success: false, error: upsertError.message }
   }
 
-  logger.info({ factory: fac, date: pdate, totalem: total, absentCount: absent.length }, 'saveHRDaily success')
+  logger.info({ factory: fac, date: pdate, totalem: total, absentCount: absent.length, transferredCount: transferred.length }, 'saveHRDaily success')
   return { success: true }
+}
+
+async function getHeadcountForGroup(supabase: ReturnType<typeof getDb>, factory: HRDailyGroupKey): Promise<number> {
+  const { count, error } = await supabase
+    .from('human_resource')
+    .select('id', { count: 'exact', head: true })
+    .eq('factory', factory)
+
+  if (error) {
+    logger.error({ err: error.message, factory }, 'getHeadcountForGroup failed')
+    return 0
+  }
+  return count ?? 0
+}
+
+export async function ensureDefaultHRDailyRows(date: string, scopeUser?: HRProfile): Promise<void> {
+  const parsedDate = dateSchema.safeParse(date)
+  if (!parsedDate.success || !shouldEnsureDefaultRows(date)) return
+
+  const profile = scopeUser ?? await getSessionUser()
+  if (!profile) return
+
+  const groups = getVisibleHRDailyGroups(profile)
+  if (groups.length === 0) return
+
+  const supabase = getDb()
+  const [empRes, dailyRes] = await Promise.all([
+    supabase
+      .from('human_resource')
+      .select('id,name,factory,machine,position,phone')
+      .in('factory', [...groups]),
+    supabase
+      .from('hr_daily')
+      .select('factory')
+      .eq('pdate', date)
+      .in('factory', [...groups]),
+  ])
+
+  if (empRes.error || dailyRes.error) {
+    logger.error({ empErr: empRes.error?.message, dailyErr: dailyRes.error?.message }, 'ensureDefaultHRDailyRows query failed')
+    return
+  }
+
+  const employees: HumanResource[] = (empRes.data ?? []).map((row) => ({
+    id: row.id as number,
+    name: row.name as string,
+    factory: row.factory as string | null,
+    machine: row.machine as string | null,
+    position: row.position as string | null,
+    phone: row.phone as string | null,
+  }))
+  const counts = countEmployeesByGroup(employees)
+  const existing = new Set(((dailyRes.data ?? []) as Array<{ factory: string }>).map((row) => row.factory))
+  const now = new Date().toISOString()
+  const rows = groups
+    .filter((factory) => !existing.has(factory))
+    .map((factory) => ({
+      factory,
+      pdate: date,
+      totalem: counts.get(factory) ?? 0,
+      absent_ids: [],
+      transferred_ids: [],
+      auto_filled: true,
+      auto_filled_at: now,
+      updated_at: now,
+    }))
+
+  if (rows.length === 0) return
+
+  const { error } = await supabase
+    .from('hr_daily')
+    .upsert(rows, { onConflict: 'factory,pdate' })
+
+  if (error) logger.error({ err: error.message, date }, 'ensureDefaultHRDailyRows upsert failed')
+}
+
+export async function getHREfficiencyData(date: string, scopeUser?: HRProfile): Promise<HREfficiencyRow[]> {
+  const parsedDate = dateSchema.safeParse(date)
+  if (!parsedDate.success) {
+    logger.warn({ date }, 'getHREfficiencyData: invalid date')
+    return []
+  }
+
+  const profile = scopeUser ?? await requireTabView('administration.hr-performance')
+  if (!profile) return []
+
+  const visibleGroups = PRODUCTION_GROUPS.filter((factory) => canAccessFactory(profile, factory))
+  if (visibleGroups.length === 0) return []
+
+  const supabase = getDb()
+  const [hrData, productionRes] = await Promise.all([
+    getHRData(date, profile),
+    supabase
+      .from('Production')
+      .select('pcode,workforce,starttime,endtime')
+      .eq('pdate', date),
+  ])
+
+  if (productionRes.error) {
+    logger.error({ err: productionRes.error.message, date }, 'getHREfficiencyData: production query failed')
+  }
+
+  const productionRows = (productionRes.data ?? []) as ProductionEfficiencySourceRow[]
+  const pcodes = Array.from(new Set(productionRows.map((row) => row.pcode).filter((pcode): pcode is string => Boolean(pcode))))
+  const pcodeToWorkshop = new Map<string, string>()
+
+  if (pcodes.length > 0) {
+    const { data, error } = await supabase
+      .from('data')
+      .select('PCODE,WORKSHOP')
+      .in('PCODE', pcodes)
+
+    if (error) {
+      logger.error({ err: error.message, date }, 'getHREfficiencyData: data query failed')
+    } else {
+      for (const row of (data ?? []) as DataWorkshopRow[]) {
+        pcodeToWorkshop.set(row.PCODE, workshopCode(normalizeWorkshop(row.WORKSHOP ?? '')))
+      }
+    }
+  }
+
+  const headcountByFactory = new Map<HRDailyGroupKey, number>()
+  for (const row of hrData.dailyData) {
+    headcountByFactory.set(row.factory, calculateActualHeadcount(row.totalem, row.absentIds, row.transferredIds))
+  }
+
+  const elapsedHours = elapsedWorkHours(date)
+  const rows = new Map<HRDailyGroupKey, HREfficiencyRow>()
+  for (const factory of visibleGroups) {
+    rows.set(factory, {
+      factory,
+      productionLaborHours: 0,
+      elapsedHours,
+      actualHeadcount: headcountByFactory.get(factory) ?? 0,
+      efficiency: null,
+      warnings: [],
+    })
+  }
+
+  for (const row of productionRows) {
+    if (!row.pcode) continue
+    const factory = pcodeToWorkshop.get(row.pcode)
+    if (!factory || !isProductionHRGroup(factory)) continue
+    const target = rows.get(factory)
+    if (!target) continue
+
+    const workforce = Number(row.workforce ?? 0)
+    const duration = row.starttime && row.endtime ? calcDurationHours(row.starttime, row.endtime) : 0
+
+    if (workforce <= 0) target.warnings.push(`${row.pcode}: thiếu nhân sự lệnh`)
+    if (duration <= 0) target.warnings.push(`${row.pcode}: thiếu giờ bắt đầu/kết thúc`)
+    if (workforce > 0 && duration > 0) target.productionLaborHours += duration * workforce
+  }
+
+  for (const row of rows.values()) {
+    if (row.actualHeadcount <= 0) row.warnings.push('Chưa có nhân sự làm việc thực tế')
+    if (row.elapsedHours <= 0) row.warnings.push('Chưa đến giờ làm việc 07:30')
+    const denominator = row.elapsedHours * row.actualHeadcount
+    row.productionLaborHours = Math.round(row.productionLaborHours * 100) / 100
+    row.efficiency = denominator > 0 ? Math.round((row.productionLaborHours / denominator) * 10000) / 100 : null
+  }
+
+  return Array.from(rows.values())
 }
 
 // ─── createHumanResource ─────────────────────────────────────────────────────
