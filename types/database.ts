@@ -13,7 +13,7 @@ export interface Database {
         Row: {
           id: string
           username: string
-          role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'
+          role: 'ADMIN' | 'MANAGER' | 'WORKSHOP_MANAGER' | 'TEAM_LEADER' | 'MAINTENANCE' | 'COORDINATION' | 'SALES' | 'HR'
           workspace: string
           created_at: string
           updated_at: string
@@ -21,14 +21,14 @@ export interface Database {
         Insert: {
           id: string
           username: string
-          role?: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'
+          role?: 'ADMIN' | 'MANAGER' | 'WORKSHOP_MANAGER' | 'TEAM_LEADER' | 'MAINTENANCE' | 'COORDINATION' | 'SALES' | 'HR'
           workspace?: string
           created_at?: string
           updated_at?: string
         }
         Update: {
           username?: string
-          role?: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'
+          role?: 'ADMIN' | 'MANAGER' | 'WORKSHOP_MANAGER' | 'TEAM_LEADER' | 'MAINTENANCE' | 'COORDINATION' | 'SALES' | 'HR'
           workspace?: string
           updated_at?: string
         }
@@ -412,7 +412,7 @@ export interface Database {
     Views: Record<string, never>
     Functions: Record<string, never>
     Enums: {
-      user_role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'
+      user_role: 'ADMIN' | 'MANAGER' | 'WORKSHOP_MANAGER' | 'TEAM_LEADER' | 'MAINTENANCE' | 'COORDINATION' | 'SALES' | 'HR'
     }
   }
 }

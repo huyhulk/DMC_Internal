@@ -16,8 +16,8 @@ describe('role tab permissions', () => {
 
   it('keeps system permissions admin-only even if configured otherwise', () => {
     expect(normalizePermissionLevel('MANAGER', 'admin', 'edit')).toBe('invisible')
-    expect(normalizePermissionLevel('SUPERVISOR', 'admin.users', 'view')).toBe('invisible')
-    expect(normalizePermissionLevel('USER', 'admin.kpi-settings', 'edit')).toBe('invisible')
+    expect(normalizePermissionLevel('TEAM_LEADER', 'admin.users', 'view')).toBe('invisible')
+    expect(normalizePermissionLevel('HR', 'admin.kpi-settings', 'edit')).toBe('invisible')
     expect(normalizePermissionLevel('ADMIN', 'admin.users', 'edit')).toBe('edit')
   })
 

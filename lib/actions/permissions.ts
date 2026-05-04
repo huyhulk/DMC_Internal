@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { getSessionUser } from '@/lib/actions/auth'
-import type { UserRole } from '@/types'
+import { USER_ROLES, type UserRole } from '@/types'
 import {
   DEFAULT_ROLE_PERMISSIONS,
   isPermissionKey,
@@ -65,7 +65,7 @@ export async function listRoleTabPermissionsAction(): Promise<{ success?: boolea
   if (error) return { success: true, rows: defaultRows() }
 
   const rows = (data ?? [])
-    .filter((row) => ['ADMIN', 'MANAGER', 'SUPERVISOR', 'USER'].includes(String(row.role)))
+    .filter((row) => (USER_ROLES as readonly string[]).includes(String(row.role)))
     .filter((row) => isPermissionKey(String(row.permission_key)))
     .filter((row) => ['invisible', 'view', 'edit'].includes(String(row.level)))
     .map((row) => ({

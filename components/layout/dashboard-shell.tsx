@@ -90,15 +90,20 @@ const ADMINISTRATION_ITEMS = getAdministrationTabs().map((item) => ({
 }))
 
 const ADMIN_ITEMS = [
-  { code: 'users',        label: 'Quản lý người dùng', icon: UserCog,           href: '/dashboard/admin' },
-  { code: 'kpi-settings', label: 'Cài đặt KPI',         icon: SlidersHorizontal, href: '/dashboard/admin/kpi-settings' },
+  { code: 'users',        label: 'Quản lý người dùng', icon: UserCog,           href: '/dashboard/admin', permissionKey: 'admin.users' as PermissionKey },
+  { code: 'permissions',  label: 'Phân quyền tab',     icon: ShieldCheck,       href: '/dashboard/admin?sub=permissions', permissionKey: undefined },
+  { code: 'kpi-settings', label: 'Cài đặt KPI',         icon: SlidersHorizontal, href: '/dashboard/admin/kpi-settings', permissionKey: 'admin.kpi-settings' as PermissionKey },
 ] as const
 
 const ROLE_COLOR: Record<string, string> = {
-  ADMIN:      'text-[#3b5bdb] bg-[#3b5bdb]/10 border-[#3b5bdb]/25',
-  MANAGER:    'text-[#2f9e44] bg-[#2f9e44]/10 border-[#2f9e44]/25',
-  SUPERVISOR: 'text-[#d4870c] bg-[#d4870c]/10 border-[#d4870c]/25',
-  USER:       'text-[#6e6e73] bg-[#6e6e73]/10 border-[#6e6e73]/20',
+  ADMIN: 'text-[#3b5bdb] bg-[#3b5bdb]/10 border-[#3b5bdb]/25',
+  MANAGER: 'text-[#2f9e44] bg-[#2f9e44]/10 border-[#2f9e44]/25',
+  WORKSHOP_MANAGER: 'text-[#0b7285] bg-[#0b7285]/10 border-[#0b7285]/25',
+  TEAM_LEADER: 'text-[#d4870c] bg-[#d4870c]/10 border-[#d4870c]/25',
+  MAINTENANCE: 'text-[#7048e8] bg-[#7048e8]/10 border-[#7048e8]/25',
+  COORDINATION: 'text-[#0c8599] bg-[#0c8599]/10 border-[#0c8599]/25',
+  SALES: 'text-[#c2255c] bg-[#c2255c]/10 border-[#c2255c]/25',
+  HR: 'text-[#5c7cfa] bg-[#5c7cfa]/10 border-[#5c7cfa]/25',
 }
 
 interface Props {
@@ -134,7 +139,7 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, child
   const maintenanceItems = MAINTENANCE_ITEMS.filter((item) => visiblePermissionSet.has(`maintenance.${item.code}` as PermissionKey))
   const coordinationItems = COORDINATION_ITEMS.filter((item) => visiblePermissionSet.has(`coordination.${item.code}` as PermissionKey))
   const administrationItems = ADMINISTRATION_ITEMS.filter((item) => visiblePermissionSet.has(`administration.${item.code}` as PermissionKey))
-  const adminItems = ADMIN_ITEMS.filter((item) => visiblePermissionSet.has(`admin.${item.code}` as PermissionKey))
+  const adminItems = ADMIN_ITEMS.filter((item) => item.permissionKey ? visiblePermissionSet.has(item.permissionKey) : user.role === 'ADMIN' && visiblePermissionSet.has('admin'))
 
   function openDropdown() {
     if (closeTimer.current) clearTimeout(closeTimer.current)
@@ -766,7 +771,7 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, child
         <div className="shrink-0 flex items-center justify-end gap-1.5">
           <span className={cn(
             'hidden sm:inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full border tracking-wide',
-            ROLE_COLOR[user.role] ?? ROLE_COLOR.USER
+            ROLE_COLOR[user.role] ?? ROLE_COLOR.MANAGER
           )}>
             {ROLE_LABELS[user.role] ?? user.role}
           </span>

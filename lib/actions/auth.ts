@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createSSRClient } from '@/lib/supabase/server'
 import { loginSchema, changePasswordSchema } from '@/lib/validations/auth'
 import logger from '@/lib/logger'
-import type { SessionUser } from '@/types'
+import type { SessionUser, UserRole } from '@/types'
 
 function getAdminClient() {
   return createClient(
@@ -31,7 +31,7 @@ const fetchSessionUser = cache(async (): Promise<SessionUser | null> => {
 
   if (!profileData) return null
 
-  const profile = profileData as any as { username: string; role: 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'; workspace: string }
+  const profile = profileData as any as { username: string; role: UserRole; workspace: string }
 
   return {
     id: user.id,

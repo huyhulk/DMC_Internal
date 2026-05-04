@@ -47,14 +47,14 @@ describe('API parameter parsing', () => {
   })
 
   it('blocks global KPI summary/comparison for workspace-scoped users', () => {
-    expect(resolveKpiComparisonAccess({ id: 'u1', username: 'u', email: 'u@dmc.local', role: 'USER', workspace: 'DMC1' })).toBe(
+    expect(resolveKpiComparisonAccess({ id: 'u1', username: 'u', email: 'u@dmc.local', role: 'TEAM_LEADER', workspace: 'DMC1' })).toBe(
       'Tài khoản giới hạn xưởng không có quyền xem so sánh toàn bộ xưởng'
     )
     expect(resolveKpiComparisonAccess({ id: 'a1', username: 'a', email: 'a@dmc.local', role: 'ADMIN', workspace: '' })).toBeNull()
   })
 
   it('requires report detail mode for workspace-scoped users', () => {
-    const user = { id: 'u1', username: 'u', email: 'u@dmc.local', role: 'USER' as const, workspace: 'DMC1' }
+    const user = { id: 'u1', username: 'u', email: 'u@dmc.local', role: 'TEAM_LEADER' as const, workspace: 'DMC1' }
 
     expect(resolveReportWorkshopAccess(user, 'comparison', null)).toBe(
       'Tài khoản giới hạn xưởng phải chọn mode=detail và workshopId hợp lệ'

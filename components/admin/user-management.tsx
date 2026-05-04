@@ -13,7 +13,7 @@ import {
   type UserRow,
 } from '@/lib/actions/admin'
 import { WORKSPACE_OPTIONS, normalizeWorkspaceList } from '@/lib/approval/workflow'
-import type { UserRole } from '@/types'
+import { ROLE_LABELS, USER_ROLES, type UserRole } from '@/types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -21,28 +21,23 @@ const INPUT_CLS =
   'w-full h-[38px] px-3 rounded-[10px] bg-[#f5f5f7] border border-[#d2d2d7]/80 ' +
   'text-[13px] text-[#1d1d1f] focus:outline-none focus:ring-1 focus:ring-[#3b5bdb]/40 transition-all'
 
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: 'ADMIN',      label: 'Admin' },
-  { value: 'MANAGER',    label: 'Quản lý' },
-  { value: 'SUPERVISOR', label: 'Tổ trưởng' },
-  { value: 'USER',       label: 'Công nhân' },
-]
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = USER_ROLES.map((role) => ({
+  value: role,
+  label: ROLE_LABELS[role],
+}))
 
 const ROLE_BADGE: Record<UserRole, string> = {
-  ADMIN:      'text-[#3b5bdb] bg-[#3b5bdb]/10 border border-[#3b5bdb]/25',
-  MANAGER:    'text-[#2f9e44] bg-[#2f9e44]/10 border border-[#2f9e44]/25',
-  SUPERVISOR: 'text-[#d4870c] bg-[#d4870c]/10 border border-[#d4870c]/25',
-  USER:       'text-[#6e6e73] bg-[#6e6e73]/10 border border-[#6e6e73]/20',
+  ADMIN: 'text-[#3b5bdb] bg-[#3b5bdb]/10 border border-[#3b5bdb]/25',
+  MANAGER: 'text-[#2f9e44] bg-[#2f9e44]/10 border border-[#2f9e44]/25',
+  WORKSHOP_MANAGER: 'text-[#0b7285] bg-[#0b7285]/10 border border-[#0b7285]/25',
+  TEAM_LEADER: 'text-[#d4870c] bg-[#d4870c]/10 border border-[#d4870c]/25',
+  MAINTENANCE: 'text-[#7048e8] bg-[#7048e8]/10 border border-[#7048e8]/25',
+  COORDINATION: 'text-[#0c8599] bg-[#0c8599]/10 border border-[#0c8599]/25',
+  SALES: 'text-[#c2255c] bg-[#c2255c]/10 border border-[#c2255c]/25',
+  HR: 'text-[#5c7cfa] bg-[#5c7cfa]/10 border border-[#5c7cfa]/25',
 }
 
-const ROLE_LABEL: Record<UserRole, string> = {
-  ADMIN:      'Admin',
-  MANAGER:    'Quản lý',
-  SUPERVISOR: 'Tổ trưởng',
-  USER:       'Công nhân',
-}
-
-const EMPTY_FORM = { username: '', password: '', role: 'USER' as UserRole, workspace: '' }
+const EMPTY_FORM = { username: '', password: '', role: 'TEAM_LEADER' as UserRole, workspace: '' }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -534,7 +529,7 @@ function UserListItem({
           'text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0',
           ROLE_BADGE[user.role]
         )}>
-          {ROLE_LABEL[user.role]}
+          {ROLE_LABELS[user.role]}
         </span>
       </div>
 

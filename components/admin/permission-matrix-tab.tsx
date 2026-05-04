@@ -17,20 +17,13 @@ import {
   updateRoleTabPermissionsAction,
   type RoleTabPermissionRow,
 } from '@/lib/actions/permissions'
-import type { UserRole } from '@/types'
+import { ROLE_LABELS, USER_ROLES, type UserRole } from '@/types'
 
 interface Props {
   initialRows: RoleTabPermissionRow[]
 }
 
-const ROLES: UserRole[] = ['ADMIN', 'MANAGER', 'SUPERVISOR', 'USER']
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  ADMIN: 'Admin',
-  MANAGER: 'Quản lý',
-  SUPERVISOR: 'Tổ trưởng',
-  USER: 'Công nhân',
-}
+const ROLES: UserRole[] = [...USER_ROLES]
 
 const LEVEL_LABELS: Record<PermissionLevel, string> = {
   invisible: 'Ẩn',
@@ -147,13 +140,13 @@ export function PermissionMatrixTab({ initialRows }: Props) {
 
       <div className="overflow-hidden rounded-2xl border border-dmc-border bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] text-sm">
+          <table className="w-full min-w-[1320px] text-sm">
             <thead>
               <tr className="bg-[#f5f5f7] text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73]">
                 <th className="w-44 px-4 py-3 text-left">Nhóm</th>
                 <th className="px-4 py-3 text-left">Tab / chức năng</th>
                 {ROLES.map((role) => (
-                  <th key={role} className="w-44 px-4 py-3 text-center">{ROLE_LABELS[role]}</th>
+                  <th key={role} className="w-36 px-3 py-3 text-center">{ROLE_LABELS[role]}</th>
                 ))}
               </tr>
             </thead>

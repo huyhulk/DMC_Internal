@@ -21,10 +21,10 @@ describe('maintenance workflow helpers', () => {
   it('scopes maintenance workshop dropdowns for non-manager roles', () => {
     expect(getMaintenanceWorkshopOptions('ADMIN', 'ALL', true)).toEqual(['ALL', 'DMC1', 'DMC3', 'DMC4', 'DMC5'])
     expect(getMaintenanceWorkshopOptions('MANAGER', 'ALL', true)).toEqual(['ALL', 'DMC1', 'DMC3', 'DMC4', 'DMC5'])
-    expect(getMaintenanceWorkshopOptions('SUPERVISOR', 'DMC3', true)).toEqual(['DMC3'])
-    expect(getMaintenanceWorkshopOptions('USER', 'DMC1,DMC5', true)).toEqual(['DMC1', 'DMC5'])
-    expect(getMaintenanceWorkshopOptions('USER', '', true)).toEqual([])
-    expect(getMaintenanceWorkshopOptions('SUPERVISOR', null, true)).toEqual([])
+    expect(getMaintenanceWorkshopOptions('TEAM_LEADER', 'DMC3', true)).toEqual(['DMC3'])
+    expect(getMaintenanceWorkshopOptions('TEAM_LEADER', 'DMC1,DMC5', true)).toEqual(['DMC1', 'DMC5'])
+    expect(getMaintenanceWorkshopOptions('TEAM_LEADER', '', true)).toEqual([])
+    expect(getMaintenanceWorkshopOptions('TEAM_LEADER', null, true)).toEqual([])
   })
 
   it('rejects breakdown end times that are not after the start time', () => {

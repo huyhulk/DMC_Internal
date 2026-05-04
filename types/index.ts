@@ -1,19 +1,29 @@
-export type UserRole = 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'USER'
+export const USER_ROLES = ['ADMIN', 'MANAGER', 'WORKSHOP_MANAGER', 'TEAM_LEADER', 'MAINTENANCE', 'COORDINATION', 'SALES', 'HR'] as const
+
+export type UserRole = typeof USER_ROLES[number]
 
 export type TabId = 'production' | 'maintenance' | 'coordination' | 'administration' | 'report' | 'admin'
 
 export const ROLE_TABS: Record<UserRole, TabId[]> = {
-  ADMIN:      ['production', 'maintenance', 'coordination', 'administration', 'report', 'admin'],
-  MANAGER:    ['production', 'maintenance', 'coordination', 'administration', 'report'],
-  SUPERVISOR: ['production', 'coordination', 'administration', 'report'],
-  USER:       ['production', 'administration'],
+  ADMIN:            ['production', 'maintenance', 'coordination', 'administration', 'report', 'admin'],
+  MANAGER:          ['production', 'maintenance', 'coordination', 'administration', 'report'],
+  WORKSHOP_MANAGER: ['production', 'maintenance', 'coordination', 'administration', 'report'],
+  TEAM_LEADER:      ['production', 'coordination', 'administration', 'report'],
+  MAINTENANCE:      ['maintenance', 'report'],
+  COORDINATION:     ['coordination', 'report'],
+  SALES:            ['coordination', 'report'],
+  HR:               ['administration', 'report'],
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  ADMIN:      'Admin',
-  MANAGER:    'Quản lý',
-  SUPERVISOR: 'Tổ trưởng',
-  USER:       'Công nhân',
+  ADMIN: 'Admin',
+  MANAGER: 'Quản lý',
+  WORKSHOP_MANAGER: 'Trưởng xưởng',
+  TEAM_LEADER: 'Tổ trưởng',
+  MAINTENANCE: 'Bảo trì',
+  COORDINATION: 'Điều phối',
+  SALES: 'Kinh doanh',
+  HR: 'Nhân sự',
 }
 
 export interface SessionUser {

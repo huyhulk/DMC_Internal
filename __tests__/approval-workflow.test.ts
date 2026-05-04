@@ -13,17 +13,17 @@ describe('approval workflow helpers', () => {
   it('allows only admin and manager to approve requests', () => {
     expect(canApproveRequests('ADMIN')).toBe(true)
     expect(canApproveRequests('MANAGER')).toBe(true)
-    expect(canApproveRequests('SUPERVISOR')).toBe(false)
-    expect(canApproveRequests('USER')).toBe(false)
+    expect(canApproveRequests('TEAM_LEADER')).toBe(false)
+    expect(canApproveRequests('TEAM_LEADER')).toBe(false)
   })
 
   it('scopes workspace access without treating empty workspace as unrestricted', () => {
     expect(canAccessWorkspace('ADMIN', '', 'DMC1')).toBe(true)
     expect(canAccessWorkspace('MANAGER', 'ALL', 'DMC4')).toBe(true)
-    expect(canAccessWorkspace('SUPERVISOR', 'DMC1,DMC5', 'DMC5')).toBe(true)
-    expect(canAccessWorkspace('USER', '', 'DMC1')).toBe(false)
-    expect(canAccessWorkspace('SUPERVISOR', null, 'DMC3')).toBe(false)
-    expect(canAccessWorkspace('USER', 'DMC1', 'DMC3')).toBe(false)
+    expect(canAccessWorkspace('TEAM_LEADER', 'DMC1,DMC5', 'DMC5')).toBe(true)
+    expect(canAccessWorkspace('TEAM_LEADER', '', 'DMC1')).toBe(false)
+    expect(canAccessWorkspace('TEAM_LEADER', null, 'DMC3')).toBe(false)
+    expect(canAccessWorkspace('TEAM_LEADER', 'DMC1', 'DMC3')).toBe(false)
   })
 
   it('requires approvers to have workspace access to the target request', () => {
@@ -32,14 +32,14 @@ describe('approval workflow helpers', () => {
     expect(canApproveWorkspace('MANAGER', 'DMC1,DMC3', 'DMC3')).toBe(true)
     expect(canApproveWorkspace('MANAGER', 'DMC1', 'DMC5')).toBe(false)
     expect(canApproveWorkspace('MANAGER', '', 'DMC1')).toBe(false)
-    expect(canApproveWorkspace('SUPERVISOR', 'DMC1', 'DMC1')).toBe(false)
+    expect(canApproveWorkspace('TEAM_LEADER', 'DMC1', 'DMC1')).toBe(false)
   })
 
   it('returns a DB filter for scoped workspaces without making managers global', () => {
     expect(getWorkspaceScopedFilter('ADMIN', '')).toEqual({ unrestricted: true, workspaces: [] })
     expect(getWorkspaceScopedFilter('MANAGER', 'ALL')).toEqual({ unrestricted: true, workspaces: [] })
     expect(getWorkspaceScopedFilter('MANAGER', 'DMC1,DMC3')).toEqual({ unrestricted: false, workspaces: ['DMC1', 'DMC3'] })
-    expect(getWorkspaceScopedFilter('USER', '')).toEqual({ unrestricted: false, workspaces: [] })
+    expect(getWorkspaceScopedFilter('TEAM_LEADER', '')).toEqual({ unrestricted: false, workspaces: [] })
   })
 
   it('defines the Administration and HR workspace as a top-level tab group', () => {

@@ -3,7 +3,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
 import { z } from 'zod'
-import type { UserRole } from '@/types'
+import { USER_ROLES, type UserRole } from '@/types'
 import { isKnownWorkspaceToken, normalizeWorkspaceList } from '@/lib/approval/workflow'
 import { requireTabEdit } from '@/lib/permissions/server'
 
@@ -37,12 +37,12 @@ const workspaceSchema = z.string()
 const createUserSchema = z.object({
   username:  z.string().min(2, 'Tên đăng nhập phải có ít nhất 2 ký tự').max(50).regex(/^[a-z0-9_]+$/, 'Chỉ dùng chữ thường, số, dấu gạch dưới'),
   password:  z.string().min(4, 'Mật khẩu phải có ít nhất 4 ký tự'),
-  role:      z.enum(['ADMIN', 'MANAGER', 'SUPERVISOR', 'USER']),
+  role:      z.enum(USER_ROLES),
   workspace: workspaceSchema,
 })
 
 const updateUserSchema = z.object({
-  role:      z.enum(['ADMIN', 'MANAGER', 'SUPERVISOR', 'USER']),
+  role:      z.enum(USER_ROLES),
   workspace: workspaceSchema,
 })
 
