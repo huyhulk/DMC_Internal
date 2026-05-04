@@ -43,9 +43,12 @@ function statusVariant(s: string): 'warning' | 'info' | 'success' | 'danger' | '
   return 'neutral'
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function DeliveryTab({ user }: Props) {
+export function DeliveryTab({ user, canEdit }: Props) {
   const [rows, setRows]         = useState<DeliveryRow[]>([])
   const [loading, setLoading]   = useState(true)
   const [showCreate, setShowCreate]   = useState(false)
@@ -96,6 +99,10 @@ export function DeliveryTab({ user }: Props) {
   const vehicleField  = createForm.watch('vehicle_code') ?? ''
 
   async function onCreateSubmit(values: DeliveryCreateInput) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await createDeliveryAction(values)
     if (res.success) { toast.success(res.message); setShowCreate(false); createForm.reset({ delivery_code: genDeliveryCode(), planned_date: getTodayLocal() }); void load() }
@@ -105,6 +112,10 @@ export function DeliveryTab({ user }: Props) {
 
   async function onCompleteSubmit(values: DeliveryCompleteInput) {
     if (!completeId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await completeDeliveryAction(completeId, values)
     if (res.success) { toast.success(res.message); setCompleteId(null); void load() }
@@ -113,6 +124,10 @@ export function DeliveryTab({ user }: Props) {
   }
 
   async function onBaselineSubmit(values: DeliveryBaselineInput) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await upsertCostBaselineAction(values)
     if (res.success) { toast.success(res.message); setShowBaseline(false) }
@@ -121,12 +136,20 @@ export function DeliveryTab({ user }: Props) {
   }
 
   async function handleStart(id: string) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     const res = await startDeliveryAction(id)
     if (res.success) { toast.success(res.message); void load() }
     else toast.error(res.message)
   }
 
   async function handleCancel(id: string) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     const res = await cancelDeliveryAction(id)
     if (res.success) { toast.success(res.message); void load() }
     else toast.error(res.message)
@@ -134,6 +157,10 @@ export function DeliveryTab({ user }: Props) {
 
   async function onDelete() {
     if (!deleteId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await deleteDeliveryAction(deleteId)
     if (res.success) { toast.success(res.message); setDeleteId(null); void load() }
@@ -156,16 +183,18 @@ export function DeliveryTab({ user }: Props) {
           <p className="text-[13px] text-[#6e6e73] mt-0.5">Quản lý lịch giao, theo dõi tiến độ và chi phí</p>
         </div>
         <div className="flex gap-2">
-          {user.role === 'ADMIN' && (
+          {canEdit && user.role === 'ADMIN' && (
             <button onClick={() => setShowBaseline(true)}
               className="px-3 py-2 text-[13px] font-medium border border-[#d2d2d7] text-[#6e6e73] rounded-xl hover:bg-[#f2f2f7]">
               Baseline CP
             </button>
           )}
-          <button onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
-            <Plus size={14} /> Thêm lịch giao
-          </button>
+          {canEdit && (
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
+              <Plus size={14} /> Thêm lịch giao
+            </button>
+          )}
         </div>
       </div>
 
@@ -242,7 +271,7 @@ export function DeliveryTab({ user }: Props) {
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">
-                        {row.status === 'planned' && (
+                        {canEdit && row.status === 'planned' && (
                           <>
                             <button onClick={() => handleStart(row.id)} title="Bắt đầu giao" className="text-blue-600 hover:text-blue-700">
                               <Truck size={14} />
@@ -252,13 +281,13 @@ export function DeliveryTab({ user }: Props) {
                             </button>
                           </>
                         )}
-                        {row.status === 'in_transit' && (
+                        {canEdit && row.status === 'in_transit' && (
                           <button onClick={() => { setCompleteId(row.id); completeForm.reset({ actual_date: getTodayLocal(), damaged_weight_tons: 0, status: 'delivered' }) }}
                             title="Hoàn thành giao" className="text-emerald-600 hover:text-emerald-700">
                             <CheckCircle size={15} />
                           </button>
                         )}
-                        {user.role === 'ADMIN' && (
+                        {canEdit && user.role === 'ADMIN' && (
                           <button onClick={() => setDeleteId(row.id)} title="Xóa" className="text-red-400 hover:text-red-600">
                             <Trash2 size={14} />
                           </button>

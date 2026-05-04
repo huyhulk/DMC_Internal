@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { requireTabEdit } from '@/lib/permissions/server'
 import logger from '@/lib/logger'
 import { canAccessWorkspace, canApproveRequests, canApproveWorkspace, getWorkspaceScopedFilter, summarizeOvertimeParticipants } from '@/lib/approval/workflow'
 import {
@@ -181,6 +182,9 @@ export async function createOvertimeRequestAction(
   input: OvertimeRequestCreateInput
 ): Promise<ActionResult<string>> {
   try {
+    const editor = await requireTabEdit('administration.overtime')
+    if (!editor) return { success: false, message: 'Bạn chỉ có quyền xem tab này.' }
+
     const parsed = overtimeRequestCreateSchema.safeParse(input)
     if (!parsed.success) {
       return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu tăng ca không hợp lệ' }
@@ -262,6 +266,9 @@ export async function reviewOvertimeRequestAction(
   note?: string
 ): Promise<ActionResult<string | null>> {
   try {
+    const editor = await requireTabEdit('administration.overtime')
+    if (!editor) return { success: false, message: 'Bạn chỉ có quyền xem tab này.' }
+
     const parsed = overtimeReviewSchema.safeParse({ id, decision, note })
     if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message ?? 'Dữ liệu duyệt không hợp lệ' }
 

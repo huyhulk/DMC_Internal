@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { requireTabEdit } from '@/lib/permissions/server'
 import logger from '@/lib/logger'
 
 export type KpiTargetRow = {
@@ -52,6 +53,9 @@ export async function updateKpiTargetsAction(
   updates: KpiTargetUpdate[]
 ): Promise<{ success: boolean; message: string }> {
   try {
+    const editor = await requireTabEdit('admin.kpi-settings')
+    if (!editor) return { success: false, message: 'Bạn chỉ có quyền xem tab này.' }
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { success: false, message: 'Chưa đăng nhập' }

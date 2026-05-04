@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { requireTabEdit } from '@/lib/permissions/server'
 import { defectsBulkSchema, type DefectsBulkInput } from '@/lib/validations/defects'
 import { getUserWorkspaces, isWorkspaceAllowed, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
@@ -14,6 +15,9 @@ export async function submitDefectsAction(
   input: DefectsBulkInput
 ): Promise<{ success: boolean; message: string; count?: number }> {
   try {
+    const editor = await requireTabEdit('production')
+    if (!editor) return { success: false, message: 'Bạn chỉ có quyền xem tab này.' }
+
     const parsed = defectsBulkSchema.safeParse(input)
     if (!parsed.success) {
       return { success: false, message: 'Dữ liệu không hợp lệ: ' + (parsed.error.issues[0]?.message ?? '') }

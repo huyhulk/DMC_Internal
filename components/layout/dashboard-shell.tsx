@@ -16,7 +16,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction, changePasswordAction } from '@/lib/actions/auth'
-import { ROLE_TABS, ROLE_LABELS, type SessionUser } from '@/types'
+import { ROLE_LABELS, type SessionUser, type TabId } from '@/types'
+import type { PermissionKey } from '@/lib/permissions/tabs'
 import { ChangePasswordDialog } from '@/components/shared/change-password-dialog'
 import { ApprovalNotificationBell } from '@/components/layout/approval-notification-bell'
 import {
@@ -102,10 +103,12 @@ const ROLE_COLOR: Record<string, string> = {
 
 interface Props {
   user: SessionUser
+  visibleTabs: TabId[]
+  visiblePermissionKeys: PermissionKey[]
   children: React.ReactNode
 }
 
-export function DashboardShell({ user, children }: Props) {
+export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, children }: Props) {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -122,11 +125,16 @@ export function DashboardShell({ user, children }: Props) {
   const adminTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const maintTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const allowedTabs = ROLE_TABS[user.role]
+  const allowedTabs = visibleTabs
   const requestedSub = searchParams.get('sub')
   const activeCoordinationSub = resolveCoordinationSub(requestedSub)
   const activeMaintenanceSub = resolveMaintenanceSub(requestedSub)
   const activeAdministrationSub = resolveAdministrationSub(requestedSub)
+  const visiblePermissionSet = new Set(visiblePermissionKeys)
+  const maintenanceItems = MAINTENANCE_ITEMS.filter((item) => visiblePermissionSet.has(`maintenance.${item.code}` as PermissionKey))
+  const coordinationItems = COORDINATION_ITEMS.filter((item) => visiblePermissionSet.has(`coordination.${item.code}` as PermissionKey))
+  const administrationItems = ADMINISTRATION_ITEMS.filter((item) => visiblePermissionSet.has(`administration.${item.code}` as PermissionKey))
+  const adminItems = ADMIN_ITEMS.filter((item) => visiblePermissionSet.has(`admin.${item.code}` as PermissionKey))
 
   function openDropdown() {
     if (closeTimer.current) clearTimeout(closeTimer.current)
@@ -278,7 +286,7 @@ export function DashboardShell({ user, children }: Props) {
                     </Link>
                     {maintOpen && (
                       <div className="hidden absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
-                        {MAINTENANCE_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                        {maintenanceItems.map(({ code, label, icon: ItemIcon, href }) => {
                           const isActiveSub = pathname.startsWith('/dashboard/maintenance') && activeMaintenanceSub === code
                           return (
                             <Link key={code} href={href} onClick={() => setMaintOpen(false)} className={cn('mx-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-100', isActiveSub ? 'bg-dmc-primary/8 text-dmc-primary' : 'text-[#1d1d1f] hover:bg-[#f2f2f7]')}>
@@ -327,7 +335,7 @@ export function DashboardShell({ user, children }: Props) {
                     </Link>
                     {coordOpen && (
                       <div className="hidden absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
-                        {COORDINATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                        {coordinationItems.map(({ code, label, icon: ItemIcon, href }) => {
                           const isActiveSub = pathname.startsWith('/dashboard/coordination') && activeCoordinationSub === code
                           return (
                             <Link key={code} href={href} onClick={() => setCoordOpen(false)} className={cn('mx-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-100', isActiveSub ? 'bg-dmc-primary/8 text-dmc-primary' : 'text-[#1d1d1f] hover:bg-[#f2f2f7]')}>
@@ -376,7 +384,7 @@ export function DashboardShell({ user, children }: Props) {
                     </Link>
                     {administrationOpen && (
                       <div className="hidden absolute left-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
-                        {ADMINISTRATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                        {administrationItems.map(({ code, label, icon: ItemIcon, href }) => {
                           const isActiveSub = pathname.startsWith('/dashboard/administration') && activeAdministrationSub === code
                           return (
                             <Link key={code} href={href} onClick={() => setAdministrationOpen(false)} className={cn('mx-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-100', isActiveSub ? 'bg-dmc-primary/8 text-dmc-primary' : 'text-[#1d1d1f] hover:bg-[#f2f2f7]')}>
@@ -425,7 +433,7 @@ export function DashboardShell({ user, children }: Props) {
                     </Link>
                     {adminOpen && (
                       <div className="hidden absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-2xl border border-[#d2d2d7]/70 bg-white/95 py-1.5 shadow-apple-lg backdrop-blur-xl">
-                        {ADMIN_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+                        {adminItems.map(({ code, label, icon: ItemIcon, href }) => {
                           const isActiveSub = pathname.startsWith(href)
                           return (
                             <Link key={code} href={href} onClick={() => setAdminOpen(false)} className={cn('mx-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-100', isActiveSub ? 'bg-dmc-primary/8 text-dmc-primary' : 'text-[#1d1d1f] hover:bg-[#f2f2f7]')}>
@@ -536,7 +544,7 @@ export function DashboardShell({ user, children }: Props) {
                 </span>
               </div>
 
-              {MAINTENANCE_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+              {maintenanceItems.map(({ code, label, icon: ItemIcon, href }) => {
                 const isActiveSub = pathname.startsWith('/dashboard/maintenance') && activeMaintenanceSub === code
                 return (
                   <Link
@@ -584,7 +592,7 @@ export function DashboardShell({ user, children }: Props) {
                 </span>
               </div>
 
-              {COORDINATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+              {coordinationItems.map(({ code, label, icon: ItemIcon, href }) => {
                 const isActiveSub = pathname.startsWith('/dashboard/coordination') && activeCoordinationSub === code
                 return (
                   <Link
@@ -632,7 +640,7 @@ export function DashboardShell({ user, children }: Props) {
                 </span>
               </div>
 
-              {ADMINISTRATION_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+              {administrationItems.map(({ code, label, icon: ItemIcon, href }) => {
                 const isActiveSub = pathname.startsWith('/dashboard/administration') && activeAdministrationSub === code
                 return (
                   <Link
@@ -680,7 +688,7 @@ export function DashboardShell({ user, children }: Props) {
                 </span>
               </div>
 
-              {ADMIN_ITEMS.map(({ code, label, icon: ItemIcon, href }) => {
+              {adminItems.map(({ code, label, icon: ItemIcon, href }) => {
                 const isActiveSub = pathname.startsWith(href)
                 return (
                   <Link

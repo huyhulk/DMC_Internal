@@ -34,9 +34,12 @@ function accuracyColor(pct: number | null) {
   return 'text-red-600 font-semibold'
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function SurveysTab({ user }: Props) {
+export function SurveysTab({ user, canEdit }: Props) {
   const [rows, setRows]       = useState<SurveyRow[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -122,10 +125,12 @@ export function SurveysTab({ user }: Props) {
           <h1 className="text-xl font-semibold text-[#1d1d1f]">Khảo sát công trình (KT-07)</h1>
           <p className="text-[13px] text-[#6e6e73] mt-0.5">Ghi nhận kết quả đo kiểm và độ chính xác thi công</p>
         </div>
-        <button onClick={openCreate}
-          className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
-          <Plus size={14} /> Nhập kết quả
-        </button>
+        {canEdit && (
+          <button onClick={openCreate}
+            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
+            <Plus size={14} /> Nhập kết quả
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border border-[#d2d2d7]/60 p-4 flex flex-wrap gap-3">
@@ -180,10 +185,12 @@ export function SurveysTab({ user }: Props) {
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => openEdit(row)} title="Sửa" className="text-[#6e6e73] hover:text-dmc-primary">
-                          <Pencil size={14} />
-                        </button>
-                        {user.role === 'ADMIN' && (
+                        {canEdit && (
+                          <button onClick={() => openEdit(row)} title="Sửa" className="text-[#6e6e73] hover:text-dmc-primary">
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                        {canEdit && user.role === 'ADMIN' && (
                           <button onClick={() => setDeleteId(row.id)} title="Xóa" className="text-red-400 hover:text-red-600">
                             <Trash2 size={14} />
                           </button>

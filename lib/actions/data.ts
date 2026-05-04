@@ -4,6 +4,7 @@ import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import { getProductionRowsValidationError } from '@/lib/production/workflow'
+import { requireTabEdit } from '@/lib/permissions/server'
 import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, Order, ProductionReportRow } from '@/types'
@@ -178,6 +179,9 @@ export async function recordProductionAction(rows: Array<{
   log: string
 }>): Promise<{ success: boolean; message: string }> {
   try {
+    const editor = await requireTabEdit('production')
+    if (!editor) return { success: false, message: 'Bạn chỉ có quyền xem tab này.' }
+
     const supabase = await createClient()
 
     // ── 1. Verify session (server-side, cannot be spoofed by client) ─────────

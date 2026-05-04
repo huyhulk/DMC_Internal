@@ -28,13 +28,14 @@ function emptyForm(): FormData {
 
 interface Props {
   open: boolean
+  canEdit: boolean
   onClose: () => void
   onRefresh: () => void
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function HRAdminModal({ open, onClose, onRefresh }: Props) {
+export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
   const [employees, setEmployees]     = useState<HumanResource[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedId, setSelectedId]   = useState<number | null>(null)
@@ -97,6 +98,10 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
 
   // ── Save ──
   async function handleSave() {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     if (!formData.name.trim()) {
       setNameError('Họ tên không được để trống')
       return
@@ -140,6 +145,10 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
   // ── Delete ──
   async function handleDelete() {
     if (selectedId === null) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
 
     const emp = employees.find((e) => e.id === selectedId)
     const confirmed = window.confirm(
@@ -301,6 +310,7 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
                   value={formData.name}
                   onChange={(e) => setField('name', e.target.value)}
                   placeholder="Nguyễn Văn A"
+                  disabled={!canEdit}
                   className={cn(inputCls, nameError && 'border-[#ff3b30]/60 focus:ring-[#ff3b30]/30')}
                 />
               </FormField>
@@ -310,6 +320,7 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
                 <select
                   value={formData.factory}
                   onChange={(e) => setField('factory', e.target.value)}
+                  disabled={!canEdit}
                   className={cn(inputCls, 'cursor-pointer')}
                 >
                   {FACTORIES.map((f) => (
@@ -327,6 +338,7 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
                   value={formData.machine}
                   onChange={(e) => setField('machine', e.target.value)}
                   placeholder="Máy may 01"
+                  disabled={!canEdit}
                   className={inputCls}
                 />
               </FormField>
@@ -337,6 +349,7 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
                   value={formData.position}
                   onChange={(e) => setField('position', e.target.value)}
                   placeholder="Công nhân"
+                  disabled={!canEdit}
                   className={inputCls}
                 />
               </FormField>
@@ -347,6 +360,7 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
                   value={formData.phone}
                   onChange={(e) => setField('phone', e.target.value)}
                   placeholder="0901 234 567"
+                  disabled={!canEdit}
                   className={inputCls}
                 />
               </FormField>
@@ -360,7 +374,7 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
                 <button
                   type="button"
                   onClick={handleDelete}
-                  disabled={deleting || loading}
+                  disabled={!canEdit || deleting || loading}
                   className="h-10 px-4 rounded-[10px] border border-[#ff3b30]/40
                              text-[#ff3b30] text-[13px] font-semibold
                              hover:bg-[#ff3b30]/5 active:scale-[0.98]
@@ -382,7 +396,7 @@ export function HRAdminModal({ open, onClose, onRefresh }: Props) {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={loading || deleting}
+                disabled={!canEdit || loading || deleting}
                 className="h-10 px-5 rounded-[10px] bg-[#3b5bdb] hover:bg-[#2f4ac4]
                            text-white text-[13px] font-semibold
                            active:scale-[0.98] transition-all duration-150

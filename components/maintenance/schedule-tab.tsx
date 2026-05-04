@@ -38,9 +38,12 @@ type CreateFields = {
   notes:            string
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function ScheduleTab({ user }: Props) {
+export function ScheduleTab({ user, canEdit }: Props) {
   const [rows, setRows]       = useState<ScheduleRow[]>([])
   const [loading, setLoading] = useState(true)
   const [mode, setMode]       = useState<'plan' | 'execute'>('plan')
@@ -268,14 +271,18 @@ export function ScheduleTab({ user }: Props) {
           <p className="text-[13px] text-[#6e6e73] mt-0.5">Lập kế hoạch và theo dõi thực hiện bảo trì định kỳ</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowBulk(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-dmc-primary text-dmc-primary rounded-xl hover:bg-dmc-primary/5 transition-colors">
-            <Repeat size={14} /> Tạo định kỳ
-          </button>
-          <button onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90 transition-opacity">
-            <Plus size={14} /> Thêm lịch
-          </button>
+          {canEdit && (
+            <>
+              <button onClick={() => setShowBulk(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-dmc-primary text-dmc-primary rounded-xl hover:bg-dmc-primary/5 transition-colors">
+                <Repeat size={14} /> Tạo định kỳ
+              </button>
+              <button onClick={() => setShowCreate(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90 transition-opacity">
+                <Plus size={14} /> Thêm lịch
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -375,7 +382,7 @@ export function ScheduleTab({ user }: Props) {
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">
-                        {approver && row.approval_status === 'pending' && (
+                        {canEdit && approver && row.approval_status === 'pending' && (
                           <>
                             <button
                               onClick={() => onReview(row.id, 'approved')}
@@ -395,13 +402,13 @@ export function ScheduleTab({ user }: Props) {
                             </button>
                           </>
                         )}
-                        {!row.is_completed && row.approval_status === 'approved' && (
+                        {canEdit && !row.is_completed && row.approval_status === 'approved' && (
                           <button onClick={() => openComplete(row)} title="Đánh dấu hoàn thành"
                             className="text-emerald-600 hover:text-emerald-700">
                             <CheckCircle size={15} />
                           </button>
                         )}
-                        {user.role === 'ADMIN' && (
+                        {canEdit && user.role === 'ADMIN' && (
                           <button onClick={() => setDeleteId(row.id)} title="Xóa"
                             className="text-red-400 hover:text-red-600">
                             <Trash2 size={14} />

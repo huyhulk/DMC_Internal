@@ -22,9 +22,12 @@ function buildDefaultState(visibleFactories: readonly FactoryKey[]): FactoryStat
   return base as FactoryState
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function HRTab({ user }: Props) {
+export function HRTab({ user, canEdit }: Props) {
   const today = getTodayLocal()
 
   const visibleFactories = useMemo((): readonly FactoryKey[] => {
@@ -37,11 +40,12 @@ export function HRTab({ user }: Props) {
   // ADMIN can edit all. Others can only edit their assigned factories.
   // Empty/ALL workspace → no restriction (edit all visible).
   const editableFactories = useMemo((): Set<FactoryKey> => {
+    if (!canEdit) return new Set()
     if (user.role === 'ADMIN') return new Set(FACTORIES)
     const ws = getUserWorkspaces(user.workspace)
     if (ws.length === 0) return new Set(FACTORIES)
     return new Set(ws.filter((w): w is FactoryKey => (FACTORIES as readonly string[]).includes(w)))
-  }, [user.role, user.workspace])
+  }, [canEdit, user.role, user.workspace])
 
   const [date, setDate]               = useState<string>(today)
   const [employees, setEmployees]     = useState<HumanResource[]>([])
@@ -96,6 +100,10 @@ export function HRTab({ user }: Props) {
   }, [])
 
   const handleSave = useCallback(async (factory: FactoryKey) => {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     const { totalem, absentIds } = factoryState[factory]
     if (totalem === '') {
       toast.error(`Vui lòng nhập tổng nhân sự cho ${factory}`)
@@ -114,7 +122,7 @@ export function HRTab({ user }: Props) {
     } finally {
       setSaving((prev) => ({ ...prev, [factory]: false }))
     }
-  }, [date, factoryState])
+  }, [canEdit, date, factoryState])
 
   function formatDateLabel(d: string): string {
     try {
@@ -141,7 +149,7 @@ export function HRTab({ user }: Props) {
             />
           </div>
 
-          {user.role === 'ADMIN' && (
+          {canEdit && user.role === 'ADMIN' && (
             <button
               onClick={() => setAdminOpen(true)}
               className="h-10 px-4 rounded-[10px] bg-[#3b5bdb] hover:bg-[#2f4ac4]
@@ -194,6 +202,7 @@ export function HRTab({ user }: Props) {
 
       <HRAdminModal
         open={adminOpen}
+        canEdit={canEdit}
         onClose={() => setAdminOpen(false)}
         onRefresh={() => loadData(date)}
       />

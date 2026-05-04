@@ -37,9 +37,12 @@ function statusLabel(s: string) {
   return 'Chờ nộp'
 }
 
-interface Props { user: SessionUser }
+interface Props {
+  user: SessionUser
+  canEdit: boolean
+}
 
-export function ReportsTab({ user }: Props) {
+export function ReportsTab({ user, canEdit }: Props) {
   const [rows, setRows]         = useState<StatReportRow[]>([])
   const [loading, setLoading]   = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -79,6 +82,10 @@ export function ReportsTab({ user }: Props) {
   })
 
   async function onCreateSubmit(values: StatReportCreateInput) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await createStatReportAction(values)
     if (res.success) { toast.success(res.message); setShowCreate(false); createForm.reset({ due_date: getTodayLocal() }); void load() }
@@ -87,6 +94,10 @@ export function ReportsTab({ user }: Props) {
   }
 
   async function onBulkSubmit(values: StatReportBulkInput) {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await bulkCreateStatReportAction(values)
     if (res.success) { toast.success(res.message); setShowBulk(false); bulkForm.reset(); void load() }
@@ -96,6 +107,10 @@ export function ReportsTab({ user }: Props) {
 
   async function onSubmitReport(values: StatReportSubmitInput) {
     if (!submitId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await submitStatReportAction(submitId, values)
     if (res.success) { toast.success(res.message); setSubmitId(null); void load() }
@@ -105,6 +120,10 @@ export function ReportsTab({ user }: Props) {
 
   async function onDelete() {
     if (!deleteId) return
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
     setSubmitting(true)
     const res = await deleteStatReportAction(deleteId)
     if (res.success) { toast.success(res.message); setDeleteId(null); void load() }
@@ -121,16 +140,18 @@ export function ReportsTab({ user }: Props) {
           <h1 className="text-xl font-semibold text-[#1d1d1f]">Báo cáo thống kê (KH-05)</h1>
           <p className="text-[13px] text-[#6e6e73] mt-0.5">Lịch nộp báo cáo định kỳ và theo dõi tiến độ</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowBulk(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-dmc-primary text-dmc-primary rounded-xl hover:bg-dmc-primary/5">
-            <Repeat size={14} /> Tạo định kỳ
-          </button>
-          <button onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
-            <Plus size={14} /> Thêm báo cáo
-          </button>
-        </div>
+        {canEdit && (
+          <div className="flex gap-2">
+            <button onClick={() => setShowBulk(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-dmc-primary text-dmc-primary rounded-xl hover:bg-dmc-primary/5">
+              <Repeat size={14} /> Tạo định kỳ
+            </button>
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium bg-dmc-primary text-white rounded-xl hover:opacity-90">
+              <Plus size={14} /> Thêm báo cáo
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Filter */}
@@ -204,13 +225,13 @@ export function ReportsTab({ user }: Props) {
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-2">
-                        {row.status !== 'submitted' && (
+                        {canEdit && row.status !== 'submitted' && (
                           <button onClick={() => { setSubmitId(row.id); submitForm.reset({ submitted_date: getTodayLocal() }) }}
                             title="Nộp báo cáo" className="text-blue-600 hover:text-blue-700">
                             <Send size={14} />
                           </button>
                         )}
-                        {user.role === 'ADMIN' && (
+                        {canEdit && user.role === 'ADMIN' && (
                           <button onClick={() => setDeleteId(row.id)} title="Xóa" className="text-red-400 hover:text-red-600">
                             <Trash2 size={14} />
                           </button>
