@@ -68,7 +68,7 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
       </div>
 
       {/* Row 2: Times + Workforce + Outputs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(2,minmax(0,1.4fr))_repeat(5,minmax(0,1fr))] gap-3">
 
         <FieldGroup label="Bắt đầu">
           <TimePicker24
@@ -88,8 +88,8 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
 
         <FieldGroup label="Tăng ca trưa">
           <label className={cn(
-            'flex h-28 items-center justify-center gap-2 rounded-xl border border-[#d2d2d7]/70 bg-[#f2f2f7] px-2',
-            'text-[12px] font-semibold text-[#1d1d1f] transition-all duration-150',
+            'flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#d2d2d7]/70 bg-[#f2f2f7] px-2',
+            'text-[11px] font-semibold text-[#1d1d1f] transition-all duration-150',
             disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-[#34c759]/50'
           )}>
             <input
@@ -97,7 +97,7 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
               checked={line.lunchOvertime}
               disabled={disabled}
               onChange={(e) => onChange('lunchOvertime', e.target.checked)}
-              className="h-4 w-4 rounded border-[#d2d2d7] accent-[#34c759]"
+              className="h-3.5 w-3.5 rounded border-[#d2d2d7] accent-[#34c759]"
             />
             <span className="leading-tight">Có làm trưa</span>
           </label>

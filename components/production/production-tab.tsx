@@ -131,9 +131,8 @@ function OpenOrdersTab({ user, canEdit }: Props) {
       : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
     return sortProductionOrdersForEntry(filterProductionOrdersByPcode(byWorkshop, searchQuery)) as OpenProductionOrder[]
   }, [allOrders, searchQuery, workshopFilter])
-  const totalRemaining = orderCatalog
-    .filter((order) => getProductionOrderStatusRank(order.status) < 2)
-    .reduce((sum, order) => sum + order.remainingQuantity, 0)
+  const openOrderCatalog = orderCatalog.filter((order) => getProductionOrderStatusRank(order.status) < 2)
+  const totalRemaining = openOrderCatalog.reduce((sum, order) => sum + order.remainingQuantity, 0)
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
@@ -229,7 +228,7 @@ function OpenOrdersTab({ user, canEdit }: Props) {
           <div className="grid grid-cols-2 gap-2">
             <div className="h-10 px-3 rounded-xl bg-white border border-[#d2d2d7]/70 flex flex-col justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Số lệnh</span>
-              <span className="text-[13px] font-semibold text-[#1d1d1f]">{orderCatalog.length}</span>
+              <span className="text-[13px] font-semibold text-[#1d1d1f]">{openOrderCatalog.length}</span>
             </div>
             <div className="h-10 px-3 rounded-xl bg-white border border-[#d2d2d7]/70 flex flex-col justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Còn lại mở</span>
