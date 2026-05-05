@@ -12,6 +12,12 @@ export interface ProductionInputRow {
   endtime: string
 }
 
+export interface ProductionCompletion {
+  producedQuantity: number
+  remainingQuantity: number
+  completionPct: number
+}
+
 function normalizeStatus(status: string): string {
   return status
     .trim()
@@ -34,6 +40,29 @@ export function getProductionOrderStatusRank(status: string): number {
   if (normalized.includes('da giao') || normalized.includes('giao hang')) return 3
 
   return 4
+}
+
+export function calculateProductionCompletion(quantity: number, produced: number): ProductionCompletion {
+  const safeQuantity = Math.max(0, quantity)
+  const producedQuantity = Math.max(0, produced)
+  return {
+    producedQuantity,
+    remainingQuantity: Math.max(0, safeQuantity - producedQuantity),
+    completionPct: safeQuantity > 0
+      ? Math.min(100, Math.round((producedQuantity / safeQuantity) * 1000) / 10)
+      : producedQuantity > 0 ? 100 : 0,
+  }
+}
+
+export function isOpenProductionOrder(
+  order: Pick<Order, 'quantity' | 'status'>,
+  produced: number,
+  closed: boolean,
+): boolean {
+  if (closed) return false
+  if (getProductionOrderStatusRank(order.status) === 3) return false
+  const quantity = Number(order.quantity) || 0
+  return calculateProductionCompletion(quantity, produced).completionPct < 100
 }
 
 export function sortProductionOrdersForEntry(orders: Order[]): Order[] {

@@ -1,8 +1,10 @@
 import type { Order } from '@/types'
 import {
+  calculateProductionCompletion,
   filterProductionOrdersByPcode,
   getProductionRowsValidationError,
   getProductionOrderStatusRank,
+  isOpenProductionOrder,
   isProductionTimeRangeValid,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
@@ -49,6 +51,33 @@ describe('production workflow helpers', () => {
     ], 'abc')
 
     expect(filtered.map((o) => o.pcode)).toEqual(['DMC-ABC-001'])
+  })
+
+  it('calculates cumulative production completion', () => {
+    expect(calculateProductionCompletion(100, 40)).toEqual({
+      producedQuantity: 40,
+      remainingQuantity: 60,
+      completionPct: 40,
+    })
+    expect(calculateProductionCompletion(100, 125)).toEqual({
+      producedQuantity: 125,
+      remainingQuantity: 0,
+      completionPct: 100,
+    })
+    expect(calculateProductionCompletion(0, 5)).toEqual({
+      producedQuantity: 5,
+      remainingQuantity: 0,
+      completionPct: 100,
+    })
+  })
+
+  it('detects open production orders for the default list', () => {
+    expect(isOpenProductionOrder({ quantity: '100', status: 'Dang san xuat' }, 40, false)).toBe(true)
+    expect(isOpenProductionOrder({ quantity: '100', status: 'Chua san xuat' }, 0, false)).toBe(true)
+    expect(isOpenProductionOrder({ quantity: '100', status: '' }, 99, false)).toBe(true)
+    expect(isOpenProductionOrder({ quantity: '100', status: 'Dang san xuat' }, 100, false)).toBe(false)
+    expect(isOpenProductionOrder({ quantity: '100', status: 'Dang san xuat' }, 40, true)).toBe(false)
+    expect(isOpenProductionOrder({ quantity: '100', status: 'Da giao' }, 40, false)).toBe(false)
   })
 
   it('requires production end time to be later than start time', () => {

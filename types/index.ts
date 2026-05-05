@@ -84,6 +84,20 @@ export interface InitData {
   closedPcodes: string[]
 }
 
+export interface OpenProductionOrder extends Order {
+  producedQuantity: number
+  remainingQuantity: number
+  completionPct: number
+}
+
+export interface OpenProductionOrdersData {
+  orders: OpenProductionOrder[]
+  norms: NormItem[]
+  materials: MaterialItem[]
+  submittedPcodes: string[]
+  closedPcodes: string[]
+}
+
 export interface ProductionReportRow {
   pdate: string
   pcode: string
