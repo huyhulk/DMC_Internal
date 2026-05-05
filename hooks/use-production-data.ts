@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { getInitData, getOpenProductionOrdersAction, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
 import { getProductionRowsValidationError } from '@/lib/production/workflow'
+import { isEffectiveDeliveredProductionStatus } from '@/lib/production/status'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { InitData, Order, NormItem, ProductionSaveStatus, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
@@ -36,17 +37,8 @@ const INITIAL_LINE: ProductLine = {
 const MAX_LINES = 5
 const INITIAL_LINES = 2
 
-function normalizedStatus(status: string): string {
-  return status
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-}
-
 function isDeliveredOrder(order: Pick<Order, 'status'>): boolean {
-  return normalizedStatus(order.status).includes('da giao')
+  return isEffectiveDeliveredProductionStatus(order.status)
 }
 
 function buildPcodeStatuses(orders: Order[], submittedPcodes: string[], closedPcodes: string[]): Record<string, PcodeStatus> {

@@ -1,6 +1,9 @@
 import { addDays, parse } from 'date-fns'
 import { createClient } from '@/lib/supabase/server'
 import { formatDate, normalizeWorkshop, workshopCode } from '@/lib/utils'
+import { calculateProductionCompletion } from '@/lib/production/workflow'
+import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
+import { shouldShowOpenProductionOrder } from '@/lib/production/status'
 
 export const DAILY_REPORT_WORKSHOPS = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 export type DailyReportWorkshop = typeof DAILY_REPORT_WORKSHOPS[number]
@@ -142,20 +145,6 @@ function emptyRowsMap<T>() {
   return new Map<DailyReportWorkshop, T[]>(DAILY_REPORT_WORKSHOPS.map((workshop) => [workshop, []]))
 }
 
-function normalizeStatus(status: string | null | undefined): string {
-  return (status ?? '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/đ/g, 'd')
-    .trim()
-}
-
-function isClosedOrder(status: string | null | undefined): boolean {
-  const s = normalizeStatus(status)
-  return s.includes('da giao') || s.includes('closed') || s.includes('done') || s.includes('hoan thanh')
-}
-
 function formatDeadline(deadline: string | null): string {
   if (!deadline) return ''
   const date = formatDate(deadline, 'dd/MM/yyyy')
@@ -207,7 +196,7 @@ async function fetchProductionOutputs(pcodes: string[]): Promise<ProductionRow[]
   for (const chunk of chunkArray([...new Set(pcodes)], 200)) {
     const { data, error } = await supabase
       .from('Production')
-      .select('pcode,poutput')
+      .select('pcode,poutput,save_status')
       .in('pcode', chunk) as { data: ProductionRow[] | null; error: { message: string } | null }
 
     if (error) throw new Error(error.message)
@@ -232,15 +221,31 @@ export async function getDailyPlanReport(date: string): Promise<Array<DailyWorks
   const pcodes = dataRows.map((row) => row.PCODE).filter(Boolean)
   const productionRows = await fetchProductionOutputs(pcodes)
   const outputByPcode = buildPcodeOutputMap(productionRows)
+  const quantityByPcode = new Map(dataRows.map((row) => [row.PCODE, row.QUANTITY ?? 0]))
+  const statusMap = buildProductionStatusMapFromRows({
+    pcodes,
+    productionRows,
+    quantityByPcode,
+  })
   const rowsByWorkshop = emptyRowsMap<DailyPlanReportRow>()
 
   for (const source of dataRows) {
     const workshop = resolveDailyReportWorkshop(source.WORKSHOP)
-    if (!workshop || isClosedOrder(source.STATUS)) continue
     const quantity = source.QUANTITY ?? 0
     const produced = outputByPcode.get(source.PCODE) ?? 0
+    const completion = calculateProductionCompletion(quantity, produced)
+    const effectiveOrder = applyEffectiveStatusToOrder({
+      pcode: source.PCODE,
+      initialdate: source.INITIALDATE ?? '',
+      workshop: normalizeWorkshop(source.WORKSHOP ?? ''),
+      customer: source.CUSTOMER ?? '',
+      quantity: String(quantity),
+      description: source.DESCRIPTION ?? '',
+      deadlinedate: source.DEADLINEDATE ?? '',
+      status: source.STATUS ?? '',
+    }, statusMap)
+    if (!workshop || !shouldShowOpenProductionOrder({ status: effectiveOrder.status, closed: statusMap.get(source.PCODE)?.closed ?? false, completion })) continue
     const { remaining, completionPct } = calculateCompletion(quantity, produced)
-    if (quantity > 0 && completionPct >= 100) continue
 
     const plannedQuantity = produced > 0 ? remaining : quantity
 

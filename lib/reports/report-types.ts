@@ -1,3 +1,5 @@
+import type { ProductionOrderEffectiveStatus } from '@/types'
+
 export type ReportMode = 'detail' | 'comparison'
 export type GroupBy = 'day' | 'week' | 'month' | 'year' | 'hour'
 export type FilterBy = 'deadline' | 'initialdate' | 'completed_date'
@@ -81,6 +83,7 @@ export interface OrderStatus {
   deadlinedate:  string
   deadlinetime:  string
   status:        OrderStatusCode
+  productionStatus: ProductionOrderEffectiveStatus
   hasProduction: boolean
   totalOutput:   number
   completionPct: number

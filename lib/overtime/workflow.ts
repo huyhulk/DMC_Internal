@@ -5,6 +5,7 @@ export type OvertimeOrderSourceRow = {
   customer: string
   workshop: string
   status: string
+  quantity?: string
   initialdate?: string | null
 }
 

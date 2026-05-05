@@ -1,3 +1,4 @@
+import { normalizeProductionStatus } from '@/lib/production/status'
 import type { Order } from '@/types'
 
 export interface ProductionInputRow {
@@ -18,17 +19,8 @@ export interface ProductionCompletion {
   completionPct: number
 }
 
-function normalizeStatus(status: string): string {
-  return status
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-}
-
 export function getProductionOrderStatusRank(status: string): number {
-  const normalized = normalizeStatus(status)
+  const normalized = normalizeProductionStatus(status)
 
   if (normalized.includes('dang sx') || normalized.includes('dang san xuat')) return 0
   if (normalized.includes('chua sx') || normalized.includes('chua san xuat') || normalized === '') return 1

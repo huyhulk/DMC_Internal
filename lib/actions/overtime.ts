@@ -11,7 +11,9 @@ import {
   type OvertimeEmployeeOption,
   type OvertimeOrderOption,
 } from '@/lib/overtime/workflow'
+import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
 import { normalizeWorkshop, workshopCode, workshopToDataFilters } from '@/lib/utils'
+import type { Database } from '@/types/database'
 import {
   overtimeRequestCreateSchema,
   overtimeReviewSchema,
@@ -26,6 +28,7 @@ type DataOrderRow = {
   WORKSHOP: string | null
   STATUS: string | null
   INITIALDATE: string | null
+  QUANTITY: number | null
 }
 
 export type OvertimeProductionOrderOption = OvertimeOrderOption
@@ -90,6 +93,7 @@ function mapDataOrderRow(row: DataOrderRow): OvertimeProductionOrderOption {
     customer: row.CUSTOMER ?? '',
     workshop: workshopCode(normalizeWorkshop(row.WORKSHOP ?? '')),
     status: row.STATUS ?? '',
+    quantity: row.QUANTITY != null ? String(row.QUANTITY) : '',
     initialdate: row.INITIALDATE,
   }
 }
@@ -105,7 +109,7 @@ async function getIncompleteOrdersForWorkshop(
   const filters = [...workshopToDataFilters(workshop), `${workshop}%`]
   let query = supabase
     .from('data')
-    .select('PCODE,CUSTOMER,WORKSHOP,STATUS,INITIALDATE')
+    .select('PCODE,CUSTOMER,WORKSHOP,STATUS,INITIALDATE,QUANTITY')
     .not('PCODE', 'is', null)
     .limit(1000)
 
@@ -121,9 +125,23 @@ async function getIncompleteOrdersForWorkshop(
   const rows = ((data ?? []) as DataOrderRow[])
     .map(mapDataOrderRow)
     .filter((row) => canAccessWorkshop(profile, row.workshop))
+  const quantityByPcode = new Map(rows.map((row) => [row.pcode, Number(row.quantity) || 0]))
+  const { data: prodRows, error: prodError } = await supabase
+    .from('Production')
+    .select('pcode,poutput,save_status')
+    .in('pcode', rows.map((row) => row.pcode))
+
+  if (prodError) return { options: [], error: prodError.message }
+
+  const statusMap = buildProductionStatusMapFromRows({
+    pcodes: rows.map((row) => row.pcode),
+    productionRows: (prodRows ?? []) as Array<Pick<Database['public']['Tables']['Production']['Row'], 'pcode' | 'poutput' | 'save_status'>>,
+    quantityByPcode,
+  })
+  const effectiveRows = rows.map((row) => applyEffectiveStatusToOrder(row, statusMap))
 
   return {
-    options: getIncompleteOvertimeOrderOptions(rows, workshop, initialdate),
+    options: getIncompleteOvertimeOrderOptions(effectiveRows, workshop, initialdate),
   }
 }
 

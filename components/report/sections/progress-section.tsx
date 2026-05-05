@@ -19,6 +19,13 @@ const STATUS_LABEL: Record<OrderStatus['status'], string> = {
   overdue:     'Trễ deadline',
 }
 
+const PRODUCTION_STATUS_COLOR: Record<string, string> = {
+  'Đã giao': 'bg-[#8e8e93]/10 text-[#6e6e73] border-[#8e8e93]/20',
+  'Đã SX': 'bg-[#34c759]/15 text-[#2f9e44] border-[#2f9e44]/20',
+  'Đang SX': 'bg-[#3b82f6]/10 text-[#3b5bdb] border-[#3b5bdb]/20',
+  'Chưa SX': 'bg-[#f2f2f7] text-[#6e6e73] border-[#d2d2d7]',
+}
+
 // ── Detail mode ──────────────────────────────────────────────────────────
 
 export function ProgressDetail({ orders, summary }: {
@@ -82,14 +89,14 @@ export function ProgressDetail({ orders, summary }: {
         <table className="w-full text-[12px]">
           <thead className="bg-[#f2f2f7]">
             <tr>
-              {['Mã LSX', 'Mô tả', 'KH', 'Ngày SX', 'Deadline', 'SL thực / ĐH', 'Trạng thái'].map((h) => (
+              {['Mã LSX', 'Mô tả', 'KH', 'Ngày SX', 'Deadline', 'SL thực / ĐH', 'Trạng thái SX', 'Tiến độ'].map((h) => (
                 <th key={h} className="px-3 py-2 text-left text-[#6e6e73] font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {visibleOrders.length === 0 ? (
-              <tr><td colSpan={7} className="px-3 py-8 text-center text-[#aeaeb2]">Không có dữ liệu</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-[#aeaeb2]">Không có dữ liệu</td></tr>
             ) : visibleOrders.map((o) => (
               <tr key={o.pcode} className="border-t border-[#d2d2d7]/40 hover:bg-[#f2f2f7]/60">
                 <td className="px-3 py-2 font-mono font-semibold text-[#3b5bdb]">{o.pcode}</td>
@@ -109,6 +116,11 @@ export function ProgressDetail({ orders, summary }: {
                       <span className="text-[10px] text-[#6e6e73]">({o.completionPct ?? 0}%)</span>
                     ) : null}
                   </div>
+                </td>
+                <td className="px-3 py-2">
+                  <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium border', PRODUCTION_STATUS_COLOR[o.productionStatus] ?? PRODUCTION_STATUS_COLOR['Chưa SX'])}>
+                    {o.productionStatus || 'Chưa SX'}
+                  </span>
                 </td>
                 <td className="px-3 py-2">
                   <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-medium border', STATUS_COLOR[o.status])}>

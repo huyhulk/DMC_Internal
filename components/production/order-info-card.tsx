@@ -12,6 +12,9 @@ interface Props {
 const STATUS_STYLE: Record<string, string> = {
   'đã giao':  'text-[#2f9e44] bg-[#2f9e44]/10 border-[#2f9e44]/20',
   'đang sx':  'text-[#b37700] bg-[#ff9500]/10 border-[#ff9500]/20',
+  'đang sản xuất':  'text-[#b37700] bg-[#ff9500]/10 border-[#ff9500]/20',
+  'chưa sx':  'text-[#6e6e73] bg-[#f2f2f7] border-[#d2d2d7]',
+  'chưa sản xuất':  'text-[#6e6e73] bg-[#f2f2f7] border-[#d2d2d7]',
   'đã sx':    'text-[#1971c2] bg-[#1971c2]/10 border-[#1971c2]/20',
 }
 

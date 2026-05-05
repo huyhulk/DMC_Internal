@@ -6,9 +6,16 @@ import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import {
   calculateProductionCompletion,
   getProductionRowsValidationError,
-  isOpenProductionOrder,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
+import {
+  applyEffectiveStatusToOrder,
+  applyEffectiveStatusToOrders,
+  buildProductionStatusMapFromRows,
+  upsertProductionOrderStatuses,
+  type ProductionSourceRow,
+} from '@/lib/production/status-server'
+import { shouldShowOpenProductionOrder } from '@/lib/production/status'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
 import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
@@ -76,7 +83,7 @@ export async function getInitData(
         .eq('INITIALDATE', selectedDate),
       supabase
         .from('Production')
-        .select('pcode,save_status')
+        .select('pcode,poutput,save_status')
         .eq('pdate', selectedDate),
     ])
 
@@ -99,7 +106,25 @@ export async function getInitData(
       })
       .map(mapDataRowToOrder)
 
-    const prodRows = (productionRes.data ?? []) as Pick<ProductionRow, 'pcode' | 'save_status'>[]
+    const orderPcodes = orders.map((order) => order.pcode)
+    const { data: cumulativeProductionRows, error: cumulativeProductionError } = orderPcodes.length > 0
+      ? await supabase
+          .from('Production')
+          .select('pcode,poutput,save_status')
+          .in('pcode', orderPcodes)
+      : { data: [], error: null }
+
+    if (cumulativeProductionError) return { success: false, error: cumulativeProductionError.message }
+
+    const quantityByPcode = new Map(orders.map((order) => [order.pcode, Number(order.quantity) || 0]))
+    const prodRows = (productionRes.data ?? []) as ProductionSourceRow[]
+    const statusMap = buildProductionStatusMapFromRows({
+      pcodes: orderPcodes,
+      productionRows: (cumulativeProductionRows ?? []) as ProductionSourceRow[],
+      quantityByPcode,
+    })
+    const effectiveOrders = applyEffectiveStatusToOrders(orders, statusMap)
+
     const submittedPcodes = [
       ...new Set(prodRows.map((p) => p.pcode).filter(Boolean) as string[]),
     ]
@@ -130,7 +155,7 @@ export async function getInitData(
 
     return {
       success: true,
-      data: { orders, norms, materials, submittedPcodes, closedPcodes },
+      data: { orders: effectiveOrders, norms, materials, submittedPcodes, closedPcodes },
     }
   } catch (err) {
     logger.error({ err }, 'getInitData error')
@@ -155,6 +180,19 @@ export async function searchOrderByPcode(
     }
 
     const order = mapDataRowToOrder(data as DataRow)
+    const { data: productionRows, error: productionError } = await supabase
+      .from('Production')
+      .select('pcode,poutput,save_status')
+      .eq('pcode', order.pcode)
+    if (productionError) return { success: false, message: productionError.message }
+
+    const quantityByPcode = new Map([[order.pcode, Number(order.quantity) || 0]])
+    const statusMap = buildProductionStatusMapFromRows({
+      pcodes: [order.pcode],
+      productionRows: (productionRows ?? []) as ProductionSourceRow[],
+      quantityByPcode,
+    })
+    const effectiveOrder = applyEffectiveStatusToOrder(order, statusMap)
 
     // Verify the current user has access to this order's workshop
     const { data: { user } } = await supabase.auth.getUser()
@@ -170,7 +208,7 @@ export async function searchOrderByPcode(
       }
     }
 
-    return { success: true, order }
+    return { success: true, order: effectiveOrder }
   } catch (err) {
     logger.error({ err }, 'searchOrderByPcode error')
     return { success: false, message: String(err) }
@@ -211,23 +249,35 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     if (productionRes.error) return { success: false, error: productionRes.error.message }
 
     const dataRows = (dataRes.data ?? []) as DataRow[]
-    const prodRows = (productionRes.data ?? []) as Pick<ProductionRow, 'pcode' | 'poutput' | 'save_status'>[]
+    const prodRows = (productionRes.data ?? []) as ProductionSourceRow[]
     const outputByPcode = buildPcodeOutputMap(prodRows)
     const submittedPcodes = [...new Set(prodRows.map((p) => p.pcode).filter(Boolean) as string[])]
     const closedPcodes = [
       ...new Set(prodRows.filter((p) => p.save_status === 'closed').map((p) => p.pcode).filter(Boolean) as string[]),
     ]
 
+    const scopedOrders = dataRows
+      .filter((row) => isWorkspaceAllowed(normalizeWorkshop(row.WORKSHOP ?? ''), role, userWorkspaces))
+      .map((row) => {
+        const order = mapDataRowToOrder(row)
+        const produced = outputByPcode.get(order.pcode) ?? 0
+        const completion = calculateProductionCompletion(Number(order.quantity) || 0, produced)
+        return { ...order, ...completion }
+      })
+    const quantityByPcode = new Map(scopedOrders.map((order) => [order.pcode, Number(order.quantity) || 0]))
+    const statusMap = buildProductionStatusMapFromRows({
+      pcodes: scopedOrders.map((order) => order.pcode),
+      productionRows: prodRows,
+      quantityByPcode,
+    })
     const orders = sortProductionOrdersForEntry(
-      dataRows
-        .filter((row) => isWorkspaceAllowed(normalizeWorkshop(row.WORKSHOP ?? ''), role, userWorkspaces))
-        .map((row) => {
-          const order = mapDataRowToOrder(row)
-          const produced = outputByPcode.get(order.pcode) ?? 0
-          const completion = calculateProductionCompletion(Number(order.quantity) || 0, produced)
-          return { ...order, ...completion }
-        })
-        .filter((order) => isOpenProductionOrder(order, order.producedQuantity, closedPcodes.includes(order.pcode)))
+      scopedOrders
+        .map((order) => applyEffectiveStatusToOrder(order, statusMap))
+        .filter((order) => shouldShowOpenProductionOrder({
+          status: order.status,
+          closed: closedPcodes.includes(order.pcode),
+          completion: order,
+        }))
     ) as OpenProductionOrdersData['orders']
 
     return { success: true, data: { orders, norms, materials, submittedPcodes, closedPcodes } }
@@ -294,6 +344,12 @@ export async function recordProductionAction(rows: Array<{
         const { data: orderData } = await supabase
           .from('data').select('PCODE,WORKSHOP').in('PCODE', uniquePcodes)
 
+        const foundPcodes = new Set(((orderData ?? []) as Array<{ PCODE: string }>).map((row) => row.PCODE))
+        const missingPcode = uniquePcodes.find((pcode) => !foundPcodes.has(pcode))
+        if (missingPcode) {
+          return { success: false, message: `Không tìm thấy mã ${missingPcode}.` }
+        }
+
         for (const row of (orderData ?? []) as Array<{ PCODE: string; WORKSHOP: string | null }>) {
           const ws = normalizeWorkshop(row.WORKSHOP ?? '')
           if (!isWorkspaceAllowed(ws, profile.role, userWorkspaces)) {
@@ -327,6 +383,30 @@ export async function recordProductionAction(rows: Array<{
     if (error) {
       logger.error({ error: error.message }, 'recordProduction DB error')
       return { success: false, message: `Lỗi: ${error.message}` }
+    }
+
+    const uniquePcodes = [...new Set(rows.map((r) => r.pcode).filter(Boolean))]
+    const { data: orderData, error: orderError } = await supabase
+      .from('data')
+      .select('PCODE,QUANTITY,STATUS,WORKSHOP')
+      .in('PCODE', uniquePcodes)
+
+    if (orderError) {
+      logger.error({ error: orderError.message, pcodes: uniquePcodes, userId: user.id }, 'recordProduction status source error')
+      return { success: false, message: `Đã lưu sản xuất nhưng lỗi đọc trạng thái LSX: ${orderError.message}` }
+    }
+
+    const statusDataRows = (orderData ?? []) as Array<{ PCODE: string; QUANTITY: number | null; STATUS: string | null; WORKSHOP: string | null }>
+    try {
+      await upsertProductionOrderStatuses({
+        supabase,
+        pcodes: uniquePcodes,
+        dataRows: statusDataRows,
+        userId: user.id,
+      })
+    } catch (statusError) {
+      logger.error({ err: statusError, pcodes: uniquePcodes, userId: user.id }, 'recordProduction status upsert error')
+      return { success: false, message: `Đã lưu sản xuất nhưng lỗi cập nhật trạng thái LSX: ${String(statusError)}` }
     }
 
     logger.info({ count: rows.length, userId: user.id }, 'Production recorded')

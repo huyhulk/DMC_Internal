@@ -107,6 +107,34 @@ export interface Database {
           material?: string
         }
       }
+      production_order_status: {
+        Row: {
+          pcode: string
+          status: 'Chưa SX' | 'Đang SX' | 'Đã SX'
+          produced_quantity: number
+          quantity: number
+          completion_pct: number
+          updated_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          pcode: string
+          status: 'Chưa SX' | 'Đang SX' | 'Đã SX'
+          produced_quantity?: number
+          quantity?: number
+          completion_pct?: number
+          updated_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          status?: 'Chưa SX' | 'Đang SX' | 'Đã SX'
+          produced_quantity?: number
+          quantity?: number
+          completion_pct?: number
+          updated_by?: string | null
+          updated_at?: string
+        }
+      }
       Production: {
         Row: {
           id: number

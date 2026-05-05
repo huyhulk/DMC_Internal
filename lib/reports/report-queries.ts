@@ -9,6 +9,9 @@ import type {
   OrderStatus, ProgressSummary, HeatmapCell,
 } from './report-types'
 import { WORKSHOP_CODES, SHIFT_LABELS } from './report-types'
+import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
+import { isEffectiveCompletedProductionStatus } from '@/lib/production/status'
+import { calculateProductionCompletion } from '@/lib/production/workflow'
 
 // Hour-aware period key: combines pdate + starttime HH when groupBy='hour'
 function getPeriodKey(r: ProdRow, groupBy: GroupBy): string {
@@ -173,7 +176,7 @@ export async function queryProgress(
   const allPcodes = dataRows.map((r) => r.PCODE).filter(Boolean)
   const { data: prodRows } = await supabase
     .from('Production')
-    .select('pcode,poutput')
+    .select('pcode,poutput,save_status')
     .in('pcode', allPcodes) as { data: { pcode: string | null; poutput: number | null }[] | null }
 
   // Sum poutput per pcode (một lệnh có thể có nhiều records)
@@ -183,15 +186,32 @@ export async function queryProgress(
     pcodeSumMap.set(r.pcode, (pcodeSumMap.get(r.pcode) ?? 0) + (r.poutput ?? 0))
   }
 
+  const quantityByPcode = new Map(dataRows.map((r) => [r.PCODE, r.QUANTITY ?? 0]))
+  const statusMap = buildProductionStatusMapFromRows({
+    pcodes: allPcodes,
+    productionRows: (prodRows ?? []) as Array<{ pcode: string | null; poutput: number | null; save_status: 'draft' | 'closed' | null }>,
+    quantityByPcode,
+  })
+
   const orders: OrderStatus[] = dataRows.map((r) => {
     const ws = workshopCode(normalizeWorkshop(r.WORKSHOP ?? '')) as WorkshopCode
     const validWs: WorkshopCode = WORKSHOP_CODES.includes(ws) ? ws : 'DMC1'
     const totalOutput   = pcodeSumMap.get(r.PCODE) ?? 0
     const hasProduction = totalOutput > 0
     const qty           = r.QUANTITY ?? 0
-    // Hoàn thành khi tổng sản lượng thực tế >= số lượng đặt hàng
-    const isCompleted   = hasProduction && (qty <= 0 || totalOutput >= qty)
-    const completionPct = qty > 0 ? Math.min(100, Math.round((totalOutput / qty) * 100)) : (hasProduction ? 100 : 0)
+    const completion = calculateProductionCompletion(qty, totalOutput)
+    const effectiveOrder = applyEffectiveStatusToOrder({
+      pcode: r.PCODE,
+      initialdate: r.INITIALDATE ?? '',
+      workshop: validWs,
+      customer: r.CUSTOMER ?? '',
+      quantity: qty > 0 ? String(qty) : '',
+      description: r.DESCRIPTION ?? '',
+      deadlinedate: r.DEADLINEDATE ?? '',
+      status: r.STATUS ?? '',
+    }, statusMap)
+    const isCompleted = isEffectiveCompletedProductionStatus(effectiveOrder.status)
+    const completionPct = completion.completionPct
     const dl = r.DEADLINEDATE ? new Date(r.DEADLINEDATE) : null
 
     let status: OrderStatus['status'] = isCompleted ? 'completed' : 'in_progress'
@@ -211,6 +231,7 @@ export async function queryProgress(
       deadlinedate:  dlStr.substring(0, 10),
       deadlinetime:  dlStr.includes('T') ? dlStr.substring(11, 16) : '',
       status,
+      productionStatus: effectiveOrder.status,
       hasProduction,
       totalOutput,
       completionPct,

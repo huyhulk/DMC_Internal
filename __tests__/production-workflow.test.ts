@@ -9,6 +9,11 @@ import {
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
 
+import {
+  resolveProductionOrderStatus,
+  shouldShowOpenProductionOrder,
+} from '@/lib/production/status'
+
 const baseOrder: Order = {
   pcode: '',
   initialdate: '2026-05-02',
@@ -30,6 +35,43 @@ describe('production workflow helpers', () => {
     expect(getProductionOrderStatusRank('Chua san xuat')).toBe(1)
     expect(getProductionOrderStatusRank('Da SX')).toBe(2)
     expect(getProductionOrderStatusRank('Da giao')).toBe(3)
+  })
+
+  it('resolves effective production order status without mutating source status', () => {
+    expect(resolveProductionOrderStatus({ sourceStatus: 'Đã giao', produced: 0, quantity: 100, closed: false })).toBe('Đã giao')
+    expect(resolveProductionOrderStatus({ sourceStatus: 'Đã SX', produced: 0, quantity: 100, closed: false })).toBe('Đã SX')
+    expect(resolveProductionOrderStatus({ sourceStatus: 'Đang sản xuất', produced: 0, quantity: 100, closed: false })).toBe('Chưa SX')
+    expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: false })).toBe('Đang SX')
+    expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 100, quantity: 100, closed: false })).toBe('Đã SX')
+    expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: true })).toBe('Đã SX')
+  })
+
+  it('detects open production orders from effective status and completion metadata', () => {
+    expect(shouldShowOpenProductionOrder({
+      status: 'Chưa SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 0),
+    })).toBe(true)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đang SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 40),
+    })).toBe(true)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 100),
+    })).toBe(false)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã giao',
+      closed: false,
+      completion: calculateProductionCompletion(100, 40),
+    })).toBe(false)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đang SX',
+      closed: true,
+      completion: calculateProductionCompletion(100, 40),
+    })).toBe(false)
   })
 
   it('sorts order catalog by status priority then pcode', () => {
