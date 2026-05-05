@@ -1,4 +1,10 @@
-import { calculateActualHeadcount, elapsedWorkHours, isProductionHRGroup } from '@/lib/hr/workflow'
+import {
+  calculateActualHeadcount,
+  calculateEffectiveWorkHours,
+  calculateHRLaborHoursByFactory,
+  elapsedWorkHours,
+  isProductionHRGroup,
+} from '@/lib/hr/workflow'
 
 describe('HR workflow helpers', () => {
   it('subtracts absent and transferred ids once from total headcount', () => {
@@ -32,5 +38,56 @@ describe('HR workflow helpers', () => {
     expect(isProductionHRGroup('DMC5')).toBe(true)
     expect(isProductionHRGroup('PKT-SX')).toBe(false)
     expect(isProductionHRGroup('DIEU-PHOI')).toBe(false)
+  })
+
+  it('calculates effective transfer hours inside workday and excludes lunch', () => {
+    expect(calculateEffectiveWorkHours('08:00', '10:00')).toBe(2)
+    expect(calculateEffectiveWorkHours('09:00', '14:00')).toBe(4)
+    expect(calculateEffectiveWorkHours('12:30', '16:30')).toBe(4)
+  })
+
+  it('clamps transfer hours to the configured workday', () => {
+    expect(calculateEffectiveWorkHours('06:00', '18:00')).toBe(8)
+    expect(calculateEffectiveWorkHours('16:30', '18:00')).toBe(0)
+  })
+
+  it('moves available labor hours from source to destination factories', () => {
+    const result = calculateHRLaborHoursByFactory([
+      {
+        factory: 'DMC1',
+        totalem: 10,
+        absentIds: [1],
+        transferRecords: [{ employeeId: 2, fromFactory: 'DMC1', toFactory: 'DMC3', startTime: '08:00', endTime: '12:00' }],
+      },
+      {
+        factory: 'DMC3',
+        totalem: 5,
+        absentIds: [],
+        transferRecords: [],
+      },
+    ], 8)
+
+    expect(result.get('DMC1')).toMatchObject({ actualHeadcount: 9, availableLaborHours: 68.5, transferredOutHours: 3.5 })
+    expect(result.get('DMC3')).toMatchObject({ actualHeadcount: 5, availableLaborHours: 43.5, transferredInHours: 3.5 })
+  })
+
+  it('does not allocate transfer hours for absent employees', () => {
+    const result = calculateHRLaborHoursByFactory([
+      {
+        factory: 'DMC1',
+        totalem: 2,
+        absentIds: [1],
+        transferRecords: [{ employeeId: 1, fromFactory: 'DMC1', toFactory: 'DMC3', startTime: '08:00', endTime: '10:00' }],
+      },
+      {
+        factory: 'DMC3',
+        totalem: 1,
+        absentIds: [],
+        transferRecords: [],
+      },
+    ], 8)
+
+    expect(result.get('DMC1')).toMatchObject({ actualHeadcount: 1, availableLaborHours: 8, transferredOutHours: 0 })
+    expect(result.get('DMC3')).toMatchObject({ actualHeadcount: 1, availableLaborHours: 8, transferredInHours: 0 })
   })
 })

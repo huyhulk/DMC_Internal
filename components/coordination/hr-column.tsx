@@ -1,11 +1,11 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
-import { ChevronDown, Save, Lock, Users } from 'lucide-react'
+import { ChevronDown, Save, Lock, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { calculateActualHeadcount } from '@/lib/hr/workflow'
-import type { HumanResource, HRDailyGroupKey } from '@/types'
-import { HR_DAILY_GROUP_LABELS } from '@/types'
+import type { HumanResource, HRDailyGroupKey, HRTransferRecord } from '@/types'
+import { HR_DAILY_GROUP_LABELS, HR_DAILY_GROUPS } from '@/types'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -15,10 +15,12 @@ interface Props {
   totalem: number
   absentIds: number[]
   transferredIds: number[]
+  transferRecords: HRTransferRecord[]
   saving: boolean
   readOnly?: boolean
   onAbsentToggle: (id: number) => void
   onTransferredToggle: (id: number) => void
+  onTransferChange: (id: number, field: 'toFactory' | 'startTime' | 'endTime', value: string) => void
   onSave: () => void
 }
 
@@ -30,10 +32,12 @@ export function HRColumn({
   totalem,
   absentIds,
   transferredIds,
+  transferRecords,
   saving,
   readOnly = false,
   onAbsentToggle,
   onTransferredToggle,
+  onTransferChange,
   onSave,
 }: Props) {
   const [absentDropdownOpen, setAbsentDropdownOpen] = useState(false)
@@ -57,8 +61,8 @@ export function HRColumn({
   }, [absentDropdownOpen, transferredDropdownOpen])
 
   const absentEmployees = employees.filter((emp) => absentIds.includes(emp.id))
-  const transferredEmployees = employees.filter((emp) => transferredIds.includes(emp.id))
   const actualHeadcount = calculateActualHeadcount(totalem, absentIds, transferredIds)
+  const destinationOptions = HR_DAILY_GROUPS.filter((group) => group !== factory)
 
   const absentTriggerLabel =
     absentIds.length === 0
@@ -107,10 +111,10 @@ export function HRColumn({
         </div>
         <div className="rounded-xl bg-[#34c759]/10 border border-[#34c759]/20 px-3 py-2">
           <div className="text-[10px] text-[#248a3d] uppercase tracking-[0.06em] font-medium">
-            Thực tế làm việc
+            Thực tế tại bộ phận
           </div>
           <div className="mt-1 text-[18px] font-semibold text-[#248a3d]">{actualHeadcount}</div>
-          <div className="mt-1 text-[10px] text-[#248a3d]">Trừ nghỉ phép/điều chuyển</div>
+          <div className="mt-1 text-[10px] text-[#248a3d]">Trừ nghỉ/điều chuyển đi</div>
         </div>
       </div>
 
@@ -274,19 +278,85 @@ export function HRColumn({
         </div>
       </div>
 
-      {/* ── 5. Selected employee info cards ── */}
-      {(absentEmployees.length > 0 || transferredEmployees.length > 0) && (
+      {/* ── 5. Transfer details ── */}
+      {transferRecords.length > 0 && (
+        <div className="space-y-2">
+          {transferRecords.map((record) => {
+            const employee = employees.find((emp) => emp.id === record.employeeId)
+            const missing = !record.toFactory || !record.startTime || !record.endTime
+            return (
+              <div key={record.employeeId} className="rounded-xl border border-[#ff9500]/25 bg-[#ff9500]/5 p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#1d1d1f] leading-tight">
+                      {employee?.name ?? `#${record.employeeId}`}
+                    </p>
+                    {missing && <p className="mt-0.5 text-[10px] text-[#bf6a02]">Nhập xưởng đến và thời gian điều chuyển</p>}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={readOnly}
+                    onClick={() => !readOnly && onTransferredToggle(record.employeeId)}
+                    className="rounded-full p-1 text-[#bf6a02] hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Bỏ điều chuyển"
+                  >
+                    <X size={13} strokeWidth={2.5} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  <label className="space-y-1">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.06em] text-[#6e6e73]">Đến xưởng</span>
+                    <select
+                      value={record.toFactory}
+                      disabled={readOnly}
+                      onChange={(e) => onTransferChange(record.employeeId, 'toFactory', e.target.value)}
+                      className="h-9 w-full rounded-lg border border-[#d2d2d7]/70 bg-white px-2 text-[12px] font-medium text-[#1d1d1f] focus:outline-none focus:ring-1 focus:ring-[#ff9500]/40 disabled:opacity-50"
+                    >
+                      {destinationOptions.map((group) => (
+                        <option key={group} value={group}>{HR_DAILY_GROUP_LABELS[group]}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.06em] text-[#6e6e73]">Từ</span>
+                      <input
+                        type="time"
+                        value={record.startTime}
+                        disabled={readOnly}
+                        onChange={(e) => onTransferChange(record.employeeId, 'startTime', e.target.value)}
+                        className="h-9 w-full rounded-lg border border-[#d2d2d7]/70 bg-white px-2 text-[12px] font-medium text-[#1d1d1f] focus:outline-none focus:ring-1 focus:ring-[#ff9500]/40 disabled:opacity-50"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.06em] text-[#6e6e73]">Đến</span>
+                      <input
+                        type="time"
+                        value={record.endTime}
+                        disabled={readOnly}
+                        onChange={(e) => onTransferChange(record.employeeId, 'endTime', e.target.value)}
+                        className="h-9 w-full rounded-lg border border-[#d2d2d7]/70 bg-white px-2 text-[12px] font-medium text-[#1d1d1f] focus:outline-none focus:ring-1 focus:ring-[#ff9500]/40 disabled:opacity-50"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── 6. Selected employee info cards ── */}
+      {absentEmployees.length > 0 && (
         <div className="space-y-2">
           {absentEmployees.map((emp) => (
             <EmployeeInfoCard key={`absent-${emp.id}`} employee={emp} tag="Vắng" />
           ))}
-          {transferredEmployees.map((emp) => (
-            <EmployeeInfoCard key={`transferred-${emp.id}`} employee={emp} tag="Điều chuyển" />
-          ))}
         </div>
       )}
 
-      {/* ── 5. Save button ── */}
+      {/* ── 7. Save button ── */}
       {readOnly ? (
         <div className="mt-auto w-full h-10 rounded-[10px] bg-[#f2f2f7] border border-[#d2d2d7]/60
                         flex items-center justify-center gap-1.5

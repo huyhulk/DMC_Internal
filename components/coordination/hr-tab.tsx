@@ -8,14 +8,14 @@ import { HRColumn } from './hr-column'
 import { HRAdminModal } from './hr-admin-modal'
 import { saveHRDaily } from '@/lib/actions/hr'
 import { getTodayLocal, getUserWorkspaces } from '@/lib/utils'
-import { HR_DAILY_GROUPS, type SessionUser, type HumanResource, type HRDayData, type HRDailyGroupKey } from '@/types'
+import { HR_DAILY_GROUPS, type SessionUser, type HumanResource, type HRDayData, type HRDailyGroupKey, type HRTransferRecord } from '@/types'
 
-type FactoryState = Record<HRDailyGroupKey, { totalem: number; absentIds: number[]; transferredIds: number[] }>
+type FactoryState = Record<HRDailyGroupKey, { totalem: number; absentIds: number[]; transferRecords: HRTransferRecord[] }>
 
 function buildDefaultState(): FactoryState {
   const base: Partial<FactoryState> = {}
   for (const f of HR_DAILY_GROUPS) {
-    base[f] = { totalem: 0, absentIds: [], transferredIds: [] }
+    base[f] = { totalem: 0, absentIds: [], transferRecords: [] }
   }
   return base as FactoryState
 }
@@ -70,7 +70,7 @@ export function HRTab({ user, canEdit }: Props) {
       for (const row of json.dailyData) {
         const key = row.factory
         if (key in next) {
-          next[key] = { totalem: row.totalem, absentIds: row.absentIds, transferredIds: row.transferredIds }
+          next[key] = { totalem: row.totalem, absentIds: row.absentIds, transferRecords: row.transferRecords }
         }
       }
       setFactoryState(next)
@@ -89,20 +89,39 @@ export function HRTab({ user, canEdit }: Props) {
       const nextAbsent = current.includes(empId)
         ? current.filter((id) => id !== empId)
         : [...current, empId]
-      const nextTransferred = prev[factory].transferredIds.filter((id) => id !== empId)
-      return { ...prev, [factory]: { ...prev[factory], absentIds: nextAbsent, transferredIds: nextTransferred } }
+      const nextTransferRecords = prev[factory].transferRecords.filter((record) => record.employeeId !== empId)
+      return { ...prev, [factory]: { ...prev[factory], absentIds: nextAbsent, transferRecords: nextTransferRecords } }
     })
   }, [])
 
   const toggleTransferred = useCallback((factory: HRDailyGroupKey, empId: number) => {
     setFactoryState((prev) => {
-      const current = prev[factory].transferredIds
-      const nextTransferred = current.includes(empId)
-        ? current.filter((id) => id !== empId)
-        : [...current, empId]
+      const current = prev[factory].transferRecords
+      const exists = current.some((record) => record.employeeId === empId)
+      const nextTransferRecords = exists
+        ? current.filter((record) => record.employeeId !== empId)
+        : [...current, {
+            employeeId: empId,
+            fromFactory: factory,
+            toFactory: HR_DAILY_GROUPS.find((group) => group !== factory) ?? factory,
+            startTime: '',
+            endTime: '',
+          }]
       const nextAbsent = prev[factory].absentIds.filter((id) => id !== empId)
-      return { ...prev, [factory]: { ...prev[factory], absentIds: nextAbsent, transferredIds: nextTransferred } }
+      return { ...prev, [factory]: { ...prev[factory], absentIds: nextAbsent, transferRecords: nextTransferRecords } }
     })
+  }, [])
+
+  const updateTransferRecord = useCallback((factory: HRDailyGroupKey, empId: number, field: 'toFactory' | 'startTime' | 'endTime', value: string) => {
+    setFactoryState((prev) => ({
+      ...prev,
+      [factory]: {
+        ...prev[factory],
+        transferRecords: prev[factory].transferRecords.map((record) => (
+          record.employeeId === empId ? { ...record, [field]: value } : record
+        )),
+      },
+    }))
   }, [])
 
   const handleSave = useCallback(async (factory: HRDailyGroupKey) => {
@@ -110,10 +129,10 @@ export function HRTab({ user, canEdit }: Props) {
       toast.error('Bạn chỉ có quyền xem tab này.')
       return
     }
-    const { absentIds, transferredIds } = factoryState[factory]
+    const { absentIds, transferRecords } = factoryState[factory]
     setSaving((prev) => ({ ...prev, [factory]: true }))
     try {
-      const result = await saveHRDaily(date, factory, absentIds, transferredIds)
+      const result = await saveHRDaily(date, factory, absentIds, transferRecords)
       if (result.success) {
         toast.success(`Đã lưu nhân sự ${factory}`)
       } else {
@@ -191,11 +210,13 @@ export function HRTab({ user, canEdit }: Props) {
                 employees={employees.filter((e) => e.factory === factory)}
                 totalem={factoryState[factory].totalem}
                 absentIds={factoryState[factory].absentIds}
-                transferredIds={factoryState[factory].transferredIds}
+                transferredIds={factoryState[factory].transferRecords.map((record) => record.employeeId)}
+                transferRecords={factoryState[factory].transferRecords}
                 saving={saving[factory]}
                 readOnly={!editableFactories.has(factory)}
                 onAbsentToggle={(id) => toggleAbsent(factory, id)}
                 onTransferredToggle={(id) => toggleTransferred(factory, id)}
+                onTransferChange={(id, field, value) => updateTransferRecord(factory, id, field, value)}
                 onSave={() => handleSave(factory)}
               />
             ))}

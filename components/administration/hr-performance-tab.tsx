@@ -39,7 +39,7 @@ export function HRPerformanceTab({ canEdit: _canEdit }: Props) {
 
   const totals = useMemo(() => {
     const productionLaborHours = rows.reduce((sum, row) => sum + row.productionLaborHours, 0)
-    const availableLaborHours = rows.reduce((sum, row) => sum + (row.elapsedHours * row.actualHeadcount), 0)
+    const availableLaborHours = rows.reduce((sum, row) => sum + row.availableLaborHours, 0)
     const efficiency = availableLaborHours > 0 ? (productionLaborHours / availableLaborHours) * 100 : null
     return {
       productionLaborHours: Math.round(productionLaborHours * 100) / 100,
@@ -146,8 +146,6 @@ function SummaryCard({
 }
 
 function EfficiencyCard({ row }: { row: HREfficiencyRow }) {
-  const availableLaborHours = Math.round(row.elapsedHours * row.actualHeadcount * 100) / 100
-
   return (
     <div className="rounded-2xl border border-[#d2d2d7]/60 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] p-4 space-y-4">
       <div className="flex items-center justify-between gap-2">
@@ -163,7 +161,9 @@ function EfficiencyCard({ row }: { row: HREfficiencyRow }) {
         <Metric label="Giờ công sản xuất" value={row.productionLaborHours} suffix="giờ" />
         <Metric label="Giờ đã trôi qua" value={row.elapsedHours} suffix="giờ" />
         <Metric label="Nhân sự thực tế" value={row.actualHeadcount} suffix="người" icon={Users} />
-        <Metric label="Giờ công khả dụng" value={availableLaborHours} suffix="giờ" />
+        <Metric label="Giờ công khả dụng" value={row.availableLaborHours} suffix="giờ" />
+        <Metric label="Điều chuyển đi" value={row.transferredOutHours} suffix="giờ" />
+        <Metric label="Điều chuyển đến" value={row.transferredInHours} suffix="giờ" />
       </div>
 
       {row.warnings.length > 0 && (

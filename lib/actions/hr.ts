@@ -7,13 +7,14 @@ import { getSessionUser } from '@/lib/actions/auth'
 import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
 import { calcDurationHours, normalizeWorkshop, workshopCode } from '@/lib/utils'
-import { calculateActualHeadcount, elapsedWorkHours, getVietnamNow, isProductionHRGroup } from '@/lib/hr/workflow'
+import { calculateHRLaborHoursByFactory, elapsedWorkHours, getVietnamNow, isProductionHRGroup } from '@/lib/hr/workflow'
 import {
   HR_DAILY_GROUPS,
   HUMAN_RESOURCE_FACTORIES,
   type HumanResource,
   type HRDailyGroupKey,
   type HRDayData,
+  type HRTransferRecord,
   type HumanResourceFactoryKey,
   type SessionUser,
 } from '@/types'
@@ -37,6 +38,7 @@ type HRDailyRow = {
   totalem: number | null
   absent_ids: number[] | null
   transferred_ids: number[] | null
+  transfer_records: HRTransferRecord[] | null
   auto_filled: boolean | null
   pdate: string | null
 }
@@ -58,6 +60,9 @@ export interface HREfficiencyRow {
   productionLaborHours: number
   elapsedHours: number
   actualHeadcount: number
+  availableLaborHours: number
+  transferredOutHours: number
+  transferredInHours: number
   efficiency: number | null
   warnings: string[]
 }
@@ -68,11 +73,19 @@ const dateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
 
+const transferRecordSchema = z.object({
+  employeeId: z.number().int().positive(),
+  fromFactory: z.enum(HR_DAILY_GROUPS),
+  toFactory: z.enum(HR_DAILY_GROUPS),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Giờ bắt đầu điều chuyển không hợp lệ'),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'Giờ kết thúc điều chuyển không hợp lệ'),
+})
+
 const saveHRDailySchema = z.object({
   date: dateSchema,
   factory: z.enum(HR_DAILY_GROUPS),
   absentIds: z.array(z.number().int().positive()),
-  transferredIds: z.array(z.number().int().positive()),
+  transferRecords: z.array(transferRecordSchema),
 })
 
 const humanResourceSchema = z.object({
@@ -118,6 +131,52 @@ function uniqueIds(ids: number[]): number[] {
   return Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)))
 }
 
+function timeToMinutes(value: string): number | null {
+  const [hours, minutes] = value.split(':').map(Number)
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+  return hours * 60 + minutes
+}
+
+function normalizeTransferRecords(factory: HRDailyGroupKey, absentIds: number[], records: HRTransferRecord[]): { records: HRTransferRecord[]; error?: string } {
+  const absent = new Set(absentIds)
+  const normalized: HRTransferRecord[] = []
+  const intervalsByEmployee = new Map<number, Array<{ start: number; end: number }>>()
+
+  for (const record of records) {
+    if (record.fromFactory !== factory) return { records: [], error: 'Xưởng đi không khớp với xưởng đang lưu.' }
+    if (record.toFactory === factory) return { records: [], error: 'Xưởng đến phải khác xưởng hiện tại.' }
+    if (absent.has(record.employeeId)) return { records: [], error: 'Nhân sự đã nghỉ không thể điều chuyển.' }
+
+    const start = timeToMinutes(record.startTime)
+    const end = timeToMinutes(record.endTime)
+    if (start === null || end === null) return { records: [], error: 'Giờ điều chuyển không hợp lệ.' }
+    if (end <= start) return { records: [], error: 'Giờ kết thúc điều chuyển phải sau giờ bắt đầu.' }
+
+    const intervals = intervalsByEmployee.get(record.employeeId) ?? []
+    if (intervals.some((interval) => start < interval.end && end > interval.start)) {
+      return { records: [], error: 'Một nhân sự không thể có nhiều khoảng điều chuyển chồng giờ.' }
+    }
+    intervals.push({ start, end })
+    intervalsByEmployee.set(record.employeeId, intervals)
+
+    normalized.push({
+      employeeId: record.employeeId,
+      fromFactory: record.fromFactory,
+      toFactory: record.toFactory,
+      startTime: record.startTime,
+      endTime: record.endTime,
+    })
+  }
+
+  return { records: normalized }
+}
+
+function parseTransferRecords(value: unknown): HRTransferRecord[] {
+  const parsed = z.array(transferRecordSchema).safeParse(value)
+  return parsed.success ? parsed.data : []
+}
+
 function shouldEnsureDefaultRows(date: string): boolean {
   const now = getVietnamNow()
   return date === now.date && (now.hour > 16 || (now.hour === 16 && now.minute >= 0))
@@ -152,7 +211,7 @@ export async function getHRData(
       .order('name', { ascending: true }),
     supabase
       .from('hr_daily')
-      .select('factory,totalem,absent_ids,transferred_ids,auto_filled,pdate')
+      .select('factory,totalem,absent_ids,transferred_ids,transfer_records,auto_filled,pdate')
       .eq('pdate', date)
       .in('factory', [...dailyGroups]),
   ])
@@ -186,6 +245,7 @@ export async function getHRData(
       totalem: headcountByGroup.get(factory) ?? 0,
       absentIds: todayRow?.absent_ids ?? [],
       transferredIds: todayRow?.transferred_ids ?? [],
+      transferRecords: parseTransferRecords(todayRow?.transfer_records ?? []),
       isAutoFilled: todayRow?.auto_filled ?? !todayRow,
     }
   })
@@ -204,9 +264,9 @@ export async function saveHRDaily(
   date: string,
   factory: string,
   absentIds: number[],
-  transferredIds: number[] = []
+  transferRecords: HRTransferRecord[] = []
 ): Promise<{ success: boolean; error?: string }> {
-  const parsed = saveHRDailySchema.safeParse({ date, factory, absentIds, transferredIds })
+  const parsed = saveHRDailySchema.safeParse({ date, factory, absentIds, transferRecords })
   if (!parsed.success) {
     const msg = parsed.error.errors[0].message
     logger.warn({ date, factory, zodError: msg }, 'saveHRDaily: validation failed')
@@ -215,7 +275,10 @@ export async function saveHRDaily(
 
   const { date: pdate, factory: fac } = parsed.data
   const absent = uniqueIds(parsed.data.absentIds)
-  const transferred = uniqueIds(parsed.data.transferredIds).filter((id) => !absent.includes(id))
+  const transferResult = normalizeTransferRecords(fac, absent, parsed.data.transferRecords)
+  if (transferResult.error) return { success: false, error: transferResult.error }
+  const transfers = transferResult.records
+  const transferred = uniqueIds(transfers.map((record) => record.employeeId))
   const user = await requireHREditUser()
   if (!user) return { success: false, error: 'Không có quyền cập nhật nhân sự.' }
   if (!canAccessFactory(user, fac)) return { success: false, error: 'Không có quyền cập nhật xưởng này.' }
@@ -232,6 +295,7 @@ export async function saveHRDaily(
         totalem: total,
         absent_ids: absent,
         transferred_ids: transferred,
+        transfer_records: transfers,
         auto_filled: false,
         auto_filled_at: null,
         updated_at: new Date().toISOString(),
@@ -308,6 +372,7 @@ export async function ensureDefaultHRDailyRows(date: string, scopeUser?: HRProfi
       totalem: counts.get(factory) ?? 0,
       absent_ids: [],
       transferred_ids: [],
+      transfer_records: [],
       auto_filled: true,
       auto_filled_at: now,
       updated_at: now,
@@ -367,19 +432,24 @@ export async function getHREfficiencyData(date: string, scopeUser?: HRProfile): 
     }
   }
 
-  const headcountByFactory = new Map<HRDailyGroupKey, number>()
-  for (const row of hrData.dailyData) {
-    headcountByFactory.set(row.factory, calculateActualHeadcount(row.totalem, row.absentIds, row.transferredIds))
-  }
-
   const elapsedHours = elapsedWorkHours(date)
+  const laborHoursByFactory = calculateHRLaborHoursByFactory(hrData.dailyData.map((row) => ({
+    factory: row.factory,
+    totalem: row.totalem,
+    absentIds: row.absentIds,
+    transferRecords: row.transferRecords,
+  })), elapsedHours)
   const rows = new Map<HRDailyGroupKey, HREfficiencyRow>()
   for (const factory of visibleGroups) {
+    const labor = laborHoursByFactory.get(factory)
     rows.set(factory, {
       factory,
       productionLaborHours: 0,
       elapsedHours,
-      actualHeadcount: headcountByFactory.get(factory) ?? 0,
+      actualHeadcount: labor?.actualHeadcount ?? 0,
+      availableLaborHours: labor?.availableLaborHours ?? 0,
+      transferredOutHours: labor?.transferredOutHours ?? 0,
+      transferredInHours: labor?.transferredInHours ?? 0,
       efficiency: null,
       warnings: [],
     })
@@ -403,9 +473,8 @@ export async function getHREfficiencyData(date: string, scopeUser?: HRProfile): 
   for (const row of rows.values()) {
     if (row.actualHeadcount <= 0) row.warnings.push('Chưa có nhân sự làm việc thực tế')
     if (row.elapsedHours <= 0) row.warnings.push('Chưa đến giờ làm việc 07:30')
-    const denominator = row.elapsedHours * row.actualHeadcount
     row.productionLaborHours = Math.round(row.productionLaborHours * 100) / 100
-    row.efficiency = denominator > 0 ? Math.round((row.productionLaborHours / denominator) * 10000) / 100 : null
+    row.efficiency = row.availableLaborHours > 0 ? Math.round((row.productionLaborHours / row.availableLaborHours) * 10000) / 100 : null
   }
 
   return Array.from(rows.values())

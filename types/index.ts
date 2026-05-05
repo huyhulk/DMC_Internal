@@ -190,10 +190,19 @@ export interface HumanResource {
   phone: string | null
 }
 
+export interface HRTransferRecord {
+  employeeId: number
+  fromFactory: HRDailyGroupKey
+  toFactory: HRDailyGroupKey
+  startTime: string
+  endTime: string
+}
+
 export interface HRDayData {
   factory: HRDailyGroupKey
   totalem: number
   absentIds: number[]
   transferredIds: number[]
+  transferRecords: HRTransferRecord[]
   isAutoFilled: boolean
 }
