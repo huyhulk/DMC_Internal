@@ -27,7 +27,7 @@ import {
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
 import { cn, getTodayLocal, workshopCode } from '@/lib/utils'
-import type { NormItem, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
+import type { NormItem, OpenProductionOrder, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
 
 interface Props {
   user: SessionUser
@@ -43,20 +43,274 @@ const inputCls =
   'shadow-[0_1px_2px_rgba(0,0,0,0.05)]'
 
 export function ProductionTab({ user, canEdit }: Props) {
+  const [activeSubTab, setActiveSubTab] = useState<'open-orders' | 'daily-entry'>('open-orders')
+  const [showHistory, setShowHistory] = useState(false)
+
+  if (showHistory) {
+    return <ProductionInputHistoryTab onBack={() => setShowHistory(false)} />
+  }
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
+      <div className="shrink-0 px-3 sm:px-4 pt-3 bg-white/85 backdrop-blur-sm border-b border-[#d2d2d7]/60 space-y-3">
+        {!canEdit && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-700">
+            Bạn chỉ có quyền xem tab này.
+          </div>
+        )}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 pb-3">
+          <div className="inline-flex p-1 rounded-2xl bg-[#f2f2f7] border border-[#d2d2d7]/60 w-full sm:w-auto">
+            <SubTabButton active={activeSubTab === 'open-orders'} onClick={() => setActiveSubTab('open-orders')}>
+              Danh sách lệnh sản xuất
+            </SubTabButton>
+            <SubTabButton active={activeSubTab === 'daily-entry'} onClick={() => setActiveSubTab('daily-entry')}>
+              Theo dõi lệnh theo ngày tạo
+            </SubTabButton>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowHistory(true)}
+            className="h-9 px-3 rounded-xl border border-[#d2d2d7]/70 text-[12px] font-medium text-dmc-primary bg-white hover:bg-[#f2f2f7] active:scale-95 flex items-center justify-center gap-1.5 transition-all duration-150 sm:ml-auto"
+          >
+            <History size={12} />
+            <span>Lịch sử nhập</span>
+          </button>
+        </div>
+      </div>
+
+      {activeSubTab === 'open-orders'
+        ? <OpenOrdersTab user={user} canEdit={canEdit} />
+        : <DailyEntryTab user={user} canEdit={canEdit} />}
+    </div>
+  )
+}
+
+function SubTabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex-1 sm:flex-none h-8 px-3 rounded-xl text-[12px] font-semibold transition-all duration-150 active:scale-[0.98]',
+        active
+          ? 'bg-white text-dmc-primary shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+          : 'text-[#6e6e73] hover:text-[#1d1d1f]'
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function OpenOrdersTab({ user, canEdit }: Props) {
+  const {
+    state, visibleRows,
+    loadOpenOrders, selectOrder,
+    unlockPcode, updateLine,
+    submitProduction,
+    getProductOptions, getNormHint,
+  } = useProductionData(user)
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [workshopFilter, setWorkshopFilter] = useState('ALL')
+  const [entryOpen, setEntryOpen] = useState(false)
+  const [unlockPcodeOpen, setUnlockPcodeOpen] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'draft' | 'closed'>('draft')
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => { loadOpenOrders() }, [loadOpenOrders])
+
+  const allOrders = useMemo(() => state.initData?.orders as OpenProductionOrder[] ?? [], [state.initData?.orders])
+  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => workshopCode(order.workshop)).filter(Boolean))].sort(), [allOrders])
+  const submittedPcodes = state.initData?.submittedPcodes ?? []
+  const closedPcodes = state.initData?.closedPcodes ?? []
+  const orderCatalog = useMemo(() => {
+    const byWorkshop = workshopFilter === 'ALL'
+      ? allOrders
+      : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
+    return sortProductionOrdersForEntry(filterProductionOrdersByPcode(byWorkshop, searchQuery)) as OpenProductionOrder[]
+  }, [allOrders, searchQuery, workshopFilter])
+  const totalRemaining = orderCatalog.reduce((sum, order) => sum + order.remainingQuantity, 0)
+  const isOther = state.selectedWorkshop.startsWith('Việc khác')
+  const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
+  const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
+
+  useEffect(() => {
+    if (workshopOptions.length === 1 && workshopFilter !== workshopOptions[0]) {
+      setWorkshopFilter(workshopOptions[0])
+    } else if (workshopOptions.length !== 1 && workshopFilter !== 'ALL' && !workshopOptions.includes(workshopFilter)) {
+      setWorkshopFilter('ALL')
+    }
+  }, [workshopFilter, workshopOptions])
+
+  function handleSearch() {
+    const query = searchQuery.trim()
+    if (!query) return
+    const localMatch = allOrders.find((order) => order.pcode.toLowerCase() === query.toLowerCase())
+    if (localMatch) handleOrderSelect(localMatch)
+  }
+
+  function handleOrderSelect(order: Order) {
+    const alreadySubmitted = submittedPcodes.includes(order.pcode)
+    const alreadyClosed = closedPcodes.includes(order.pcode)
+    const delivered = getProductionOrderStatusRank(order.status) === 3
+    if ((alreadySubmitted || alreadyClosed) && !delivered && !state.pcodeUnlocked) {
+      setUnlockPcodeOpen(true)
+      return
+    }
+
+    const selected = selectOrder(order)
+    if (selected) {
+      setEntryOpen(true)
+      setConfirmOpen(false)
+    }
+  }
+
+  async function handleSubmit() {
+    if (!canEdit) {
+      toast.error('Bạn chỉ có quyền xem tab này.')
+      return
+    }
+
+    setSubmitting(true)
+    const ok = await submitProduction(saveStatus, loadOpenOrders)
+    setSubmitting(false)
+    if (ok) {
+      setConfirmOpen(false)
+      setEntryOpen(false)
+    } else {
+      setConfirmOpen(false)
+    }
+  }
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
+      <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3 bg-white/85 backdrop-blur-sm">
+        <SectionLabel>
+          Danh sách lệnh sản xuất chưa hoàn thành
+        </SectionLabel>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(150px,190px)_minmax(220px,1fr)_auto] gap-3 lg:items-end">
+          <FieldGroup label="Xưởng">
+            <select
+              value={workshopFilter}
+              onChange={(e) => setWorkshopFilter(e.target.value)}
+              className={inputCls}
+              disabled={workshopOptions.length <= 1}
+            >
+              {workshopOptions.length > 1 && <option value="ALL">Tất cả xưởng</option>}
+              {workshopOptions.map((ws) => (
+                <option key={ws} value={ws}>{ws}</option>
+              ))}
+            </select>
+          </FieldGroup>
+
+          <FieldGroup label="Tìm mã LSX">
+            <div className="flex gap-2">
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="Nhập mã LSX..."
+                className={cn(inputCls, 'flex-1 min-w-0')}
+              />
+              <button
+                onClick={handleSearch}
+                className="h-10 px-3.5 rounded-xl bg-dmc-primary hover:bg-dmc-primary-dark text-white shrink-0 active:scale-95 transition-all duration-150 flex items-center justify-center shadow-sm"
+              >
+                <Search size={15} strokeWidth={2.5} />
+              </button>
+            </div>
+          </FieldGroup>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="h-10 px-3 rounded-xl bg-white border border-[#d2d2d7]/70 flex flex-col justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Số lệnh</span>
+              <span className="text-[13px] font-semibold text-[#1d1d1f]">{orderCatalog.length}</span>
+            </div>
+            <div className="h-10 px-3 rounded-xl bg-white border border-[#d2d2d7]/70 flex flex-col justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Còn lại</span>
+              <span className="text-[13px] font-semibold text-[#1d1d1f]">{totalRemaining.toLocaleString('vi-VN')}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3">
+        <OrderCatalog
+          orders={orderCatalog}
+          loading={state.loading}
+          selectedPcode={state.orderInfo?.pcode ?? ''}
+          submittedPcodes={submittedPcodes}
+          closedPcodes={closedPcodes}
+          onSelect={handleOrderSelect}
+        />
+      </div>
+
+      <ProductionEntryDialog
+        open={entryOpen && Boolean(state.selectedPcode)}
+        order={state.orderInfo}
+        selectedWorkshop={state.selectedWorkshop}
+        unlockLog={state.unlockLog}
+        visibleRows={visibleRows}
+        lines={state.lines}
+        products={productOptions}
+        canEdit={canEdit}
+        canSubmit={canSubmit}
+        submitting={submitting}
+        getNormHint={getNormHint}
+        onLineChange={updateLine}
+        onRequestSave={() => {
+          setSaveStatus('draft')
+          setConfirmOpen(true)
+        }}
+        onRequestCloseOrder={() => {
+          setSaveStatus('closed')
+          setConfirmOpen(true)
+        }}
+        onClose={() => {
+          setEntryOpen(false)
+          setConfirmOpen(false)
+        }}
+      />
+
+      <UnlockDialog
+        open={unlockPcodeOpen}
+        title="Mở khóa LSX"
+        description="Nhập mật khẩu để mở khóa mã LSX đã nhập:"
+        onConfirm={unlockPcode}
+        onClose={() => setUnlockPcodeOpen(false)}
+      />
+
+      {confirmOpen && (
+        <ConfirmSaveDialog
+          saveStatus={saveStatus}
+          submitting={submitting}
+          pcode={state.pcodeStatuses[state.selectedPcode]?.pcode ?? state.selectedPcode}
+          workshop={state.selectedWorkshop}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={handleSubmit}
+        />
+      )}
+    </div>
+  )
+}
+
+function DailyEntryTab({ user, canEdit }: Props) {
   const today = getTodayLocal()
-  const [activeView, setActiveView] = useState<'entry' | 'history'>('entry')
   const {
     state, visibleRows,
     loadData, selectOrder,
-    unlockDate, unlockPcode, updateLine,
+    unlockPcode, updateLine,
     searchByPcode, submitProduction,
     getProductOptions, getNormHint,
     refreshNorms,
   } = useProductionData(user)
 
-  const [searchQuery,     setSearchQuery]     = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [workshopFilter, setWorkshopFilter] = useState('ALL')
   const [entryOpen,       setEntryOpen]       = useState(false)
-  const [unlockDateOpen,  setUnlockDateOpen]  = useState(false)
   const [unlockPcodeOpen, setUnlockPcodeOpen] = useState(false)
   const [confirmOpen,     setConfirmOpen]     = useState(false)
   const [saveStatus,      setSaveStatus]      = useState<'draft' | 'closed'>('draft')
@@ -66,20 +320,27 @@ export function ProductionTab({ user, canEdit }: Props) {
   useEffect(() => { loadData(today) }, [today, loadData])
 
   const allOrders = useMemo(() => state.initData?.orders ?? [], [state.initData?.orders])
+  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => workshopCode(order.workshop)).filter(Boolean))].sort(), [allOrders])
   const submittedPcodes = state.initData?.submittedPcodes ?? []
   const closedPcodes = state.initData?.closedPcodes ?? []
-  const orderCatalog = useMemo(
-    () => sortProductionOrdersForEntry(filterProductionOrdersByPcode(allOrders, searchQuery)),
-    [allOrders, searchQuery]
-  )
+  const orderCatalog = useMemo(() => {
+    const byWorkshop = workshopFilter === 'ALL'
+      ? allOrders
+      : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
+    return sortProductionOrdersForEntry(filterProductionOrdersByPcode(byWorkshop, searchQuery))
+  }, [allOrders, searchQuery, workshopFilter])
   const hasSubmittedOrders = submittedPcodes.length > 0
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
 
-  if (activeView === 'history') {
-    return <ProductionInputHistoryTab onBack={() => setActiveView('entry')} />
-  }
+  useEffect(() => {
+    if (workshopOptions.length === 1 && workshopFilter !== workshopOptions[0]) {
+      setWorkshopFilter(workshopOptions[0])
+    } else if (workshopOptions.length !== 1 && workshopFilter !== 'ALL' && !workshopOptions.includes(workshopFilter)) {
+      setWorkshopFilter('ALL')
+    }
+  }, [workshopFilter, workshopOptions])
 
   async function handleSearch() {
     const query = searchQuery.trim()
@@ -94,6 +355,7 @@ export function ProductionTab({ user, canEdit }: Props) {
     const order = await searchByPcode(query)
     if (order) {
       setSearchQuery(order.pcode)
+      setWorkshopFilter(workshopCode(order.workshop) || 'ALL')
       await loadData(order.initialdate)
     }
   }
@@ -141,21 +403,8 @@ export function ProductionTab({ user, canEdit }: Props) {
   return (
     <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
       <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3 bg-white/85 backdrop-blur-sm">
-        {!canEdit && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-700">
-            Bạn chỉ có quyền xem tab này.
-          </div>
-        )}
         <SectionLabel action={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveView('history')}
-              className="h-8 px-2.5 rounded-lg border border-[#d2d2d7]/70 text-[11px] font-medium text-dmc-primary bg-white hover:bg-[#f2f2f7] active:scale-95 flex items-center gap-1.5 transition-all duration-150"
-            >
-              <History size={11} />
-              <span>Lịch sử nhập</span>
-            </button>
             {hasSubmittedOrders && (
               <LockChip
                 locked={!state.pcodeUnlocked}
@@ -173,23 +422,31 @@ export function ProductionTab({ user, canEdit }: Props) {
             </button>
           </div>
         }>
-          Nhập liệu sản xuất
+          Theo dõi lệnh theo ngày tạo
         </SectionLabel>
 
-        <div className="grid grid-cols-1 sm:grid-cols-[minmax(180px,220px)_minmax(220px,1fr)] gap-3">
-          <FieldGroup
-            label="Ngày lập phiếu"
-            extra={state.dateLocked
-              ? <LockChip locked onClick={() => setUnlockDateOpen(true)} />
-              : <LockChip locked={false} />}
-          >
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(150px,190px)_minmax(150px,190px)_minmax(220px,1fr)] gap-3">
+          <FieldGroup label="Ngày lập phiếu">
             <input
               type="date"
               value={state.selectedDate}
-              disabled={state.dateLocked}
               onChange={(e) => loadData(e.target.value)}
               className={inputCls}
             />
+          </FieldGroup>
+
+          <FieldGroup label="Xưởng">
+            <select
+              value={workshopFilter}
+              onChange={(e) => setWorkshopFilter(e.target.value)}
+              className={inputCls}
+              disabled={workshopOptions.length <= 1}
+            >
+              {workshopOptions.length > 1 && <option value="ALL">Tất cả xưởng</option>}
+              {workshopOptions.map((ws) => (
+                <option key={ws} value={ws}>{ws}</option>
+              ))}
+            </select>
           </FieldGroup>
 
           <FieldGroup label="Tìm mã LSX">
@@ -251,13 +508,6 @@ export function ProductionTab({ user, canEdit }: Props) {
       />
 
       <UnlockDialog
-        open={unlockDateOpen}
-        title="Mở khóa ngày"
-        description="Nhập mật khẩu để mở khóa ngày lập phiếu:"
-        onConfirm={unlockDate}
-        onClose={() => setUnlockDateOpen(false)}
-      />
-      <UnlockDialog
         open={unlockPcodeOpen}
         title="Mở khóa LSX"
         description="Nhập mật khẩu để mở khóa mã LSX đã nhập:"
@@ -266,45 +516,70 @@ export function ProductionTab({ user, canEdit }: Props) {
       />
 
       {confirmOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
-            onClick={() => setConfirmOpen(false)}
-          />
-          <div className="relative w-full max-w-sm bg-white border border-[#d2d2d7]/60 rounded-[20px] p-6 shadow-apple-lg scale-in">
-            <h3 className="text-[16px] font-semibold text-[#1d1d1f] mb-4 tracking-[-0.01em]">
-              {saveStatus === 'closed' ? 'Xác nhận đóng lệnh' : 'Xác nhận lưu dữ liệu'}
-            </h3>
-
-            <div className="space-y-2 mb-5">
-              <Row label="Mã LSX" value={
-                state.pcodeStatuses[state.selectedPcode]?.pcode ?? state.selectedPcode
-              } accent />
-              <Row label="Xưởng" value={state.selectedWorkshop} />
-              <Row label="Trạng thái" value={saveStatus === 'closed' ? 'Đã đóng' : 'Lưu tạm'} />
-            </div>
-
-            <div className="flex gap-2.5">
-              <button
-                onClick={() => setConfirmOpen(false)}
-                className="flex-1 h-10 rounded-xl border border-[#d2d2d7]/70 text-[#6e6e73] text-[13px] font-medium hover:bg-[#f2f2f7] active:scale-[0.98] transition-all duration-150"
-              >
-                Hủy
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="flex-1 h-10 rounded-xl bg-dmc-success text-white text-[13px] font-semibold active:scale-[0.98] transition-all duration-150 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {submitting
-                  ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <Save size={13} strokeWidth={2.5} />}
-                {submitting ? 'Đang lưu...' : 'Xác nhận'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmSaveDialog
+          saveStatus={saveStatus}
+          submitting={submitting}
+          pcode={state.pcodeStatuses[state.selectedPcode]?.pcode ?? state.selectedPcode}
+          workshop={state.selectedWorkshop}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={handleSubmit}
+        />
       )}
+    </div>
+  )
+}
+
+function ConfirmSaveDialog({
+  saveStatus,
+  submitting,
+  pcode,
+  workshop,
+  onCancel,
+  onConfirm,
+}: {
+  saveStatus: 'draft' | 'closed'
+  submitting: boolean
+  pcode: string
+  workshop: string
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+        onClick={onCancel}
+      />
+      <div className="relative w-full max-w-sm bg-white border border-[#d2d2d7]/60 rounded-[20px] p-6 shadow-apple-lg scale-in">
+        <h3 className="text-[16px] font-semibold text-[#1d1d1f] mb-4 tracking-[-0.01em]">
+          {saveStatus === 'closed' ? 'Xác nhận đóng lệnh' : 'Xác nhận lưu dữ liệu'}
+        </h3>
+
+        <div className="space-y-2 mb-5">
+          <Row label="Mã LSX" value={pcode} accent />
+          <Row label="Xưởng" value={workshop} />
+          <Row label="Trạng thái" value={saveStatus === 'closed' ? 'Đã đóng' : 'Lưu tạm'} />
+        </div>
+
+        <div className="flex gap-2.5">
+          <button
+            onClick={onCancel}
+            className="flex-1 h-10 rounded-xl border border-[#d2d2d7]/70 text-[#6e6e73] text-[13px] font-medium hover:bg-[#f2f2f7] active:scale-[0.98] transition-all duration-150"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={submitting}
+            className="flex-1 h-10 rounded-xl bg-dmc-success text-white text-[13px] font-semibold active:scale-[0.98] transition-all duration-150 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {submitting
+              ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              : <Save size={13} strokeWidth={2.5} />}
+            {submitting ? 'Đang lưu...' : 'Xác nhận'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -341,7 +616,7 @@ function OrderCatalog({
         <span>Khách hàng</span>
         <span>Diễn giải</span>
         <span className="text-right">Số lượng</span>
-        <span className="text-center">Tình trạng</span>
+          <span>Tiến độ</span>
       </div>
 
       {orders.map((order) => (
@@ -421,12 +696,32 @@ function OrderRow({
           <p className="text-[13px] font-semibold text-[#1d1d1f] md:text-right">{order.quantity || '—'}</p>
         </div>
 
-        <div className="flex md:justify-center">
-          <StatusBadge status={order.status} />
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <MobileLabel>Tiến độ</MobileLabel>
+            <StatusBadge status={order.status} />
+          </div>
+          {isOpenProductionOrderRow(order) && (
+            <div className="space-y-1">
+              <div className="h-1.5 rounded-full bg-[#e5e5ea] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-dmc-success"
+                  style={{ width: `${order.completionPct}%` }}
+                />
+              </div>
+              <p className="text-[11px] font-medium text-[#6e6e73]">
+                {order.producedQuantity.toLocaleString('vi-VN')} / {order.quantity || '0'} · còn {order.remainingQuantity.toLocaleString('vi-VN')}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </button>
   )
+}
+
+function isOpenProductionOrderRow(order: Order): order is OpenProductionOrder {
+  return 'completionPct' in order && 'producedQuantity' in order && 'remainingQuantity' in order
 }
 
 function ProductionEntryDialog({

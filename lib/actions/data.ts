@@ -3,11 +3,16 @@
 import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
-import { getProductionRowsValidationError } from '@/lib/production/workflow'
+import {
+  calculateProductionCompletion,
+  getProductionRowsValidationError,
+  isOpenProductionOrder,
+  sortProductionOrdersForEntry,
+} from '@/lib/production/workflow'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
 import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
-import type { InitData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
+import type { InitData, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
 
 // Bust the unstable_cache for Norm + Material tables.
@@ -169,6 +174,66 @@ export async function searchOrderByPcode(
   } catch (err) {
     logger.error({ err }, 'searchOrderByPcode error')
     return { success: false, message: String(err) }
+  }
+}
+
+function buildPcodeOutputMap(rows: Array<Pick<ProductionRow, 'pcode' | 'poutput'>>): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const row of rows) {
+    if (!row.pcode) continue
+    map.set(row.pcode, (map.get(row.pcode) ?? 0) + (row.poutput ?? 0))
+  }
+  return map
+}
+
+export async function getOpenProductionOrdersAction(): Promise<{ success: boolean; data?: OpenProductionOrdersData; error?: string }> {
+  try {
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.' }
+
+    const { data: profileData } = await supabase
+      .from('profiles').select('role,workspace').eq('id', user.id).single()
+    if (!profileData) return { success: false, error: 'Không tìm thấy thông tin người dùng.' }
+
+    const { role, workspace: rawWorkspace } = profileData as { role: string; workspace: string }
+    const userWorkspaces = getUserWorkspaces(rawWorkspace ?? '')
+
+    const [norms, materials, dataRes, productionRes] = await Promise.all([
+      getCachedNorms(),
+      getCachedMaterials(),
+      supabase.from('data').select(DATA_SELECT),
+      supabase.from('Production').select('pcode,poutput,save_status'),
+    ])
+
+    if (dataRes.error) return { success: false, error: dataRes.error.message }
+    if (productionRes.error) return { success: false, error: productionRes.error.message }
+
+    const dataRows = (dataRes.data ?? []) as DataRow[]
+    const prodRows = (productionRes.data ?? []) as Pick<ProductionRow, 'pcode' | 'poutput' | 'save_status'>[]
+    const outputByPcode = buildPcodeOutputMap(prodRows)
+    const submittedPcodes = [...new Set(prodRows.map((p) => p.pcode).filter(Boolean) as string[])]
+    const closedPcodes = [
+      ...new Set(prodRows.filter((p) => p.save_status === 'closed').map((p) => p.pcode).filter(Boolean) as string[]),
+    ]
+
+    const orders = sortProductionOrdersForEntry(
+      dataRows
+        .filter((row) => isWorkspaceAllowed(normalizeWorkshop(row.WORKSHOP ?? ''), role, userWorkspaces))
+        .map((row) => {
+          const order = mapDataRowToOrder(row)
+          const produced = outputByPcode.get(order.pcode) ?? 0
+          const completion = calculateProductionCompletion(Number(order.quantity) || 0, produced)
+          return { ...order, ...completion }
+        })
+        .filter((order) => isOpenProductionOrder(order, order.producedQuantity, closedPcodes.includes(order.pcode)))
+    ) as OpenProductionOrdersData['orders']
+
+    return { success: true, data: { orders, norms, materials, submittedPcodes, closedPcodes } }
+  } catch (err) {
+    logger.error({ err }, 'getOpenProductionOrdersAction error')
+    return { success: false, error: String(err) }
   }
 }
 

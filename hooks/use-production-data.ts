@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { getInitData, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
+import { getInitData, getOpenProductionOrdersAction, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
 import { getProductionRowsValidationError } from '@/lib/production/workflow'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { InitData, Order, NormItem, ProductionSaveStatus, SessionUser, ProductLine, PcodeStatus } from '@/types'
@@ -103,6 +103,26 @@ export function useProductionData(user: SessionUser) {
         loading: false,
         initData: result.data!,
         selectedDate: date,
+        pcodeUnlocked: false,
+        unlockLog: [],
+      }))
+    },
+    []
+  )
+
+  const loadOpenOrders = useCallback(
+    async () => {
+      setState((s) => ({ ...s, loading: true, selectedWorkshop: '', selectedPcode: '', orderInfo: null }))
+      const result = await getOpenProductionOrdersAction()
+      if (!result.success || !result.data) {
+        toast.error(result.error ?? 'Lỗi tải danh sách lệnh sản xuất')
+        setState((s) => ({ ...s, loading: false }))
+        return
+      }
+      setState((s) => ({
+        ...s,
+        loading: false,
+        initData: result.data!,
         pcodeUnlocked: false,
         unlockLog: [],
       }))
@@ -344,7 +364,7 @@ export function useProductionData(user: SessionUser) {
     return result.order
   }, [])
 
-  const submitProduction = useCallback(async (saveStatus: ProductionSaveStatus = 'draft') => {
+  const submitProduction = useCallback(async (saveStatus: ProductionSaveStatus = 'draft', onSuccess?: () => Promise<void>) => {
     const { initData, selectedDate, selectedWorkshop, selectedPcode, pcodeStatuses, lines, unlockLog } = state
     const status = pcodeStatuses[selectedPcode]
     const actualPcode = status?.pcode ?? selectedPcode
@@ -403,7 +423,11 @@ export function useProductionData(user: SessionUser) {
 
     if (result.success) {
       toast.success(result.message, { duration: 4000 })
-      await loadData(selectedDate)
+      if (onSuccess) {
+        await onSuccess()
+      } else {
+        await loadData(selectedDate)
+      }
       return true
     } else {
       toast.error(result.message)
@@ -467,6 +491,7 @@ export function useProductionData(user: SessionUser) {
     state,
     visibleRows,
     loadData,
+    loadOpenOrders,
     selectWorkshop,
     selectPcode,
     selectOrder,
