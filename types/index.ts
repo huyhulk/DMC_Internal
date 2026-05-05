@@ -146,6 +146,7 @@ export interface ProductLine {
   pdate: string
   starttime: string
   endtime: string
+  lunchOvertime: boolean
   workforce: number
   poutput: number
   eoutput: number

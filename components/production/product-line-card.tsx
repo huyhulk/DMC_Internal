@@ -10,7 +10,7 @@ interface Props {
   products: string[]
   normHint: NormItem | null
   disabled?: boolean
-  onChange: (field: keyof ProductLine, value: string | number) => void
+  onChange: (field: keyof ProductLine, value: string | number | boolean) => void
 }
 
 export function ProductLineCard({ index, line, products, normHint, disabled, onChange }: Props) {
@@ -68,7 +68,7 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
       </div>
 
       {/* Row 2: Times + Workforce + Outputs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
 
         <FieldGroup label="Bắt đầu">
           <TimePicker24
@@ -84,6 +84,23 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
             onChange={(v) => onChange('endtime', v)}
             disabled={disabled}
           />
+        </FieldGroup>
+
+        <FieldGroup label="Tăng ca trưa">
+          <label className={cn(
+            'flex h-28 items-center justify-center gap-2 rounded-xl border border-[#d2d2d7]/70 bg-[#f2f2f7] px-2',
+            'text-[12px] font-semibold text-[#1d1d1f] transition-all duration-150',
+            disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-[#34c759]/50'
+          )}>
+            <input
+              type="checkbox"
+              checked={line.lunchOvertime}
+              disabled={disabled}
+              onChange={(e) => onChange('lunchOvertime', e.target.checked)}
+              className="h-4 w-4 rounded border-[#d2d2d7] accent-[#34c759]"
+            />
+            <span className="leading-tight">Có làm trưa</span>
+          </label>
         </FieldGroup>
 
         {/* Workforce — plain number input */}

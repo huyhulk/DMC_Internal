@@ -92,15 +92,32 @@ export function calcDurationHours(start: string, end: string): number {
   }
 }
 
+function parseTimeToMinutes(value: string): number | null {
+  const [hours, minutes] = value.trim().split(':').map(Number)
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
+  return hours * 60 + minutes
+}
+
+function includesLunchBreak(start: string, end: string): boolean {
+  const startMin = parseTimeToMinutes(start)
+  const endMin = parseTimeToMinutes(end)
+  if (startMin === null || endMin === null || endMin <= startMin) return false
+  return startMin < 750 && endMin > 690
+}
+
 export function calcRealNorm(params: {
   nwforce: number
   workforce: number
   poutput: number
   starttime: string
   endtime: string
+  lunchOvertime?: boolean
 }): number {
-  const { nwforce, workforce, poutput, starttime, endtime } = params
-  const dtHours = calcDurationHours(starttime, endtime)
+  const { nwforce, workforce, poutput, starttime, endtime, lunchOvertime } = params
+  const durationHours = calcDurationHours(starttime, endtime)
+  const dtHours = !lunchOvertime && includesLunchBreak(starttime, endtime)
+    ? Math.max(0, durationHours - 1)
+    : durationHours
   if (nwforce === 0 || workforce === 0 || dtHours === 0) return 0
   const achievedRate = (poutput * nwforce) / (workforce * dtHours)
   return Math.round(achievedRate * 100) / 100

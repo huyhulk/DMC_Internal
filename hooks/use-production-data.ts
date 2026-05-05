@@ -27,6 +27,7 @@ const INITIAL_LINE: ProductLine = {
   pdate: '',
   starttime: '',
   endtime: '',
+  lunchOvertime: false,
   workforce: 0,
   poutput: 0,
   eoutput: 0,
@@ -256,7 +257,7 @@ export function useProductionData(user: SessionUser) {
   )
 
   const updateLine = useCallback(
-    (idx: number, field: keyof ProductLine, value: string | number) => {
+    (idx: number, field: keyof ProductLine, value: string | number | boolean) => {
       setState((s) => {
         const lines = [...s.lines]
         lines[idx] = { ...lines[idx], [field]: value }
@@ -287,6 +288,7 @@ export function useProductionData(user: SessionUser) {
               poutput: lines[idx].poutput,
               starttime: lines[idx].starttime,
               endtime: lines[idx].endtime,
+              lunchOvertime: lines[idx].lunchOvertime,
             })
           }
 
@@ -295,7 +297,7 @@ export function useProductionData(user: SessionUser) {
           }
         }
 
-        if (['poutput', 'starttime', 'endtime', 'workforce'].includes(field)) {
+        if (['poutput', 'starttime', 'endtime', 'workforce', 'lunchOvertime'].includes(field)) {
           const line = lines[idx]
           const norm = s.initData?.norms.find(
             (n) => n.products === line.product && workshopCode(n.workshop) === workshopCode(s.selectedWorkshop)
@@ -307,6 +309,7 @@ export function useProductionData(user: SessionUser) {
               poutput: line.poutput,
               starttime: line.starttime,
               endtime: line.endtime,
+              lunchOvertime: line.lunchOvertime,
             })
           }
 
@@ -326,6 +329,7 @@ export function useProductionData(user: SessionUser) {
                     poutput: lines[j].poutput,
                     starttime: lines[j].starttime,
                     endtime: lines[j].endtime,
+                    lunchOvertime: lines[j].lunchOvertime,
                   })
                 }
               }

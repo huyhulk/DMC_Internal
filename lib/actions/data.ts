@@ -17,7 +17,7 @@ import {
 } from '@/lib/production/status-server'
 import { shouldShowOpenProductionOrder } from '@/lib/production/status'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
-import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
+import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode, getLocalDateAfterDays, getTodayLocal } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
@@ -238,17 +238,32 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const { role, workspace: rawWorkspace } = profileData as { role: string; workspace: string }
     const userWorkspaces = getUserWorkspaces(rawWorkspace ?? '')
 
-    const [norms, materials, dataRes, productionRes] = await Promise.all([
+    const today = getTodayLocal()
+    const fromDate = getLocalDateAfterDays(-2)
+
+    const [norms, materials, dataRes] = await Promise.all([
       getCachedNorms(),
       getCachedMaterials(),
-      supabase.from('data').select(DATA_SELECT),
-      supabase.from('Production').select('pcode,poutput,save_status'),
+      supabase
+        .from('data')
+        .select(DATA_SELECT)
+        .gte('INITIALDATE', fromDate)
+        .lte('INITIALDATE', today),
     ])
 
     if (dataRes.error) return { success: false, error: dataRes.error.message }
-    if (productionRes.error) return { success: false, error: productionRes.error.message }
 
     const dataRows = (dataRes.data ?? []) as DataRow[]
+    const scopedDataRows = dataRows.filter((row) =>
+      isWorkspaceAllowed(normalizeWorkshop(row.WORKSHOP ?? ''), role, userWorkspaces)
+    )
+    const pcodes = [...new Set(scopedDataRows.map((row) => row.PCODE).filter(Boolean))]
+    const productionRes = pcodes.length > 0
+      ? await supabase.from('Production').select('pcode,poutput,save_status').in('pcode', pcodes)
+      : { data: [], error: null }
+
+    if (productionRes.error) return { success: false, error: productionRes.error.message }
+
     const prodRows = (productionRes.data ?? []) as ProductionSourceRow[]
     const outputByPcode = buildPcodeOutputMap(prodRows)
     const submittedPcodes = [...new Set(prodRows.map((p) => p.pcode).filter(Boolean) as string[])]
@@ -256,29 +271,30 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       ...new Set(prodRows.filter((p) => p.save_status === 'closed').map((p) => p.pcode).filter(Boolean) as string[]),
     ]
 
-    const scopedOrders = dataRows
-      .filter((row) => isWorkspaceAllowed(normalizeWorkshop(row.WORKSHOP ?? ''), role, userWorkspaces))
-      .map((row) => {
-        const order = mapDataRowToOrder(row)
-        const produced = outputByPcode.get(order.pcode) ?? 0
-        const completion = calculateProductionCompletion(Number(order.quantity) || 0, produced)
-        return { ...order, ...completion }
-      })
+    const scopedOrders = scopedDataRows.map((row) => {
+      const order = mapDataRowToOrder(row)
+      const produced = outputByPcode.get(order.pcode) ?? 0
+      const completion = calculateProductionCompletion(Number(order.quantity) || 0, produced)
+      return { ...order, ...completion }
+    })
     const quantityByPcode = new Map(scopedOrders.map((order) => [order.pcode, Number(order.quantity) || 0]))
     const statusMap = buildProductionStatusMapFromRows({
       pcodes: scopedOrders.map((order) => order.pcode),
       productionRows: prodRows,
       quantityByPcode,
     })
-    const orders = sortProductionOrdersForEntry(
-      scopedOrders
-        .map((order) => applyEffectiveStatusToOrder(order, statusMap))
-        .filter((order) => shouldShowOpenProductionOrder({
-          status: order.status,
-          closed: closedPcodes.includes(order.pcode),
-          completion: order,
-        }))
-    ) as OpenProductionOrdersData['orders']
+    const effectiveOrders = scopedOrders.map((order) => applyEffectiveStatusToOrder(order, statusMap))
+    const openOrders = sortProductionOrdersForEntry(effectiveOrders.filter((order) => shouldShowOpenProductionOrder({
+      status: order.status,
+      closed: closedPcodes.includes(order.pcode),
+      completion: order,
+    })))
+    const completedOrders = sortProductionOrdersForEntry(effectiveOrders.filter((order) => !shouldShowOpenProductionOrder({
+      status: order.status,
+      closed: closedPcodes.includes(order.pcode),
+      completion: order,
+    })))
+    const orders = [...openOrders, ...completedOrders] as OpenProductionOrdersData['orders']
 
     return { success: true, data: { orders, norms, materials, submittedPcodes, closedPcodes } }
   } catch (err) {

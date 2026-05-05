@@ -131,7 +131,9 @@ function OpenOrdersTab({ user, canEdit }: Props) {
       : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
     return sortProductionOrdersForEntry(filterProductionOrdersByPcode(byWorkshop, searchQuery)) as OpenProductionOrder[]
   }, [allOrders, searchQuery, workshopFilter])
-  const totalRemaining = orderCatalog.reduce((sum, order) => sum + order.remainingQuantity, 0)
+  const totalRemaining = orderCatalog
+    .filter((order) => getProductionOrderStatusRank(order.status) < 2)
+    .reduce((sum, order) => sum + order.remainingQuantity, 0)
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
@@ -188,7 +190,7 @@ function OpenOrdersTab({ user, canEdit }: Props) {
     <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
       <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3 bg-white/85 backdrop-blur-sm">
         <SectionLabel>
-          Danh sách lệnh sản xuất chưa hoàn thành
+          Danh sách lệnh sản xuất 3 ngày gần nhất
         </SectionLabel>
 
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(150px,190px)_minmax(220px,1fr)_auto] gap-3 lg:items-end">
@@ -230,7 +232,7 @@ function OpenOrdersTab({ user, canEdit }: Props) {
               <span className="text-[13px] font-semibold text-[#1d1d1f]">{orderCatalog.length}</span>
             </div>
             <div className="h-10 px-3 rounded-xl bg-white border border-[#d2d2d7]/70 flex flex-col justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Còn lại</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Còn lại mở</span>
               <span className="text-[13px] font-semibold text-[#1d1d1f]">{totalRemaining.toLocaleString('vi-VN')}</span>
             </div>
           </div>
@@ -752,7 +754,7 @@ function ProductionEntryDialog({
   canSubmit: boolean
   submitting: boolean
   getNormHint: (product: string) => NormItem | null
-  onLineChange: (idx: number, field: keyof ProductLine, value: string | number) => void
+  onLineChange: (idx: number, field: keyof ProductLine, value: string | number | boolean) => void
   onRequestSave: () => void
   onRequestCloseOrder: () => void
   onClose: () => void
