@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
-import { Plus, RefreshCw, Send, Trash2, Repeat } from 'lucide-react'
+import { Plus, RefreshCw, Send, Trash2, Repeat, FileText } from 'lucide-react'
 import { cn, formatDate, getTodayLocal } from '@/lib/utils'
 import {
   statReportCreateSchema, statReportBulkSchema, statReportSubmitSchema,
@@ -52,6 +52,7 @@ export function ReportsTab({ user, canEdit }: Props) {
   const [submitting, setSubmitting] = useState(false)
 
   const [filter, setFilter] = useState({ from: '', to: '', status: 'ALL' })
+  const [dailyReport, setDailyReport] = useState({ date: getTodayLocal(), type: 'both' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -132,6 +133,7 @@ export function ReportsTab({ user, canEdit }: Props) {
   }
 
   const today = getTodayLocal()
+  const dailyReportHref = `/dashboard/coordination/daily-report?date=${encodeURIComponent(dailyReport.date)}&type=${encodeURIComponent(dailyReport.type)}`
 
   return (
     <div className="space-y-4">
@@ -152,6 +154,49 @@ export function ReportsTab({ user, canEdit }: Props) {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-emerald-200 p-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-emerald-700">
+            <FileText size={17} />
+            <h2 className="text-[15px] font-semibold">Xuất báo cáo ngày</h2>
+          </div>
+          <p className="text-[12px] text-[#6e6e73] mt-1">KHSX ngày kế tiếp và KQSX theo dữ liệu Production của ngày báo cáo</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-1">
+            <label className={labelCls}>Ngày báo cáo</label>
+            <input
+              type="date"
+              value={dailyReport.date}
+              onChange={(e) => setDailyReport((r) => ({ ...r, date: e.target.value }))}
+              className={cn(inputCls, 'w-40')}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className={labelCls}>Loại báo cáo</label>
+            <select
+              value={dailyReport.type}
+              onChange={(e) => setDailyReport((r) => ({ ...r, type: e.target.value }))}
+              className={cn(inputCls, 'w-44')}
+            >
+              <option value="both">KHSX + KQSX</option>
+              <option value="plan">Chỉ KHSX</option>
+              <option value="result">Chỉ KQSX</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            <a
+              href={dailyReportHref}
+              target="_blank"
+              rel="noreferrer"
+              className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-[12px] font-semibold text-white hover:opacity-90"
+            >
+              <FileText size={14} /> Xem / Xuất PDF
+            </a>
+          </div>
+        </div>
       </div>
 
       {/* Filter */}
