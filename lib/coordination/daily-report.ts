@@ -14,7 +14,6 @@ export interface DailyPlanReportRow {
   customer: string
   description: string
   quantity: number
-  salesperson: string
   deadline: string
   completionPct: number
   productionPlan: string
@@ -192,6 +191,32 @@ function normKey(product: string | null | undefined, workshop: string | null | u
   return `${product ?? ''}|||${workshopCode(normalizeWorkshop(workshop ?? ''))}`
 }
 
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size))
+  }
+  return chunks
+}
+
+async function fetchProductionOutputs(pcodes: string[]): Promise<ProductionRow[]> {
+  if (pcodes.length === 0) return []
+  const supabase = await createClient()
+  const rows: ProductionRow[] = []
+
+  for (const chunk of chunkArray([...new Set(pcodes)], 200)) {
+    const { data, error } = await supabase
+      .from('Production')
+      .select('pcode,poutput')
+      .in('pcode', chunk) as { data: ProductionRow[] | null; error: { message: string } | null }
+
+    if (error) throw new Error(error.message)
+    rows.push(...(data ?? []))
+  }
+
+  return rows
+}
+
 export async function getDailyPlanReport(date: string): Promise<Array<DailyWorkshopSection<DailyPlanReportRow>>> {
   if (!isValidReportDate(date)) throw new Error('Ngày báo cáo không hợp lệ')
   const supabase = await createClient()
@@ -205,13 +230,8 @@ export async function getDailyPlanReport(date: string): Promise<Array<DailyWorks
   if (!dataRows?.length) return groupDailyRows(emptyRowsMap<DailyPlanReportRow>())
 
   const pcodes = dataRows.map((row) => row.PCODE).filter(Boolean)
-  const { data: productionRows, error: prodError } = await supabase
-    .from('Production')
-    .select('pcode,poutput')
-    .in('pcode', pcodes) as { data: ProductionRow[] | null; error: { message: string } | null }
-
-  if (prodError) throw new Error(prodError.message)
-  const outputByPcode = buildPcodeOutputMap(productionRows ?? [])
+  const productionRows = await fetchProductionOutputs(pcodes)
+  const outputByPcode = buildPcodeOutputMap(productionRows)
   const rowsByWorkshop = emptyRowsMap<DailyPlanReportRow>()
 
   for (const source of dataRows) {
@@ -222,17 +242,18 @@ export async function getDailyPlanReport(date: string): Promise<Array<DailyWorks
     const { remaining, completionPct } = calculateCompletion(quantity, produced)
     if (quantity > 0 && completionPct >= 100) continue
 
+    const plannedQuantity = produced > 0 ? remaining : quantity
+
     rowsByWorkshop.get(workshop)!.push({
       stt: 0,
       pcode: source.PCODE,
       initialDate: formatDate(source.INITIALDATE, 'dd/MM/yyyy'),
       customer: source.CUSTOMER ?? '',
       description: source.DESCRIPTION ?? '',
-      quantity: produced > 0 ? remaining : quantity,
-      salesperson: '',
+      quantity,
       deadline: formatDeadline(source.DEADLINEDATE),
       completionPct,
-      productionPlan: '',
+      productionPlan: plannedQuantity > 0 ? String(plannedQuantity) : '',
     })
   }
 
@@ -260,24 +281,22 @@ export async function getDailyResultReport(date: string): Promise<Array<DailyWor
   const pcodes = [...new Set(productionRows.map((row) => row.pcode).filter(Boolean))] as string[]
   const products = [...new Set(productionRows.map((row) => row.products).filter(Boolean))] as string[]
 
-  const [{ data: dataRows, error: dataError }, { data: allProductionRows, error: allProdError }, { data: normRows, error: normError }] = await Promise.all([
-    supabase.from('data').select('PCODE,CUSTOMER,WORKSHOP,DESCRIPTION,QUANTITY,DEADLINEDATE,STATUS').in('PCODE', pcodes),
-    supabase.from('Production').select('pcode,poutput').in('pcode', pcodes),
-    products.length > 0
-      ? supabase.from('Norm').select('products,norm,workshop').in('products', products)
-      : Promise.resolve({ data: [], error: null }),
-  ]) as [
-    { data: DataRow[] | null; error: { message: string } | null },
-    { data: ProductionRow[] | null; error: { message: string } | null },
-    { data: NormRow[] | null; error: { message: string } | null },
-  ]
+  const { data: dataRows, error: dataError } = await supabase
+    .from('data')
+    .select('PCODE,CUSTOMER,WORKSHOP,DESCRIPTION,QUANTITY,DEADLINEDATE,STATUS')
+    .in('PCODE', pcodes) as { data: DataRow[] | null; error: { message: string } | null }
+
+  const allProductionRows = await fetchProductionOutputs(pcodes)
+
+  const { data: normRows, error: normError } = products.length > 0
+    ? await supabase.from('Norm').select('products,norm,workshop').in('products', products) as { data: NormRow[] | null; error: { message: string } | null }
+    : { data: [], error: null }
 
   if (dataError) throw new Error(dataError.message)
-  if (allProdError) throw new Error(allProdError.message)
   if (normError) throw new Error(normError.message)
 
   const dataByPcode = new Map((dataRows ?? []).map((row) => [row.PCODE, row]))
-  const outputByPcode = buildPcodeOutputMap(allProductionRows ?? [])
+  const outputByPcode = buildPcodeOutputMap(allProductionRows)
   const norms = new Map<string, number>()
   for (const norm of normRows ?? []) {
     norms.set(normKey(norm.products, norm.workshop), norm.norm ?? 0)

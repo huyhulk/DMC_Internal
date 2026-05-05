@@ -32,8 +32,8 @@ describe('coordination daily report helpers', () => {
   it('groups rows and summarizes totals by workshop', () => {
     const rows = new Map<DailyReportWorkshop, DailyPlanReportRow[]>([
       ['DMC1', [
-        { stt: 1, pcode: 'A', initialDate: '', customer: '', description: '', quantity: 10, salesperson: '', deadline: '', completionPct: 0, productionPlan: '' },
-        { stt: 2, pcode: 'B', initialDate: '', customer: '', description: '', quantity: 20, salesperson: '', deadline: '', completionPct: 0, productionPlan: '' },
+        { stt: 1, pcode: 'A', initialDate: '', customer: '', description: '', quantity: 10, deadline: '', completionPct: 0, productionPlan: '' },
+        { stt: 2, pcode: 'B', initialDate: '', customer: '', description: '', quantity: 20, deadline: '', completionPct: 0, productionPlan: '' },
       ]],
       ['DMC3', []],
       ['DMC4', []],

@@ -43,14 +43,13 @@ function PlanReport({ data }: { data: Awaited<ReturnType<typeof getDailyProducti
                 <th>KHÁCH HÀNG</th>
                 <th>DIỄN GIẢI</th>
                 <th>SẢN LƯỢNG</th>
-                <th>NVKD</th>
                 <th>DỰ KIẾN HT</th>
                 <th>% HT</th>
-                <th>KẾ HOẠCH SẢN XUẤT</th>
+                <th>SẢN LƯỢNG KH</th>
               </tr>
             </thead>
             <tbody>
-              {section.rows.length === 0 ? <EmptyRows colSpan={10} /> : section.rows.map((row: DailyPlanReportRow) => (
+              {section.rows.length === 0 ? <EmptyRows colSpan={9} /> : section.rows.map((row: DailyPlanReportRow) => (
                 <tr key={`${section.workshop}-${row.pcode}-${row.stt}`}>
                   <td className="center">{row.stt}</td>
                   <td className="nowrap">{row.pcode}</td>
@@ -58,7 +57,6 @@ function PlanReport({ data }: { data: Awaited<ReturnType<typeof getDailyProducti
                   <td>{row.customer}</td>
                   <td>{row.description}</td>
                   <td className="number">{formatNumber(row.quantity)}</td>
-                  <td>{row.salesperson}</td>
                   <td className="center nowrap">{row.deadline}</td>
                   <td className="number">{formatNumber(row.completionPct)}%</td>
                   <td>{row.productionPlan}</td>
@@ -67,7 +65,7 @@ function PlanReport({ data }: { data: Awaited<ReturnType<typeof getDailyProducti
               <tr className="total-row">
                 <td colSpan={5}>TỔNG CỘNG {section.workshop}</td>
                 <td className="number">{formatNumber(section.summary.totalQuantity)}</td>
-                <td colSpan={4}>Tổng đơn: {section.summary.orderCount}</td>
+                <td colSpan={3}>Tổng đơn: {section.summary.orderCount}</td>
               </tr>
             </tbody>
           </table>
@@ -145,7 +143,7 @@ export default async function DailyReportPage({
   const data = await getDailyProductionReportData(date)
 
   return (
-    <main>
+    <main className="daily-report-page">
       <div className="toolbar no-print">
         <Link href="/dashboard/coordination?sub=reports">← Quay lại Báo cáo thống kê</Link>
         <div className="toolbar-actions">
@@ -159,38 +157,38 @@ export default async function DailyReportPage({
 
       <style>{`
         @page { size: A4 landscape; margin: 10mm; }
-        * { box-sizing: border-box; }
+        .daily-report-page, .daily-report-page * { box-sizing: border-box; }
         body { background: #f8fafc; }
-        main { font-family: "Noto Sans", Roboto, Arial, sans-serif; color: #0f172a; padding: 16px; }
-        .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding: 12px 16px; background: white; border: 1px solid #dbe3ef; border-radius: 14px; }
-        .toolbar a { color: #0f766e; font-weight: 700; text-decoration: none; }
-        .toolbar-actions { display: flex; align-items: center; gap: 12px; color: #475569; font-size: 13px; }
-        button { border: 0; border-radius: 10px; background: #0f766e; color: white; padding: 9px 14px; font-weight: 700; cursor: pointer; }
-        .report-section { background: white; border: 1px solid #dbe3ef; border-radius: 18px; padding: 18px; margin-bottom: 18px; }
-        h1 { text-align: center; font-size: 22px; margin: 0 0 18px; font-weight: 800; letter-spacing: .01em; }
-        h2 { font-size: 15px; margin: 18px 0 8px; padding: 8px 10px; border-left: 5px solid #0f766e; background: #ecfdf5; }
-        table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 8px; }
-        th, td { border: 1px solid #94a3b8; padding: 6px 7px; vertical-align: middle; }
-        th { background: #dbeafe; text-align: center; font-weight: 800; color: #0f172a; }
-        td { line-height: 1.35; }
-        .center { text-align: center; }
-        .number { text-align: right; white-space: nowrap; }
-        .nowrap { white-space: nowrap; }
-        .total-row td { background: #fef3c7; font-weight: 800; }
-        .grand-total { margin-top: 12px; padding: 10px 12px; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 10px; font-weight: 800; text-align: right; }
-        .badge { display: inline-block; min-width: 72px; padding: 3px 7px; border-radius: 999px; font-weight: 800; font-size: 10px; }
-        .badge.pass { background: #dcfce7; color: #166534; }
-        .badge.fail { background: #fee2e2; color: #991b1b; }
+        .daily-report-page { font-family: "Noto Sans", Roboto, Arial, sans-serif; color: #0f172a; padding: 16px; }
+        .daily-report-page .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding: 12px 16px; background: white; border: 1px solid #dbe3ef; border-radius: 14px; }
+        .daily-report-page .toolbar a { color: #0f766e; font-weight: 700; text-decoration: none; }
+        .daily-report-page .toolbar-actions { display: flex; align-items: center; gap: 12px; color: #475569; font-size: 13px; }
+        .daily-report-page button { border: 0; border-radius: 10px; background: #0f766e; color: white; padding: 9px 14px; font-weight: 700; cursor: pointer; }
+        .daily-report-page .report-section { background: white; border: 1px solid #dbe3ef; border-radius: 18px; padding: 18px; margin-bottom: 18px; }
+        .daily-report-page h1 { text-align: center; font-size: 22px; margin: 0 0 18px; font-weight: 800; letter-spacing: .01em; }
+        .daily-report-page h2 { font-size: 15px; margin: 18px 0 8px; padding: 8px 10px; border-left: 5px solid #0f766e; background: #ecfdf5; }
+        .daily-report-page table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 8px; }
+        .daily-report-page th, .daily-report-page td { border: 1px solid #94a3b8; padding: 6px 7px; vertical-align: middle; }
+        .daily-report-page th { background: #dbeafe; text-align: center; font-weight: 800; color: #0f172a; }
+        .daily-report-page td { line-height: 1.35; }
+        .daily-report-page .center { text-align: center; }
+        .daily-report-page .number { text-align: right; white-space: nowrap; }
+        .daily-report-page .nowrap { white-space: nowrap; }
+        .daily-report-page .total-row td { background: #fef3c7; font-weight: 800; }
+        .daily-report-page .grand-total { margin-top: 12px; padding: 10px 12px; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 10px; font-weight: 800; text-align: right; }
+        .daily-report-page .badge { display: inline-block; min-width: 72px; padding: 3px 7px; border-radius: 999px; font-weight: 800; font-size: 10px; }
+        .daily-report-page .badge.pass { background: #dcfce7; color: #166534; }
+        .daily-report-page .badge.fail { background: #fee2e2; color: #991b1b; }
         @media print {
           body { background: white; }
-          main { padding: 0; }
-          .no-print { display: none; }
-          .report-section { border: 0; padding: 0; margin: 0 0 12px; }
-          .page-break { break-before: page; }
-          h1 { font-size: 18px; }
-          h2 { break-after: avoid; }
-          table { break-inside: auto; }
-          tr { break-inside: avoid; break-after: auto; }
+          .daily-report-page { padding: 0; }
+          .daily-report-page .no-print { display: none; }
+          .daily-report-page .report-section { border: 0; padding: 0; margin: 0 0 12px; }
+          .daily-report-page .page-break { break-before: page; }
+          .daily-report-page h1 { font-size: 18px; }
+          .daily-report-page h2 { break-after: avoid; }
+          .daily-report-page table { break-inside: auto; }
+          .daily-report-page tr { break-inside: avoid; break-after: auto; }
         }
       `}</style>
     </main>
