@@ -422,7 +422,12 @@ export interface Database {
       }
     }   // end Tables
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      repair_production_id_sequence: {
+        Args: Record<string, never>
+        Returns: void
+      }
+    }
     Enums: {
       user_role: 'ADMIN' | 'MANAGER' | 'WORKSHOP_MANAGER' | 'TEAM_LEADER' | 'MAINTENANCE' | 'COORDINATION' | 'SALES' | 'HR'
     }

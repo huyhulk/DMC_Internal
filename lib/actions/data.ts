@@ -172,6 +172,11 @@ export async function searchOrderByPcode(
   }
 }
 
+async function repairProductionIdSequence(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { error } = await supabase.rpc('repair_production_id_sequence')
+  if (error) throw new Error(error.message)
+}
+
 export async function recordProductionAction(rows: Array<{
   pdate: string
   totalem: string
@@ -246,7 +251,13 @@ export async function recordProductionAction(rows: Array<{
       return { success: false, message: validationError }
     }
 
-    const { error } = await supabase.from('Production').insert(rows)
+    let { error } = await supabase.from('Production').insert(rows)
+
+    if (error?.code === '23505' && error.message.includes('Production_pkey')) {
+      await repairProductionIdSequence(supabase)
+      const retry = await supabase.from('Production').insert(rows)
+      error = retry.error
+    }
 
     if (error) {
       logger.error({ error: error.message }, 'recordProduction DB error')

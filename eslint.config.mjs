@@ -2,7 +2,7 @@ import coreWebVitals from "eslint-config-next/core-web-vitals";
 
 const config = [
   {
-    ignores: [".next/**", ".next-build-stale-*/**"],
+    ignores: [".next/**", ".next.locked-*/**", ".next-build-stale-*/**"],
   },
   ...coreWebVitals,
   {
