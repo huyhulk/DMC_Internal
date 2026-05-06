@@ -6,6 +6,7 @@ import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import {
   calculateProductionCompletion,
   getProductionRowsValidationError,
+  shouldAutoCloseProductionOrder,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
 import {
@@ -17,7 +18,7 @@ import {
 } from '@/lib/production/status-server'
 import { shouldShowOpenProductionOrder } from '@/lib/production/status'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
-import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode, getLocalDateAfterDays, getTodayLocal } from '@/lib/utils'
+import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode, getTodayLocal } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
@@ -224,6 +225,41 @@ function buildPcodeOutputMap(rows: Array<Pick<ProductionRow, 'pcode' | 'poutput'
   return map
 }
 
+function getLocalMonthStart(dateString: string): string {
+  return `${dateString.slice(0, 7)}-01`
+}
+
+async function autoCloseCompletedProductionOrders(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orders: Array<{ PCODE: string; QUANTITY: number | null }>,
+): Promise<string[]> {
+  const quantityByPcode = new Map(orders.map((row) => [row.PCODE, row.QUANTITY ?? 0]))
+  const pcodes = [...quantityByPcode.keys()].filter(Boolean)
+  if (pcodes.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('Production')
+    .select('pcode,poutput')
+    .in('pcode', pcodes)
+
+  if (error) throw new Error(error.message)
+
+  const outputByPcode = buildPcodeOutputMap((data ?? []) as Array<Pick<ProductionRow, 'pcode' | 'poutput'>>)
+  const completedPcodes = pcodes.filter((pcode) =>
+    shouldAutoCloseProductionOrder(quantityByPcode.get(pcode) ?? 0, outputByPcode.get(pcode) ?? 0)
+  )
+
+  if (completedPcodes.length === 0) return []
+
+  const { error: updateError } = await supabase
+    .from('Production')
+    .update({ save_status: 'closed' })
+    .in('pcode', completedPcodes)
+
+  if (updateError) throw new Error(updateError.message)
+  return completedPcodes
+}
+
 export async function getOpenProductionOrdersAction(): Promise<{ success: boolean; data?: OpenProductionOrdersData; error?: string }> {
   try {
     const supabase = await createClient()
@@ -239,7 +275,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const userWorkspaces = getUserWorkspaces(rawWorkspace ?? '')
 
     const today = getTodayLocal()
-    const fromDate = getLocalDateAfterDays(-2)
+    const fromDate = getLocalMonthStart(today)
 
     const [norms, materials, dataRes] = await Promise.all([
       getCachedNorms(),
@@ -284,17 +320,11 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       quantityByPcode,
     })
     const effectiveOrders = scopedOrders.map((order) => applyEffectiveStatusToOrder(order, statusMap))
-    const openOrders = sortProductionOrdersForEntry(effectiveOrders.filter((order) => shouldShowOpenProductionOrder({
+    const orders = sortProductionOrdersForEntry(effectiveOrders.filter((order) => shouldShowOpenProductionOrder({
       status: order.status,
       closed: closedPcodes.includes(order.pcode),
       completion: order,
-    })))
-    const completedOrders = sortProductionOrdersForEntry(effectiveOrders.filter((order) => !shouldShowOpenProductionOrder({
-      status: order.status,
-      closed: closedPcodes.includes(order.pcode),
-      completion: order,
-    })))
-    const orders = [...openOrders, ...completedOrders] as OpenProductionOrdersData['orders']
+    }))) as OpenProductionOrdersData['orders']
 
     return { success: true, data: { orders, norms, materials, submittedPcodes, closedPcodes } }
   } catch (err) {
@@ -413,6 +443,16 @@ export async function recordProductionAction(rows: Array<{
     }
 
     const statusDataRows = (orderData ?? []) as Array<{ PCODE: string; QUANTITY: number | null; STATUS: string | null; WORKSHOP: string | null }>
+    try {
+      const closedPcodes = await autoCloseCompletedProductionOrders(supabase, statusDataRows)
+      if (closedPcodes.length > 0) {
+        logger.info({ pcodes: closedPcodes, userId: user.id }, 'recordProduction auto-closed completed orders')
+      }
+    } catch (closeError) {
+      logger.error({ err: closeError, pcodes: uniquePcodes, userId: user.id }, 'recordProduction auto-close error')
+      return { success: false, message: `Đã lưu sản xuất nhưng lỗi tự động đóng LSX đã đủ: ${String(closeError)}` }
+    }
+
     try {
       await upsertProductionOrderStatuses({
         supabase,

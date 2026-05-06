@@ -131,9 +131,10 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
         </FieldGroup>
       </div>
 
-      {normHint && line.product && line.realnorm === 0 && (
+      {normHint && line.product && (
         <p className="text-[11px] text-[#6e6e73]">
           Gợi ý: {normHint.nwforce} người · Định mức {normHint.norm} sp/giờ
+          {line.realnorm > 0 ? ` · Thực tế ${line.realnorm} sp/giờ` : ''}
         </p>
       )}
     </div>

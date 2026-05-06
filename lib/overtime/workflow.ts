@@ -1,4 +1,4 @@
-import { getProductionOrderStatusRank } from '@/lib/production/workflow'
+import { normalizeProductionStatus } from '@/lib/production/status'
 
 export type OvertimeOrderSourceRow = {
   pcode: string
@@ -22,6 +22,14 @@ export type OvertimeEmployeeOption = {
   name: string
 }
 
+function getOvertimeOrderStatusRank(status: string): number {
+  const normalized = normalizeProductionStatus(status)
+
+  if (normalized.includes('dang sx') || normalized.includes('dang san xuat')) return 0
+  if (normalized.includes('chua sx') || normalized.includes('chua san xuat') || normalized === '') return 1
+  return 2
+}
+
 export function getIncompleteOvertimeOrderOptions(
   rows: OvertimeOrderSourceRow[],
   workshop?: string,
@@ -31,9 +39,9 @@ export function getIncompleteOvertimeOrderOptions(
     .filter((row) => row.pcode.trim())
     .filter((row) => !workshop || row.workshop === workshop)
     .filter((row) => !initialdate || row.initialdate === initialdate)
-    .filter((row) => getProductionOrderStatusRank(row.status) < 2)
+    .filter((row) => getOvertimeOrderStatusRank(row.status) < 2)
     .sort((a, b) => {
-      const rankDiff = getProductionOrderStatusRank(a.status) - getProductionOrderStatusRank(b.status)
+      const rankDiff = getOvertimeOrderStatusRank(a.status) - getOvertimeOrderStatusRank(b.status)
       if (rankDiff !== 0) return rankDiff
       return a.pcode.localeCompare(b.pcode, 'vi', { numeric: true, sensitivity: 'base' })
     })

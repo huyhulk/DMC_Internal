@@ -83,6 +83,5 @@ export function shouldShowOpenProductionOrder(input: {
   completion: ProductionCompletion
 }): boolean {
   if (input.closed) return false
-  if (isEffectiveClosedProductionStatus(input.status)) return false
   return input.completion.completionPct < 100
 }

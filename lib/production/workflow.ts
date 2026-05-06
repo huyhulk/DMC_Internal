@@ -22,16 +22,22 @@ export interface ProductionCompletion {
 export function getProductionOrderStatusRank(status: string): number {
   const normalized = normalizeProductionStatus(status)
 
-  if (normalized.includes('dang sx') || normalized.includes('dang san xuat')) return 0
-  if (normalized.includes('chua sx') || normalized.includes('chua san xuat') || normalized === '') return 1
+  if (normalized.includes('chua sx') || normalized.includes('chua san xuat') || normalized === '') return 0
   if (
     normalized.includes('da sx') ||
     normalized.includes('da san xuat') ||
     normalized.includes('hoan thanh')
-  ) return 2
-  if (normalized.includes('da giao') || normalized.includes('giao hang')) return 3
+  ) return 1
+  if (normalized.includes('da giao') || normalized.includes('giao hang')) return 2
+  if (normalized.includes('dang sx') || normalized.includes('dang san xuat')) return 3
 
   return 4
+}
+
+export function shouldAutoCloseProductionOrder(quantity: number, produced: number): boolean {
+  if (!Number.isFinite(quantity) || quantity <= 0) return false
+  if (!Number.isFinite(produced)) return false
+  return produced >= quantity
 }
 
 export function calculateProductionCompletion(quantity: number, produced: number): ProductionCompletion {
@@ -52,7 +58,6 @@ export function isOpenProductionOrder(
   closed: boolean,
 ): boolean {
   if (closed) return false
-  if (getProductionOrderStatusRank(order.status) === 3) return false
   const quantity = Number(order.quantity) || 0
   return calculateProductionCompletion(quantity, produced).completionPct < 100
 }

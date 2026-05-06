@@ -4,7 +4,6 @@ import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { getInitData, getOpenProductionOrdersAction, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
 import { getProductionRowsValidationError } from '@/lib/production/workflow'
-import { isEffectiveDeliveredProductionStatus } from '@/lib/production/status'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { InitData, Order, NormItem, ProductionSaveStatus, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
@@ -38,19 +37,14 @@ const INITIAL_LINE: ProductLine = {
 const MAX_LINES = 5
 const INITIAL_LINES = 2
 
-function isDeliveredOrder(order: Pick<Order, 'status'>): boolean {
-  return isEffectiveDeliveredProductionStatus(order.status)
-}
-
 function buildPcodeStatuses(orders: Order[], submittedPcodes: string[], closedPcodes: string[]): Record<string, PcodeStatus> {
   const statuses: Record<string, PcodeStatus> = {}
   orders.forEach((o) => {
     const isSubmitted = submittedPcodes.includes(o.pcode)
     const isClosed = closedPcodes.includes(o.pcode)
-    const isDelivered = isDeliveredOrder(o)
-    const locked = isSubmitted || isClosed || isDelivered
-    const reason = isDelivered ? 'delivered' : isClosed ? 'closed' : isSubmitted ? 'submitted' : ''
-    const key = locked ? `${o.pcode} ${isDelivered ? '🔒📦' : isClosed ? '🔒✅' : '🔒'}` : o.pcode
+    const locked = isSubmitted || isClosed
+    const reason = isClosed ? 'closed' : isSubmitted ? 'submitted' : ''
+    const key = locked ? `${o.pcode} ${isClosed ? '🔒✅' : '🔒'}` : o.pcode
     statuses[key] = { pcode: o.pcode, locked, reason: reason as PcodeStatus['reason'] }
   })
   return statuses
@@ -163,11 +157,6 @@ export function useProductionData(user: SessionUser) {
       const status = state.pcodeStatuses[displayPcode]
       if (!status) return
 
-      if (status.reason === 'delivered') {
-        toast.error('Mã LSX này đã giao hàng. Không thể nhập thêm.')
-        return
-      }
-
       if (status.locked && !state.pcodeUnlocked) {
         toast.warning(status.reason === 'closed' ? 'Mã LSX này đã đóng. Cần mở khóa để nhập lại.' : 'Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
         return
@@ -194,11 +183,6 @@ export function useProductionData(user: SessionUser) {
   const selectOrder = useCallback(
     (order: Order): boolean => {
       if (!state.initData) return false
-
-      if (isDeliveredOrder(order)) {
-        toast.error('Mã LSX này đã giao hàng. Không thể nhập thêm.')
-        return false
-      }
 
       const submitted = state.initData.submittedPcodes.includes(order.pcode)
       const closed = state.initData.closedPcodes.includes(order.pcode)
@@ -243,7 +227,7 @@ export function useProductionData(user: SessionUser) {
       const now = new Date().toTimeString().slice(0, 8)
       const newStatuses: Record<string, PcodeStatus> = {}
       Object.entries(state.pcodeStatuses).forEach(([key, val]) => {
-        newStatuses[key] = { ...val, locked: val.reason === 'delivered' }
+        newStatuses[key] = { ...val, locked: false }
       })
       setState((s) => ({
         ...s,

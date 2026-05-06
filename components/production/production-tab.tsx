@@ -131,8 +131,7 @@ function OpenOrdersTab({ user, canEdit }: Props) {
       : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
     return sortProductionOrdersForEntry(filterProductionOrdersByPcode(byWorkshop, searchQuery)) as OpenProductionOrder[]
   }, [allOrders, searchQuery, workshopFilter])
-  const openOrderCatalog = orderCatalog.filter((order) => getProductionOrderStatusRank(order.status) < 2)
-  const totalRemaining = openOrderCatalog.reduce((sum, order) => sum + order.remainingQuantity, 0)
+  const totalRemaining = orderCatalog.reduce((sum, order) => sum + order.remainingQuantity, 0)
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
@@ -155,8 +154,7 @@ function OpenOrdersTab({ user, canEdit }: Props) {
   function handleOrderSelect(order: Order) {
     const alreadySubmitted = submittedPcodes.includes(order.pcode)
     const alreadyClosed = closedPcodes.includes(order.pcode)
-    const delivered = getProductionOrderStatusRank(order.status) === 3
-    if ((alreadySubmitted || alreadyClosed) && !delivered && !state.pcodeUnlocked) {
+    if ((alreadySubmitted || alreadyClosed) && !state.pcodeUnlocked) {
       setUnlockPcodeOpen(true)
       return
     }
@@ -189,7 +187,7 @@ function OpenOrdersTab({ user, canEdit }: Props) {
     <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
       <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3 bg-white/85 backdrop-blur-sm">
         <SectionLabel>
-          Danh sách lệnh sản xuất 3 ngày gần nhất
+          Danh sách lệnh sản xuất tháng hiện hành
         </SectionLabel>
 
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(150px,190px)_minmax(220px,1fr)_auto] gap-3 lg:items-end">
@@ -228,7 +226,7 @@ function OpenOrdersTab({ user, canEdit }: Props) {
           <div className="grid grid-cols-2 gap-2">
             <div className="h-10 px-3 rounded-xl bg-white border border-[#d2d2d7]/70 flex flex-col justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Số lệnh</span>
-              <span className="text-[13px] font-semibold text-[#1d1d1f]">{openOrderCatalog.length}</span>
+              <span className="text-[13px] font-semibold text-[#1d1d1f]">{orderCatalog.length}</span>
             </div>
             <div className="h-10 px-3 rounded-xl bg-white border border-[#d2d2d7]/70 flex flex-col justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Còn lại mở</span>
@@ -364,8 +362,7 @@ function DailyEntryTab({ user, canEdit }: Props) {
   function handleOrderSelect(order: Order) {
     const alreadySubmitted = submittedPcodes.includes(order.pcode)
     const alreadyClosed = closedPcodes.includes(order.pcode)
-    const delivered = getProductionOrderStatusRank(order.status) === 3
-    if ((alreadySubmitted || alreadyClosed) && !delivered && !state.pcodeUnlocked) {
+    if ((alreadySubmitted || alreadyClosed) && !state.pcodeUnlocked) {
       setUnlockPcodeOpen(true)
       return
     }
@@ -647,9 +644,6 @@ function OrderRow({
   closed: boolean
   onClick: () => void
 }) {
-  const rank = getProductionOrderStatusRank(order.status)
-  const blocked = rank === 3
-
   return (
     <button
       type="button"
@@ -659,7 +653,6 @@ function OrderRow({
         'transition-all duration-150 active:scale-[0.995] focus-visible:outline-none',
         'hover:border-[#34c759]/65 hover:bg-[#f0fff4] hover:shadow-[0_0_0_1px_rgba(52,199,89,0.24),0_10px_28px_rgba(52,199,89,0.16)]',
         'focus-visible:border-[#34c759]/70 focus-visible:ring-2 focus-visible:ring-[#34c759]/30',
-        blocked ? 'opacity-75 hover:opacity-100' : '',
         selected
           ? 'border-[#34c759]/70 bg-[#f0fff4] ring-1 ring-[#34c759]/35'
           : 'border-[#d2d2d7]/60'

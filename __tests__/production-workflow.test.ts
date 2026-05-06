@@ -6,6 +6,7 @@ import {
   getProductionOrderStatusRank,
   isOpenProductionOrder,
   isProductionTimeRangeValid,
+  shouldAutoCloseProductionOrder,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
 
@@ -31,10 +32,10 @@ function order(pcode: string, status: string): Order {
 
 describe('production workflow helpers', () => {
   it('ranks production statuses in data-entry priority order', () => {
-    expect(getProductionOrderStatusRank('Dang san xuat')).toBe(0)
-    expect(getProductionOrderStatusRank('Chua san xuat')).toBe(1)
-    expect(getProductionOrderStatusRank('Da SX')).toBe(2)
-    expect(getProductionOrderStatusRank('Da giao')).toBe(3)
+    expect(getProductionOrderStatusRank('Chua san xuat')).toBe(0)
+    expect(getProductionOrderStatusRank('Da SX')).toBe(1)
+    expect(getProductionOrderStatusRank('Da giao')).toBe(2)
+    expect(getProductionOrderStatusRank('Dang san xuat')).toBe(3)
   })
 
   it('resolves effective production order status without mutating source status', () => {
@@ -66,7 +67,7 @@ describe('production workflow helpers', () => {
       status: 'Đã giao',
       closed: false,
       completion: calculateProductionCompletion(100, 40),
-    })).toBe(false)
+    })).toBe(true)
     expect(shouldShowOpenProductionOrder({
       status: 'Đang SX',
       closed: true,
@@ -83,7 +84,7 @@ describe('production workflow helpers', () => {
       order('LSX-000', 'Dang san xuat'),
     ])
 
-    expect(sorted.map((o) => o.pcode)).toEqual(['LSX-000', 'LSX-001', 'LSX-002', 'LSX-003', 'LSX-004'])
+    expect(sorted.map((o) => o.pcode)).toEqual(['LSX-002', 'LSX-003', 'LSX-004', 'LSX-000', 'LSX-001'])
   })
 
   it('filters order catalog by production code case-insensitively', () => {
@@ -119,7 +120,15 @@ describe('production workflow helpers', () => {
     expect(isOpenProductionOrder({ quantity: '100', status: '' }, 99, false)).toBe(true)
     expect(isOpenProductionOrder({ quantity: '100', status: 'Dang san xuat' }, 100, false)).toBe(false)
     expect(isOpenProductionOrder({ quantity: '100', status: 'Dang san xuat' }, 40, true)).toBe(false)
-    expect(isOpenProductionOrder({ quantity: '100', status: 'Da giao' }, 40, false)).toBe(false)
+    expect(isOpenProductionOrder({ quantity: '100', status: 'Da giao' }, 40, false)).toBe(true)
+  })
+
+  it('detects when completed production orders should be auto-closed', () => {
+    expect(shouldAutoCloseProductionOrder(100, 100)).toBe(true)
+    expect(shouldAutoCloseProductionOrder(100, 125)).toBe(true)
+    expect(shouldAutoCloseProductionOrder(100, 99)).toBe(false)
+    expect(shouldAutoCloseProductionOrder(0, 5)).toBe(false)
+    expect(shouldAutoCloseProductionOrder(Number.NaN, 5)).toBe(false)
   })
 
   it('requires production end time to be later than start time', () => {
