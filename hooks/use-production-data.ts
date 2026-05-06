@@ -157,8 +157,13 @@ export function useProductionData(user: SessionUser) {
       const status = state.pcodeStatuses[displayPcode]
       if (!status) return
 
+      if (status.reason === 'closed') {
+        toast.warning('Mã LSX này đã đóng, không thể nhập thêm.')
+        return
+      }
+
       if (status.locked && !state.pcodeUnlocked) {
-        toast.warning(status.reason === 'closed' ? 'Mã LSX này đã đóng. Cần mở khóa để nhập lại.' : 'Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
+        toast.warning('Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
         return
       }
 
@@ -186,8 +191,13 @@ export function useProductionData(user: SessionUser) {
 
       const submitted = state.initData.submittedPcodes.includes(order.pcode)
       const closed = state.initData.closedPcodes.includes(order.pcode)
-      if ((submitted || closed) && !state.pcodeUnlocked) {
-        toast.warning(closed ? 'Mã LSX này đã đóng. Cần mở khóa để nhập lại.' : 'Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
+      if (closed) {
+        toast.warning('Mã LSX này đã đóng, không thể nhập thêm.')
+        return false
+      }
+
+      if (submitted && !state.pcodeUnlocked) {
+        toast.warning('Mã LSX này đã nhập. Cần mở khóa để nhập lại.')
         return false
       }
 
@@ -227,7 +237,7 @@ export function useProductionData(user: SessionUser) {
       const now = new Date().toTimeString().slice(0, 8)
       const newStatuses: Record<string, PcodeStatus> = {}
       Object.entries(state.pcodeStatuses).forEach(([key, val]) => {
-        newStatuses[key] = { ...val, locked: false }
+        newStatuses[key] = val.reason === 'submitted' ? { ...val, locked: false } : val
       })
       setState((s) => ({
         ...s,
