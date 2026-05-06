@@ -110,6 +110,12 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
             onChange={(e) => onChange('workforce', Number(e.target.value))}
             className={inputCls}
           />
+          {normHint && line.product && (
+            <p className="text-[10px] leading-snug text-[#6e6e73]">
+              Gợi ý: {normHint.nwforce} người · {normHint.norm} sp/giờ
+              {line.realnorm > 0 ? ` · TT ${line.realnorm}` : ''}
+            </p>
+          )}
         </FieldGroup>
 
         <FieldGroup label="Sản lượng">
@@ -130,13 +136,6 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
             className={cn(inputCls, 'text-[#b37700] font-semibold')} />
         </FieldGroup>
       </div>
-
-      {normHint && line.product && (
-        <p className="text-[11px] text-[#6e6e73]">
-          Gợi ý: {normHint.nwforce} người · Định mức {normHint.norm} sp/giờ
-          {line.realnorm > 0 ? ` · Thực tế ${line.realnorm} sp/giờ` : ''}
-        </p>
-      )}
     </div>
   )
 }
