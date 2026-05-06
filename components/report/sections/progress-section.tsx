@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 import type { OrderStatus, OrderStatusCode, ProgressSummary, ReportMode, WorkshopCode } from '@/lib/reports/report-types'
 import { WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/lib/reports/report-types'
 import { cn } from '@/lib/utils'
@@ -164,7 +164,9 @@ export function ProgressComparison({ summaries }: { summaries: ProgressSummary[]
           <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fontWeight: 600 }} />
           <Tooltip formatter={(v: number, name: string) => [`${v}%`, name]} />
           <Bar dataKey="HT đúng (%)" stackId="progress" fill="#34c759" radius={[4, 0, 0, 4]} />
-          <Bar dataKey="HT trễ (%)" stackId="progress" fill="#ff9500" radius={[0, 4, 4, 0]} label={{ position: 'right', formatter: (_v: number, entry: { progressPct?: number }) => `${entry.progressPct ?? 0}%`, fontSize: 11 }} />
+          <Bar dataKey="HT trễ (%)" stackId="progress" fill="#ff9500" radius={[0, 4, 4, 0]}>
+            <LabelList dataKey="progressPct" position="right" formatter={(v: number) => `${v}%`} fontSize={11} />
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
 
