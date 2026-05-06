@@ -27,25 +27,31 @@ export function getLocalDateTimeInputValue(date = new Date()): string {
   return format(date, "yyyy-MM-dd'T'HH:mm")
 }
 
-const LOCAL_TIMESTAMP_FORMATS = ["yyyy-MM-dd'T'HH:mm:ss", 'yyyy-MM-dd HH:mm:ss', "yyyy-MM-dd'T'HH:mm", 'yyyy-MM-dd HH:mm']
+const LOCAL_TIMESTAMP_FORMATS = [
+  "yyyy-MM-dd'T'HH:mm:ss",
+  'yyyy-MM-dd HH:mm:ss',
+  "yyyy-MM-dd'T'HH:mm",
+  'yyyy-MM-dd HH:mm',
+  'dd/MM/yyyy HH:mm:ss',
+  'dd/MM/yyyy HH:mm',
+  'dd-MM-yyyy HH:mm:ss',
+  'dd-MM-yyyy HH:mm',
+]
+const LOCAL_DATE_FORMATS = ['yyyy-MM-dd', 'dd/MM/yyyy', 'dd-MM-yyyy']
 
 export function parseLocalDateTimeString(value: string): Date | null {
   const normalized = value.trim()
   if (!normalized) return null
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    const parsed = parse(normalized, 'yyyy-MM-dd', new Date())
-    return isValid(parsed) ? parsed : null
+  const withoutFraction = normalized.replace(/(\.\d{1,6})$/, '')
+  for (const pattern of LOCAL_DATE_FORMATS) {
+    const parsed = parse(withoutFraction, pattern, new Date())
+    if (isValid(parsed) && format(parsed, pattern) === withoutFraction) return parsed
   }
 
-  const isLocalTimestamp = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?$/.test(normalized)
-  if (isLocalTimestamp) {
-    const withoutFraction = normalized.replace(/(\.\d{1,6})$/, '')
-    for (const pattern of LOCAL_TIMESTAMP_FORMATS) {
-      const parsed = parse(withoutFraction, pattern, new Date())
-      if (isValid(parsed)) return parsed
-    }
-    return null
+  for (const pattern of LOCAL_TIMESTAMP_FORMATS) {
+    const parsed = parse(withoutFraction, pattern, new Date())
+    if (isValid(parsed) && format(parsed, pattern) === withoutFraction) return parsed
   }
 
   const parsed = new Date(normalized)
@@ -61,9 +67,39 @@ export function formatLocalDateTimeString(value: string | null, fmt = 'dd/MM/yyy
 export function normalizeLocalDateTimeString(value: string | null | undefined): string {
   if (!value) return ''
   const normalized = value.trim().replace(' ', 'T')
-  const match = normalized.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?/)
-  if (!match) return ''
-  return `${match[1]}T${match[2]}:${match[3] ?? '00'}`
+  const isoMatch = normalized.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?/)
+  if (isoMatch) return `${isoMatch[1]}T${isoMatch[2]}:${isoMatch[3] ?? '00'}`
+
+  const displayMatch = value.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
+  if (!displayMatch) return ''
+
+  const day = Number(displayMatch[1])
+  const month = Number(displayMatch[2])
+  const year = Number(displayMatch[3])
+  const hour = displayMatch[4] ? Number(displayMatch[4]) : 0
+  const minute = displayMatch[5] ? Number(displayMatch[5]) : 0
+  const second = displayMatch[6] ? Number(displayMatch[6]) : 0
+  const hasTime = Boolean(displayMatch[4])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return ''
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return ''
+
+  const parsed = parse(
+    `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`,
+    'dd/MM/yyyy',
+    new Date()
+  )
+  if (!isValid(parsed)) return ''
+
+  return hasTime
+    ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
+    : format(parsed, "yyyy-MM-dd'T'00:00:00")
+}
+
+export function compareLocalDateTimeStrings(left: string | null | undefined, right: string | null | undefined): number | null {
+  const normalizedLeft = normalizeLocalDateTimeString(left)
+  const normalizedRight = normalizeLocalDateTimeString(right)
+  if (!normalizedLeft || !normalizedRight) return null
+  return normalizedLeft.localeCompare(normalizedRight)
 }
 
 /**

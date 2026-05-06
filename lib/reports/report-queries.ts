@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { workshopToDataFilters, workshopCode, normalizeWorkshop, parseLocalDateTimeString } from '@/lib/utils'
+import { workshopToDataFilters, workshopCode, normalizeWorkshop, normalizeLocalDateTimeString, compareLocalDateTimeStrings } from '@/lib/utils'
 import {
   calcA, calcP, calcQ, calcOEE, weightedAvg, durationHours,
 } from './oee-calculator'
@@ -12,6 +12,21 @@ import { WORKSHOP_CODES, SHIFT_LABELS } from './report-types'
 import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
 import { isEffectiveCompletedProductionStatus } from '@/lib/production/status'
 import { calculateProductionCompletion, calculateProductionCompletionTime } from '@/lib/production/workflow'
+
+function toVietnamLocalDateTimeString(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(date)
+  const getPart = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '00'
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')}T${getPart('hour')}:${getPart('minute')}:${getPart('second')}`
+}
 
 // Hour-aware period key: combines pdate + starttime HH when groupBy='hour'
 function getPeriodKey(r: ProdRow, groupBy: GroupBy): string {
@@ -152,7 +167,9 @@ export async function queryProgress(
   filterBy: FilterBy = 'deadline',
 ): Promise<{ orders?: OrderStatus[]; summary?: ProgressSummary; summaries?: ProgressSummary[] }> {
   const supabase = await createClient()
-  const now = new Date()
+  const nowDate = new Date()
+  const now = toVietnamLocalDateTimeString(nowDate)
+  const dueSoonCutoff = toVietnamLocalDateTimeString(new Date(nowDate.getTime() + 86_400_000))
 
   type DataSelect = {
     PCODE: string; WORKSHOP: string | null; DESCRIPTION: string | null
@@ -260,15 +277,15 @@ export async function queryProgress(
     const isCompleted = isEffectiveCompletedProductionStatus(effectiveOrder.status)
     const completionPct = completion.completionPct
     const completionAt = calculateProductionCompletionTime(qty, productionRowsByPcode.get(r.PCODE) ?? [])
-    const completionDate = completionAt ? parseLocalDateTimeString(completionAt) : null
-    const dl = r.DEADLINEDATE ? parseLocalDateTimeString(r.DEADLINEDATE) : null
+    const deadlineLocal = normalizeLocalDateTimeString(r.DEADLINEDATE)
+    const completionDeadlineComparison = compareLocalDateTimeStrings(completionAt, r.DEADLINEDATE)
 
     let status: OrderStatus['status'] = 'in_progress'
     if (isCompleted) {
-      status = completionDate && dl && completionDate > dl ? 'completed_late' : 'completed'
-    } else if (dl) {
-      if (dl < now) status = 'overdue'
-      else if (dl.getTime() - now.getTime() < 86_400_000) status = 'due_soon'
+      status = completionDeadlineComparison !== null && completionDeadlineComparison > 0 ? 'completed_late' : 'completed'
+    } else if (deadlineLocal) {
+      if (deadlineLocal < now) status = 'overdue'
+      else if (deadlineLocal < dueSoonCutoff) status = 'due_soon'
     }
 
     const dlStr = r.DEADLINEDATE ?? ''

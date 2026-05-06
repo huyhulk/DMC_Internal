@@ -1,4 +1,5 @@
 import type { Order } from '@/types'
+import { compareLocalDateTimeStrings, normalizeLocalDateTimeString } from '@/lib/utils'
 import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
@@ -95,6 +96,22 @@ describe('production workflow helpers', () => {
     ], 'abc')
 
     expect(filtered.map((o) => o.pcode)).toEqual(['DMC-ABC-001'])
+  })
+
+  it('normalizes local deadline strings without timezone conversion', () => {
+    expect(normalizeLocalDateTimeString('2026-05-06T15:00:00')).toBe('2026-05-06T15:00:00')
+    expect(normalizeLocalDateTimeString('2026-05-06 15:00:00')).toBe('2026-05-06T15:00:00')
+    expect(normalizeLocalDateTimeString('06/05/2026 15:00')).toBe('2026-05-06T15:00:00')
+    expect(normalizeLocalDateTimeString('06/05/2026 15:00:00')).toBe('2026-05-06T15:00:00')
+  })
+
+  it('compares equal production completion and deadline as on time', () => {
+    expect(compareLocalDateTimeStrings('2026-05-06T15:00:00', '2026-05-06T15:00:00')).toBe(0)
+    expect(compareLocalDateTimeStrings('2026-05-06T15:00:00', '06/05/2026 15:00')).toBe(0)
+  })
+
+  it('detects production completion after local deadline as late', () => {
+    expect(compareLocalDateTimeStrings('2026-05-06T15:01:00', '2026-05-06T15:00:00')).toBeGreaterThan(0)
   })
 
   it('calculates cumulative production completion', () => {
