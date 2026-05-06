@@ -15,7 +15,11 @@ export async function GET(req: NextRequest) {
   try {
     await ensureDefaultHRDailyRows(date, user)
     const data = await getHRData(date, user)
-    return NextResponse.json(data)
+    return NextResponse.json({
+      success: true,
+      employees: data.employees,
+      dailyData: data.dailyData,
+    })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
