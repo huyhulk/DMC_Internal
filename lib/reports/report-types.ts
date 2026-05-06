@@ -71,7 +71,7 @@ export interface OEEWorkshop extends OEEMetrics {
 }
 
 // Progress
-export type OrderStatusCode = 'completed' | 'in_progress' | 'overdue' | 'due_soon'
+export type OrderStatusCode = 'completed' | 'completed_late' | 'in_progress' | 'overdue' | 'due_soon'
 
 export interface OrderStatus {
   pcode:         string
@@ -88,15 +88,18 @@ export interface OrderStatus {
   totalOutput:   number
   periodOutput:  number
   completionPct: number
+  completionAt?: string
 }
 
 export interface ProgressSummary {
-  workshop:    WorkshopCode
-  total:       number
-  completed:   number
-  overdue:     number
-  dueSoon:     number
-  progressPct: number
+  workshop:        WorkshopCode
+  total:           number
+  completed:       number
+  completedOnTime: number
+  completedLate:   number
+  overdue:         number
+  dueSoon:         number
+  progressPct:     number
 }
 
 // Output / Quality

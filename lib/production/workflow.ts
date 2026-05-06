@@ -19,6 +19,12 @@ export interface ProductionCompletion {
   completionPct: number
 }
 
+export interface ProductionCompletionTimeRow {
+  pdate: string | null
+  endtime: string | null
+  poutput: number | null
+}
+
 export function getProductionOrderStatusRank(status: string): number {
   const normalized = normalizeProductionStatus(status)
 
@@ -50,6 +56,44 @@ export function calculateProductionCompletion(quantity: number, produced: number
       ? Math.min(100, Math.round((producedQuantity / safeQuantity) * 1000) / 10)
       : producedQuantity > 0 ? 100 : 0,
   }
+}
+
+function buildProductionTimestamp(pdate: string | null, endtime: string | null): string | null {
+  if (!pdate || !endtime) return null
+
+  const date = pdate.trim()
+  const time = endtime.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+
+  const match = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (!match) return null
+
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+
+  return `${date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`
+}
+
+export function calculateProductionCompletionTime(quantity: number, rows: ProductionCompletionTimeRow[]): string | null {
+  if (!Number.isFinite(quantity) || quantity <= 0) return null
+
+  const timedRows = rows
+    .map((row) => ({
+      timestamp: buildProductionTimestamp(row.pdate, row.endtime),
+      output: row.poutput ?? 0,
+    }))
+    .filter((row): row is { timestamp: string; output: number } => row.timestamp !== null && Number.isFinite(row.output) && row.output > 0)
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+
+  let produced = 0
+  for (const row of timedRows) {
+    produced += row.output
+    if (produced >= quantity) return row.timestamp
+  }
+
+  return null
 }
 
 export function isOpenProductionOrder(

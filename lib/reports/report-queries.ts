@@ -11,7 +11,7 @@ import type {
 import { WORKSHOP_CODES, SHIFT_LABELS } from './report-types'
 import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
 import { isEffectiveCompletedProductionStatus } from '@/lib/production/status'
-import { calculateProductionCompletion } from '@/lib/production/workflow'
+import { calculateProductionCompletion, calculateProductionCompletionTime } from '@/lib/production/workflow'
 
 // Hour-aware period key: combines pdate + starttime HH when groupBy='hour'
 function getPeriodKey(r: ProdRow, groupBy: GroupBy): string {
@@ -160,20 +160,39 @@ export async function queryProgress(
     DEADLINEDATE: string | null; STATUS: string | null
   }
 
+  const emptySummary = (workshop: WorkshopCode): ProgressSummary => ({
+    workshop,
+    total: 0,
+    completed: 0,
+    completedOnTime: 0,
+    completedLate: 0,
+    overdue: 0,
+    dueSoon: 0,
+    progressPct: 0,
+  })
+
   const emptyResult = () => workshopId
-    ? { orders: [], summary: { workshop: workshopId, total: 0, completed: 0, overdue: 0, dueSoon: 0, progressPct: 0 } }
-    : { summaries: WORKSHOP_CODES.map((ws) => ({ workshop: ws, total: 0, completed: 0, overdue: 0, dueSoon: 0, progressPct: 0 })) }
+    ? { orders: [], summary: emptySummary(workshopId) }
+    : { summaries: WORKSHOP_CODES.map(emptySummary) }
 
   let dataQuery: any = supabase
     .from('data')
     .select('PCODE,WORKSHOP,DESCRIPTION,CUSTOMER,QUANTITY,INITIALDATE,DEADLINEDATE,STATUS')
 
-  let periodProductionRows: Array<{ pcode: string | null; poutput: number | null }> | null = null
+  type ProgressProductionRow = {
+    pcode: string | null
+    poutput: number | null
+    pdate: string | null
+    endtime: string | null
+    save_status?: 'draft' | 'closed' | null
+  }
+
+  let periodProductionRows: ProgressProductionRow[] | null = null
 
   if (filterBy === 'completed_date') {
     const { data: prodRows } = await supabase
-      .from('Production').select('pcode,poutput')
-      .gte('pdate', from).lte('pdate', to) as { data: Array<{ pcode: string | null; poutput: number | null }> | null }
+      .from('Production').select('pcode,poutput,pdate,endtime')
+      .gte('pdate', from).lte('pdate', to) as { data: ProgressProductionRow[] | null }
     periodProductionRows = prodRows ?? []
     const activePcodes = [...new Set(periodProductionRows.map((r) => r.pcode).filter(Boolean))] as string[]
     if (activePcodes.length === 0) return emptyResult()
@@ -197,10 +216,17 @@ export async function queryProgress(
   const allPcodes = dataRows.map((r) => r.PCODE).filter(Boolean)
   const { data: prodRows } = await supabase
     .from('Production')
-    .select('pcode,poutput,save_status')
-    .in('pcode', allPcodes) as { data: Array<{ pcode: string | null; poutput: number | null; save_status: 'draft' | 'closed' | null }> | null }
+    .select('pcode,poutput,pdate,endtime,save_status')
+    .in('pcode', allPcodes) as { data: ProgressProductionRow[] | null }
 
   const pcodeSumMap = buildPcodeOutputMap(prodRows ?? [])
+  const productionRowsByPcode = new Map<string, ProgressProductionRow[]>()
+  for (const row of prodRows ?? []) {
+    if (!row.pcode) continue
+    const list = productionRowsByPcode.get(row.pcode) ?? []
+    list.push(row)
+    productionRowsByPcode.set(row.pcode, list)
+  }
   const periodOutputMap = periodProductionRows
     ? buildPcodeOutputMap(periodProductionRows)
     : pcodeSumMap
@@ -233,10 +259,14 @@ export async function queryProgress(
     }, statusMap)
     const isCompleted = isEffectiveCompletedProductionStatus(effectiveOrder.status)
     const completionPct = completion.completionPct
+    const completionAt = calculateProductionCompletionTime(qty, productionRowsByPcode.get(r.PCODE) ?? [])
+    const completionDate = completionAt ? parseLocalDateTimeString(completionAt) : null
     const dl = r.DEADLINEDATE ? parseLocalDateTimeString(r.DEADLINEDATE) : null
 
-    let status: OrderStatus['status'] = isCompleted ? 'completed' : 'in_progress'
-    if (!isCompleted && dl) {
+    let status: OrderStatus['status'] = 'in_progress'
+    if (isCompleted) {
+      status = completionDate && dl && completionDate > dl ? 'completed_late' : 'completed'
+    } else if (dl) {
       if (dl < now) status = 'overdue'
       else if (dl.getTime() - now.getTime() < 86_400_000) status = 'due_soon'
     }
@@ -257,15 +287,18 @@ export async function queryProgress(
       totalOutput,
       periodOutput,
       completionPct,
+      completionAt: completionAt ?? undefined,
     })
   }
 
   const makeSummary = (ws: WorkshopCode, list: OrderStatus[]): ProgressSummary => {
-    const total     = list.length
-    const completed = list.filter((o) => o.status === 'completed').length
-    const overdue   = list.filter((o) => o.status === 'overdue').length
-    const dueSoon   = list.filter((o) => o.status === 'due_soon').length
-    return { workshop: ws, total, completed, overdue, dueSoon, progressPct: total > 0 ? (completed / total) * 100 : 0 }
+    const total           = list.length
+    const completedOnTime = list.filter((o) => o.status === 'completed').length
+    const completedLate   = list.filter((o) => o.status === 'completed_late').length
+    const completed       = completedOnTime + completedLate
+    const overdue         = list.filter((o) => o.status === 'overdue').length
+    const dueSoon         = list.filter((o) => o.status === 'due_soon').length
+    return { workshop: ws, total, completed, completedOnTime, completedLate, overdue, dueSoon, progressPct: total > 0 ? (completed / total) * 100 : 0 }
   }
 
   if (workshopId) {

@@ -1,6 +1,7 @@
 import type { Order } from '@/types'
 import {
   calculateProductionCompletion,
+  calculateProductionCompletionTime,
   filterProductionOrdersByPcode,
   getProductionRowsValidationError,
   getProductionOrderStatusRank,
@@ -112,6 +113,37 @@ describe('production workflow helpers', () => {
       remainingQuantity: 0,
       completionPct: 100,
     })
+  })
+
+  it('calculates completion time from production date and end time', () => {
+    expect(calculateProductionCompletionTime(100, [
+      { pdate: '2026-05-06', endtime: '10:00', poutput: 40 },
+      { pdate: '2026-05-06', endtime: '15:00', poutput: 60 },
+      { pdate: '2026-05-06', endtime: '16:00', poutput: 20 },
+    ])).toBe('2026-05-06T15:00:00')
+  })
+
+  it('sorts production rows by actual production timestamp before calculating completion time', () => {
+    expect(calculateProductionCompletionTime(100, [
+      { pdate: '2026-05-06', endtime: '15:00', poutput: 60 },
+      { pdate: '2026-05-06', endtime: '10:00', poutput: 40 },
+      { pdate: '2026-05-05', endtime: '16:30', poutput: 30 },
+    ])).toBe('2026-05-06T15:00:00')
+  })
+
+  it('ignores production rows without a valid production end timestamp', () => {
+    expect(calculateProductionCompletionTime(100, [
+      { pdate: '2026-05-06', endtime: null, poutput: 70 },
+      { pdate: '2026-05-06', endtime: '15:00', poutput: 60 },
+      { pdate: '2026-05-06', endtime: '16:00', poutput: 40 },
+    ])).toBe('2026-05-06T16:00:00')
+  })
+
+  it('returns null when timed production output has not reached quantity', () => {
+    expect(calculateProductionCompletionTime(100, [
+      { pdate: '2026-05-06', endtime: '10:00', poutput: 40 },
+      { pdate: '2026-05-06', endtime: '15:00', poutput: 59 },
+    ])).toBeNull()
   })
 
   it('detects open production orders for the default list', () => {

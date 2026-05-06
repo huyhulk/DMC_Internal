@@ -119,9 +119,10 @@ export async function getInitData(
 
     const quantityByPcode = new Map(orders.map((order) => [order.pcode, Number(order.quantity) || 0]))
     const prodRows = (productionRes.data ?? []) as ProductionSourceRow[]
+    const cumulativeRows = (cumulativeProductionRows ?? []) as ProductionSourceRow[]
     const statusMap = buildProductionStatusMapFromRows({
       pcodes: orderPcodes,
-      productionRows: (cumulativeProductionRows ?? []) as ProductionSourceRow[],
+      productionRows: cumulativeRows,
       quantityByPcode,
     })
     const effectiveOrders = applyEffectiveStatusToOrders(orders, statusMap)
@@ -131,7 +132,7 @@ export async function getInitData(
     ]
     const closedPcodes = [
       ...new Set(
-        prodRows
+        cumulativeRows
           .filter((p) => p.save_status === 'closed')
           .map((p) => p.pcode)
           .filter(Boolean) as string[]
