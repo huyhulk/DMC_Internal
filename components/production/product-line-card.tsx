@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { cn, formatDate, getTodayLocal } from '@/lib/utils'
+import { cn, formatDate, getTodayLocal, parseDisplayDate } from '@/lib/utils'
 import type { NormItem, ProductLine } from '@/types'
 
 interface Props {
@@ -58,13 +58,12 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
         </FieldGroup>
 
         <FieldGroup label="Ngày sản xuất">
-          <input
-            type="date"
+          <DisplayDateInput
             value={line.pdate || getTodayLocal()}
-            onChange={(e) => onChange('pdate', e.target.value)}
+            onChange={(value) => onChange('pdate', value)}
+            disabled={disabled}
             className={inputCls}
           />
-          <DateHint value={line.pdate || getTodayLocal()} />
         </FieldGroup>
       </div>
 
@@ -152,8 +151,44 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
   )
 }
 
-function DateHint({ value }: { value: string }) {
-  return <p className="text-[10px] leading-snug text-[#6e6e73]">Hiển thị: {formatDate(value)}</p>
+function DisplayDateInput({
+  value,
+  onChange,
+  disabled,
+  className,
+}: {
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+  className?: string
+}) {
+  const [displayValue, setDisplayValue] = useState(formatDate(value))
+
+  useEffect(() => {
+    setDisplayValue(formatDate(value))
+  }, [value])
+
+  function commit(nextDisplayValue: string) {
+    const parsed = parseDisplayDate(nextDisplayValue)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(parsed)) onChange(parsed)
+    else setDisplayValue(formatDate(value))
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={displayValue}
+      placeholder="dd/MM/yyyy"
+      disabled={disabled}
+      onChange={(e) => setDisplayValue(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+      }}
+      className={className}
+    />
+  )
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
