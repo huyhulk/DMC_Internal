@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 import type { OrderStatus, OrderStatusCode, ProgressSummary, ReportMode, WorkshopCode } from '@/lib/reports/report-types'
 import { WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/lib/reports/report-types'
-import { cn } from '@/lib/utils'
+import { cn, apiDateToDisplay, formatDateTimeDisplay } from '@/lib/utils'
 
 const STATUS_COLOR: Record<OrderStatus['status'], string> = {
   completed:      'bg-[#34c759]/15 text-[#2f9e44] border-[#2f9e44]/20',
@@ -112,9 +112,9 @@ export function ProgressDetail({ orders, summary }: {
                 <td className="px-3 py-2 font-mono font-semibold text-[#3b5bdb]">{o.pcode}</td>
                 <td className="px-3 py-2 max-w-[200px] truncate">{o.description}</td>
                 <td className="px-3 py-2 text-[#6e6e73]">{o.customer}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{o.initialdate}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{apiDateToDisplay(o.initialdate)}</td>
                 <td className="px-3 py-2 whitespace-nowrap">
-                  {o.deadlinedate}{o.deadlinetime ? ` ${o.deadlinetime}` : ''}
+                  {formatDateTimeDisplay(o.deadlinedate, o.deadlinetime) || '—'}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   <div className="flex items-center gap-2">

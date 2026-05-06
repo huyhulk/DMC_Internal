@@ -26,7 +26,7 @@ import {
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
-import { cn, getTodayLocal, workshopCode } from '@/lib/utils'
+import { cn, formatDate, formatLocalDateTimeString, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
 
 interface Props {
@@ -441,6 +441,7 @@ function DailyEntryTab({ user, canEdit }: Props) {
               onChange={(e) => loadData(e.target.value)}
               className={inputCls}
             />
+            <DateHint value={state.selectedDate} />
           </FieldGroup>
 
           <FieldGroup label="Xưởng">
@@ -919,9 +920,11 @@ function ProductionInputHistoryTab({ onBack }: { onBack: () => void }) {
         <div className="grid grid-cols-1 sm:grid-cols-[150px_150px_minmax(220px,1fr)_auto_auto] gap-2">
           <FieldGroup label="Từ ngày">
             <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputCls} />
+            <DateHint value={fromDate} />
           </FieldGroup>
           <FieldGroup label="Đến ngày">
             <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={inputCls} />
+            <DateHint value={toDate} />
           </FieldGroup>
           <FieldGroup label="Tìm kiếm">
             <input
@@ -1023,7 +1026,7 @@ function HistoryDetailModal({ row, onClose }: { row: ProductionInputHistoryRow; 
           <Row label="Đơn vị nhập" value={row.workshop || '—'} />
           <Row label="Khách hàng" value={row.customer || '—'} />
           <Row label="Sản phẩm" value={row.product || '—'} />
-          <Row label="Ngày sản xuất" value={row.pdate || '—'} />
+          <Row label="Ngày sản xuất" value={formatDate(row.pdate) || '—'} />
           <Row label="Giờ bắt đầu" value={row.starttime || '—'} />
           <Row label="Giờ kết thúc" value={row.endtime || '—'} />
           <Row label="SL nhập" value={String(row.poutput)} />
@@ -1062,7 +1065,7 @@ function formatSaveStatus(status: 'draft' | 'closed'): string {
 
 function formatDateTime(value: string): string {
   if (!value) return '—'
-  return new Date(value).toLocaleString('vi-VN', { hour12: false })
+  return formatLocalDateTimeString(value, 'HH:mm dd/MM/yyyy') || '—'
 }
 
 function SectionLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
@@ -1095,6 +1098,10 @@ function FieldGroup({
       {children}
     </div>
   )
+}
+
+function DateHint({ value }: { value: string }) {
+  return <p className="text-[10px] leading-snug text-[#6e6e73]">Hiển thị: {formatDate(value)}</p>
 }
 
 function LockChip({ locked, onClick }: { locked: boolean; onClick?: () => void }) {

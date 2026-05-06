@@ -1,6 +1,6 @@
 'use client'
 
-import { cn, apiDateToDisplay } from '@/lib/utils'
+import { cn, formatDateTimeDisplay } from '@/lib/utils'
 import { Calendar, Building2, Package, Clock, Tag } from 'lucide-react'
 import type { Order } from '@/types'
 
@@ -21,10 +21,7 @@ const STATUS_STYLE: Record<string, string> = {
 export function OrderInfoCard({ order, className }: Props) {
   if (!order) return null
 
-  const deadlineDisplay = [
-    order.deadlinedate ? apiDateToDisplay(order.deadlinedate) : '',
-    order.deadlinetime,
-  ].filter(Boolean).join(' ')
+  const deadlineDisplay = formatDateTimeDisplay(order.deadlinedate, order.deadlinetime)
 
   const statusKey = order.status?.toLowerCase() ?? ''
   const statusStyle = STATUS_STYLE[statusKey] ??
@@ -52,7 +49,7 @@ export function OrderInfoCard({ order, className }: Props) {
 
         <InfoItem
           icon={<Calendar size={12} />}
-          label="Deadline"
+          label="Deadline (giờ/ngày)"
           value={deadlineDisplay}
         />
 
