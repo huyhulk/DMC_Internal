@@ -10,7 +10,7 @@ import type {
 } from './report-types'
 import { WORKSHOP_CODES, SHIFT_LABELS } from './report-types'
 import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
-import { isEffectiveCompletedProductionStatus } from '@/lib/production/status'
+import { isEffectiveClosedProductionStatus } from '@/lib/production/status'
 import { calculateProductionCompletion, calculateProductionCompletionTime } from '@/lib/production/workflow'
 
 function toVietnamLocalDateTimeString(date: Date): string {
@@ -274,7 +274,7 @@ export async function queryProgress(
       deadlinedate: r.DEADLINEDATE ?? '',
       status: r.STATUS ?? '',
     }, statusMap)
-    const isCompleted = isEffectiveCompletedProductionStatus(effectiveOrder.status)
+    const isCompleted = completion.completionPct >= 100 || isEffectiveClosedProductionStatus(effectiveOrder.status)
     const completionPct = completion.completionPct
     const completionAt = calculateProductionCompletionTime(qty, productionRowsByPcode.get(r.PCODE) ?? [])
     const deadlineLocal = normalizeLocalDateTimeString(r.DEADLINEDATE)

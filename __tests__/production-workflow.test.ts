@@ -13,6 +13,8 @@ import {
 } from '@/lib/production/workflow'
 
 import {
+  isEffectiveClosedProductionStatus,
+  isEffectiveCompletedProductionStatus,
   resolveProductionOrderStatus,
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
@@ -38,6 +40,12 @@ describe('production workflow helpers', () => {
     expect(getProductionOrderStatusRank('Da SX')).toBe(1)
     expect(getProductionOrderStatusRank('Da giao')).toBe(2)
     expect(getProductionOrderStatusRank('Dang san xuat')).toBe(3)
+  })
+
+  it('treats delivered source status as closed but not completed production status', () => {
+    expect(isEffectiveCompletedProductionStatus('Đã giao')).toBe(false)
+    expect(isEffectiveClosedProductionStatus('Đã giao')).toBe(true)
+    expect(isEffectiveClosedProductionStatus('Đã SX')).toBe(true)
   })
 
   it('resolves effective production order status without mutating source status', () => {
