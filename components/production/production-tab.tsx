@@ -154,7 +154,12 @@ function OpenOrdersTab({ user, canEdit }: Props) {
   function handleOrderSelect(order: Order) {
     const alreadySubmitted = submittedPcodes.includes(order.pcode)
     const alreadyClosed = closedPcodes.includes(order.pcode)
-    if ((alreadySubmitted || alreadyClosed) && !state.pcodeUnlocked) {
+    if (alreadyClosed) {
+      toast.warning('Mã LSX này đã đóng, không thể nhập thêm.')
+      return
+    }
+
+    if (alreadySubmitted && !state.pcodeUnlocked) {
       setUnlockPcodeOpen(true)
       return
     }
@@ -362,7 +367,12 @@ function DailyEntryTab({ user, canEdit }: Props) {
   function handleOrderSelect(order: Order) {
     const alreadySubmitted = submittedPcodes.includes(order.pcode)
     const alreadyClosed = closedPcodes.includes(order.pcode)
-    if ((alreadySubmitted || alreadyClosed) && !state.pcodeUnlocked) {
+    if (alreadyClosed) {
+      toast.warning('Mã LSX này đã đóng, không thể nhập thêm.')
+      return
+    }
+
+    if (alreadySubmitted && !state.pcodeUnlocked) {
       setUnlockPcodeOpen(true)
       return
     }

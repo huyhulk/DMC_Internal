@@ -130,14 +130,7 @@ export async function getInitData(
     const submittedPcodes = [
       ...new Set(prodRows.map((p) => p.pcode).filter(Boolean) as string[]),
     ]
-    const closedPcodes = [
-      ...new Set(
-        cumulativeRows
-          .filter((p) => p.save_status === 'closed')
-          .map((p) => p.pcode)
-          .filter(Boolean) as string[]
-      ),
-    ]
+    const closedPcodes = getClosedPcodesFromProduction(cumulativeRows, quantityByPcode)
 
     logger.info(
       {
@@ -226,6 +219,31 @@ function buildPcodeOutputMap(rows: Array<Pick<ProductionRow, 'pcode' | 'poutput'
   return map
 }
 
+function getClosedPcodesFromProduction(
+  rows: Array<{ pcode: string | null; poutput: number | null; save_status?: 'draft' | 'closed' | null }>,
+  quantityByPcode: Map<string, number>
+): string[] {
+  const outputByPcode = buildPcodeOutputMap(rows)
+  const closed = new Set<string>()
+
+  for (const row of rows) {
+    if (row.pcode && row.save_status === 'closed') closed.add(row.pcode)
+  }
+
+  for (const [pcode, quantity] of quantityByPcode) {
+    if (shouldAutoCloseProductionOrder(quantity, outputByPcode.get(pcode) ?? 0)) closed.add(pcode)
+  }
+
+  return [...closed]
+}
+
+function getLockedProductionPcodes(
+  rows: Array<{ pcode: string | null; poutput: number | null; save_status?: 'draft' | 'closed' | null }>,
+  quantityByPcode: Map<string, number>
+): string[] {
+  return getClosedPcodesFromProduction(rows, quantityByPcode)
+}
+
 function getLocalMonthStart(dateString: string): string {
   return `${dateString.slice(0, 7)}-01`
 }
@@ -304,9 +322,6 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const prodRows = (productionRes.data ?? []) as ProductionSourceRow[]
     const outputByPcode = buildPcodeOutputMap(prodRows)
     const submittedPcodes = [...new Set(prodRows.map((p) => p.pcode).filter(Boolean) as string[])]
-    const closedPcodes = [
-      ...new Set(prodRows.filter((p) => p.save_status === 'closed').map((p) => p.pcode).filter(Boolean) as string[]),
-    ]
 
     const scopedOrders = scopedDataRows.map((row) => {
       const order = mapDataRowToOrder(row)
@@ -315,6 +330,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       return { ...order, ...completion }
     })
     const quantityByPcode = new Map(scopedOrders.map((order) => [order.pcode, Number(order.quantity) || 0]))
+    const closedPcodes = getClosedPcodesFromProduction(prodRows, quantityByPcode)
     const statusMap = buildProductionStatusMapFromRows({
       pcodes: scopedOrders.map((order) => order.pcode),
       productionRows: prodRows,
@@ -419,6 +435,46 @@ export async function recordProductionAction(rows: Array<{
       return { success: false, message: validationError }
     }
 
+    const uniquePcodes = [...new Set(rows.map((r) => r.pcode).filter(Boolean))]
+    const { data: orderData, error: orderError } = await supabase
+      .from('data')
+      .select('PCODE,QUANTITY,STATUS,WORKSHOP')
+      .in('PCODE', uniquePcodes)
+
+    if (orderError) {
+      logger.error({ error: orderError.message, pcodes: uniquePcodes, userId: user.id }, 'recordProduction status source error')
+      return { success: false, message: `Lỗi đọc trạng thái LSX: ${orderError.message}` }
+    }
+
+    const statusDataRows = (orderData ?? []) as Array<{ PCODE: string; QUANTITY: number | null; STATUS: string | null; WORKSHOP: string | null }>
+    const foundPcodes = new Set(statusDataRows.map((row) => row.PCODE))
+    const productionPcodes = uniquePcodes.filter((pcode) => !pcode.startsWith('5S') && !pcode.startsWith('Đào tạo') && !pcode.startsWith('Hỗ trợ PX khác'))
+    const missingPcode = productionPcodes.find((pcode) => !foundPcodes.has(pcode))
+    if (missingPcode) {
+      return { success: false, message: `Không tìm thấy mã ${missingPcode}.` }
+    }
+
+    const productionLockRes = productionPcodes.length > 0
+      ? await supabase
+          .from('Production')
+          .select('pcode,poutput,save_status')
+          .in('pcode', productionPcodes)
+      : { data: [], error: null }
+
+    if (productionLockRes.error) {
+      logger.error({ error: productionLockRes.error.message, pcodes: productionPcodes, userId: user.id }, 'recordProduction lock source error')
+      return { success: false, message: `Lỗi kiểm tra trạng thái đóng LSX: ${productionLockRes.error.message}` }
+    }
+
+    const quantityByPcode = new Map(statusDataRows.map((row) => [row.PCODE, row.QUANTITY ?? 0]))
+    const lockedPcodes = getLockedProductionPcodes(
+      (productionLockRes.data ?? []) as Array<Pick<ProductionRow, 'pcode' | 'poutput' | 'save_status'>>,
+      quantityByPcode
+    )
+    if (lockedPcodes.length > 0) {
+      return { success: false, message: `LSX ${lockedPcodes.join(', ')} đã đóng hoặc đã đủ sản lượng, không thể nhập thêm.` }
+    }
+
     let { error } = await supabase.from('Production').insert(rows)
 
     if (error?.code === '23505' && error.message.includes('Production_pkey')) {
@@ -432,18 +488,6 @@ export async function recordProductionAction(rows: Array<{
       return { success: false, message: `Lỗi: ${error.message}` }
     }
 
-    const uniquePcodes = [...new Set(rows.map((r) => r.pcode).filter(Boolean))]
-    const { data: orderData, error: orderError } = await supabase
-      .from('data')
-      .select('PCODE,QUANTITY,STATUS,WORKSHOP')
-      .in('PCODE', uniquePcodes)
-
-    if (orderError) {
-      logger.error({ error: orderError.message, pcodes: uniquePcodes, userId: user.id }, 'recordProduction status source error')
-      return { success: false, message: `Đã lưu sản xuất nhưng lỗi đọc trạng thái LSX: ${orderError.message}` }
-    }
-
-    const statusDataRows = (orderData ?? []) as Array<{ PCODE: string; QUANTITY: number | null; STATUS: string | null; WORKSHOP: string | null }>
     try {
       const closedPcodes = await autoCloseCompletedProductionOrders(supabase, statusDataRows)
       if (closedPcodes.length > 0) {
