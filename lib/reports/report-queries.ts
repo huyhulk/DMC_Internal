@@ -33,9 +33,27 @@ type RpcRow = {
   realnorm: number | null; norm: number | null; pspeed: number | null
 }
 
-function mapRpcRow(r: RpcRow): ProdRow {
-  const ws = (r.workshop ?? '') as WorkshopCode
-  const validWs: WorkshopCode = WORKSHOP_CODES.includes(ws) ? ws : 'DMC1'
+function isWorkshopCode(value: string): value is WorkshopCode {
+  return WORKSHOP_CODES.includes(value as WorkshopCode)
+}
+
+export function resolveReportWorkshop(rawWorkshop: string | null | undefined): WorkshopCode | null {
+  const ws = workshopCode(normalizeWorkshop(rawWorkshop ?? ''))
+  return isWorkshopCode(ws) ? ws : null
+}
+
+function buildPcodeOutputMap(rows: Array<{ pcode: string | null; poutput: number | null }>): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const row of rows) {
+    if (!row.pcode) continue
+    map.set(row.pcode, (map.get(row.pcode) ?? 0) + (row.poutput ?? 0))
+  }
+  return map
+}
+
+function mapRpcRow(r: RpcRow): ProdRow | null {
+  const validWs = resolveReportWorkshop(r.workshop)
+  if (!validWs) return null
   return {
     pcode: r.pcode ?? '', pdate: r.pdate ?? '', workshop: validWs, product: r.product ?? '',
     poutput: r.poutput ?? 0, eoutput: r.eoutput ?? 0, routput: r.routput ?? 0,
@@ -56,7 +74,7 @@ async function fetchProdRows(
     .rpc('rpc_fetch_prod_rows', { p_from: from, p_to: to, p_workshop_code: workshopId ?? null })
 
   if (!rpcErr && Array.isArray(rpcData)) {
-    return (rpcData as RpcRow[]).map(mapRpcRow)
+    return (rpcData as RpcRow[]).map(mapRpcRow).filter((row): row is ProdRow => row !== null)
   }
 
   // Legacy fallback (3 queries)
@@ -110,18 +128,19 @@ async function _fetchProdRowsLegacy(
     normMap.set(`${n.products}|||${workshopCode(n.workshop ?? '')}`, { norm: n.norm ?? 0, pspeed: n.pspeed ?? 0 })
   }
 
-  return prodData.map((r) => {
-    const rawWs = pcodeToWs.get(r.pcode ?? '') ?? ''
-    const ws = workshopCode(normalizeWorkshop(rawWs)) as WorkshopCode
-    const validWs: WorkshopCode = WORKSHOP_CODES.includes(ws) ? ws : 'DMC1'
+  const mappedRows: ProdRow[] = []
+  for (const r of prodData) {
+    const validWs = resolveReportWorkshop(pcodeToWs.get(r.pcode ?? ''))
+    if (!validWs) continue
     const normInfo = normMap.get(`${r.products}|||${validWs}`) ?? { norm: 0, pspeed: 0 }
-    return {
+    mappedRows.push({
       pcode: r.pcode ?? '', pdate: r.pdate ?? '', workshop: validWs, product: r.products ?? '',
       poutput: r.poutput ?? 0, eoutput: r.eoutput ?? 0, routput: r.routput ?? 0,
       workforce: r.workforce ?? 0, starttime: r.starttime ?? '', endtime: r.endtime ?? '',
       realnorm: r.realnorm ?? 0, norm: normInfo.norm, pspeed: normInfo.pspeed,
-    }
-  })
+    })
+  }
+  return mappedRows
 }
 
 // ── 1. Tiến độ sản xuất ──────────────────────────────────────────────────
@@ -149,12 +168,14 @@ export async function queryProgress(
     .from('data')
     .select('PCODE,WORKSHOP,DESCRIPTION,CUSTOMER,QUANTITY,INITIALDATE,DEADLINEDATE,STATUS')
 
+  let periodProductionRows: Array<{ pcode: string | null; poutput: number | null }> | null = null
+
   if (filterBy === 'completed_date') {
-    // Show orders that had any production activity within the date range
     const { data: prodRows } = await supabase
-      .from('Production').select('pcode')
-      .gte('pdate', from).lte('pdate', to) as { data: { pcode: string | null }[] | null }
-    const activePcodes = [...new Set((prodRows ?? []).map((r) => r.pcode).filter(Boolean))] as string[]
+      .from('Production').select('pcode,poutput')
+      .gte('pdate', from).lte('pdate', to) as { data: Array<{ pcode: string | null; poutput: number | null }> | null }
+    periodProductionRows = prodRows ?? []
+    const activePcodes = [...new Set(periodProductionRows.map((r) => r.pcode).filter(Boolean))] as string[]
     if (activePcodes.length === 0) return emptyResult()
     dataQuery = dataQuery.in('PCODE', activePcodes)
   } else if (filterBy === 'initialdate') {
@@ -177,27 +198,27 @@ export async function queryProgress(
   const { data: prodRows } = await supabase
     .from('Production')
     .select('pcode,poutput,save_status')
-    .in('pcode', allPcodes) as { data: { pcode: string | null; poutput: number | null }[] | null }
+    .in('pcode', allPcodes) as { data: Array<{ pcode: string | null; poutput: number | null; save_status: 'draft' | 'closed' | null }> | null }
 
-  // Sum poutput per pcode (một lệnh có thể có nhiều records)
-  const pcodeSumMap = new Map<string, number>()
-  for (const r of prodRows ?? []) {
-    if (!r.pcode) continue
-    pcodeSumMap.set(r.pcode, (pcodeSumMap.get(r.pcode) ?? 0) + (r.poutput ?? 0))
-  }
+  const pcodeSumMap = buildPcodeOutputMap(prodRows ?? [])
+  const periodOutputMap = periodProductionRows
+    ? buildPcodeOutputMap(periodProductionRows)
+    : pcodeSumMap
 
   const quantityByPcode = new Map(dataRows.map((r) => [r.PCODE, r.QUANTITY ?? 0]))
   const statusMap = buildProductionStatusMapFromRows({
     pcodes: allPcodes,
-    productionRows: (prodRows ?? []) as Array<{ pcode: string | null; poutput: number | null; save_status: 'draft' | 'closed' | null }>,
+    productionRows: prodRows ?? [],
     quantityByPcode,
   })
 
-  const orders: OrderStatus[] = dataRows.map((r) => {
-    const ws = workshopCode(normalizeWorkshop(r.WORKSHOP ?? '')) as WorkshopCode
-    const validWs: WorkshopCode = WORKSHOP_CODES.includes(ws) ? ws : 'DMC1'
+  const orders: OrderStatus[] = []
+  for (const r of dataRows) {
+    const validWs = resolveReportWorkshop(r.WORKSHOP)
+    if (!validWs) continue
     const totalOutput   = pcodeSumMap.get(r.PCODE) ?? 0
-    const hasProduction = totalOutput > 0
+    const periodOutput  = periodOutputMap.get(r.PCODE) ?? 0
+    const hasProduction = periodProductionRows ? periodOutput > 0 : totalOutput > 0
     const qty           = r.QUANTITY ?? 0
     const completion = calculateProductionCompletion(qty, totalOutput)
     const effectiveOrder = applyEffectiveStatusToOrder({
@@ -221,7 +242,7 @@ export async function queryProgress(
     }
 
     const dlStr = r.DEADLINEDATE ?? ''
-    return {
+    orders.push({
       pcode:         r.PCODE,
       workshop:      validWs,
       description:   r.DESCRIPTION ?? '',
@@ -234,9 +255,10 @@ export async function queryProgress(
       productionStatus: effectiveOrder.status,
       hasProduction,
       totalOutput,
+      periodOutput,
       completionPct,
-    }
-  })
+    })
+  }
 
   const makeSummary = (ws: WorkshopCode, list: OrderStatus[]): ProgressSummary => {
     const total     = list.length

@@ -86,6 +86,7 @@ export interface OrderStatus {
   productionStatus: ProductionOrderEffectiveStatus
   hasProduction: boolean
   totalOutput:   number
+  periodOutput:  number
   completionPct: number
 }
 

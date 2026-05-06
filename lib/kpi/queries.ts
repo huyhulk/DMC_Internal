@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { normalizeWorkshop, normalizeLocalDateTimeString, workshopCode } from '@/lib/utils'
 import { queryOEE } from '@/lib/reports/report-queries'
 import { DEPARTMENT_LABELS, KPI_WORKSHOPS } from './constants'
 import {
@@ -29,6 +30,7 @@ type ProdDataRow = {
   eoutput: number | null
   routput: number | null
   pdate: string | null
+  endtime: string | null
 }
 type OrderDataRow = {
   PCODE: string
@@ -54,24 +56,9 @@ type ProdDataset = {
   workshopByPcode: Map<string, string>
 }
 
-// Mirror of DB normalize_workshop(): map raw Google Sheet values → DMC codes
-function wsNormalize(raw: string | null | undefined): string {
-  if (!raw) return ''
-  const s = raw.trim().toUpperCase()
-  if (s === 'DMC1' || s === 'DMC3' || s === 'DMC4' || s === 'DMC5') return s
-  if (s === 'DM1' || s === 'DM2') return 'DMC1'
-  if (s === 'DM3') return 'DMC3'
-  if (s === 'DM4') return 'DMC4'
-  if (s === 'DM5') return 'DMC5'
-  const m = s.match(/(\d)/)
-  if (m) {
-    const n = m[1]
-    if (n === '1' || n === '2') return 'DMC1'
-    if (n === '3') return 'DMC3'
-    if (n === '4') return 'DMC4'
-    if (n === '5') return 'DMC5'
-  }
-  return ''
+export function wsNormalize(raw: string | null | undefined): string {
+  const ws = workshopCode(normalizeWorkshop(raw ?? ''))
+  return KPI_WORKSHOPS.includes(ws as KpiWorkshop) ? ws : ''
 }
 
 type KpiDef = {
@@ -331,7 +318,7 @@ async function fetchProdDataForPeriod(from: string, to: string): Promise<ProdDat
   const [prodRes, materialRes, findingRes] = await Promise.all([
     supabase
       .from('Production')
-      .select('pcode,poutput,eoutput,routput,pdate')
+      .select('pcode,poutput,eoutput,routput,pdate,endtime')
       .gte('pdate', from)
       .lte('pdate', to),
     supabase
@@ -405,7 +392,14 @@ function calcSX01(
   }
 }
 
-// SX-02: đúng tiến độ = % đơn có deadline trong kỳ mà ngày sx cuối ≤ deadline
+export function productionCompletionTimestamp(row: ProdDataRow): string {
+  const pdate = row.pdate ?? ''
+  if (!pdate) return ''
+  const time = row.endtime?.substring(0, 5)
+  return time ? `${pdate}T${time}:00` : `${pdate}T23:59:59`
+}
+
+// SX-02: đúng tiến độ = % đơn có deadline trong kỳ mà thời điểm sx cuối ≤ deadline
 function calcSX02(
   prodRows: ProdDataRow[],
   orderRows: OrderDataRow[],
@@ -414,21 +408,19 @@ function calcSX02(
   to: string,
   workshop: string | null,
 ): { actual: number; count: number } {
-  // Build pcode → maxPdate from production rows
   const maxByPcode = new Map<string, string>()
   for (const r of prodRows) {
     if (!r.pcode) continue
+    const actual = productionCompletionTimestamp(r)
     const ex = maxByPcode.get(r.pcode)
-    if (!ex || (r.pdate ?? '') > ex)
-      maxByPcode.set(r.pcode, r.pdate ?? '')
+    if (actual && (!ex || actual > ex)) maxByPcode.set(r.pcode, actual)
   }
 
-  // Orders: deadline in period + have production + workshop matches via data.WORKSHOP
   const scoped = orderRows.filter(o => {
-    if (!o.DEADLINEDATE) return false
-    const dl = o.DEADLINEDATE.substring(0, 10)
-    if (dl < from || dl > to) return false
-    if (!maxByPcode.has(o.PCODE)) return false // no production at all → exclude
+    const deadline = normalizeLocalDateTimeString(o.DEADLINEDATE)
+    if (!deadline) return false
+    const dlDate = deadline.substring(0, 10)
+    if (dlDate < from || dlDate > to) return false
     if (workshop && workshopByPcode.get(o.PCODE) !== workshop) return false
     return true
   })
@@ -436,8 +428,8 @@ function calcSX02(
   if (scoped.length === 0) return { actual: 0, count: 0 }
 
   const onTime = scoped.filter(o => {
-    const dl = o.DEADLINEDATE!.substring(0, 10)
-    return (maxByPcode.get(o.PCODE) ?? '') <= dl
+    const actual = maxByPcode.get(o.PCODE)
+    return Boolean(actual && actual <= normalizeLocalDateTimeString(o.DEADLINEDATE))
   }).length
 
   return { actual: (onTime / scoped.length) * 100, count: scoped.length }

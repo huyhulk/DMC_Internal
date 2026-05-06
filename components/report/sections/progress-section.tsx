@@ -109,7 +109,7 @@ export function ProgressDetail({ orders, summary }: {
                 <td className="px-3 py-2 whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span className={cn('font-medium', o.status === 'completed' ? 'text-[#2f9e44]' : 'text-[#1d1d1f]')}>
-                      {(o.totalOutput ?? 0).toLocaleString()}
+                      {(o.periodOutput ?? o.totalOutput ?? 0).toLocaleString()}
                       {o.quantity ? `/${o.quantity}` : ''}
                     </span>
                     {o.quantity ? (
