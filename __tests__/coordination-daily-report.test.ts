@@ -1,6 +1,8 @@
 import {
   calculateCompletion,
   calculateEfficiencyPct,
+  compareDeadline,
+  formatDeadline,
   groupDailyRows,
   makeDailyReportTitles,
   resolveDailyReportWorkshop,
@@ -58,6 +60,16 @@ describe('coordination daily report helpers', () => {
 
     const sections = groupDailyRows(rows)
     expect(sections[0].summary).toEqual({ orderCount: 2, failedCount: 1, totalQuantity: 15 })
+  })
+
+  it('formats timestamp-without-timezone deadlines as local planned time', () => {
+    expect(formatDeadline('2026-05-06T15:30:00')).toBe('06/05/2026 15:30')
+    expect(formatDeadline('2026-05-06 15:30:00')).toBe('06/05/2026 15:30')
+  })
+
+  it('compares actual completion time against local planned deadline', () => {
+    expect(compareDeadline('2026-05-06', '15:00:00', null, '2026-05-06T15:30:00')).toBe(true)
+    expect(compareDeadline('2026-05-06', '15:31:00', null, '2026-05-06T15:30:00')).toBe(false)
   })
 
   it('builds plan title from the next day and result title from report date', () => {

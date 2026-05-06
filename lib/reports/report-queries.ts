@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { workshopToDataFilters, workshopCode, normalizeWorkshop } from '@/lib/utils'
+import { workshopToDataFilters, workshopCode, normalizeWorkshop, parseLocalDateTimeString } from '@/lib/utils'
 import {
   calcA, calcP, calcQ, calcOEE, weightedAvg, durationHours,
 } from './oee-calculator'
@@ -161,7 +161,7 @@ export async function queryProgress(
     dataQuery = dataQuery.gte('INITIALDATE', from).lte('INITIALDATE', to)
   } else {
     // default: deadline
-    dataQuery = dataQuery.gte('DEADLINEDATE', from).lte('DEADLINEDATE', to)
+    dataQuery = dataQuery.gte('DEADLINEDATE', `${from}T00:00:00`).lte('DEADLINEDATE', `${to}T23:59:59`)
   }
 
   if (workshopId) {
@@ -212,7 +212,7 @@ export async function queryProgress(
     }, statusMap)
     const isCompleted = isEffectiveCompletedProductionStatus(effectiveOrder.status)
     const completionPct = completion.completionPct
-    const dl = r.DEADLINEDATE ? new Date(r.DEADLINEDATE) : null
+    const dl = r.DEADLINEDATE ? parseLocalDateTimeString(r.DEADLINEDATE) : null
 
     let status: OrderStatus['status'] = isCompleted ? 'completed' : 'in_progress'
     if (!isCompleted && dl) {

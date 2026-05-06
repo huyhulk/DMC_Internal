@@ -27,6 +27,45 @@ export function getLocalDateTimeInputValue(date = new Date()): string {
   return format(date, "yyyy-MM-dd'T'HH:mm")
 }
 
+const LOCAL_TIMESTAMP_FORMATS = ["yyyy-MM-dd'T'HH:mm:ss", 'yyyy-MM-dd HH:mm:ss', "yyyy-MM-dd'T'HH:mm", 'yyyy-MM-dd HH:mm']
+
+export function parseLocalDateTimeString(value: string): Date | null {
+  const normalized = value.trim()
+  if (!normalized) return null
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const parsed = parse(normalized, 'yyyy-MM-dd', new Date())
+    return isValid(parsed) ? parsed : null
+  }
+
+  const isLocalTimestamp = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?$/.test(normalized)
+  if (isLocalTimestamp) {
+    const withoutFraction = normalized.replace(/(\.\d{1,6})$/, '')
+    for (const pattern of LOCAL_TIMESTAMP_FORMATS) {
+      const parsed = parse(withoutFraction, pattern, new Date())
+      if (isValid(parsed)) return parsed
+    }
+    return null
+  }
+
+  const parsed = new Date(normalized)
+  return isValid(parsed) ? parsed : null
+}
+
+export function formatLocalDateTimeString(value: string | null, fmt = 'dd/MM/yyyy'): string {
+  if (!value) return ''
+  const parsed = parseLocalDateTimeString(value)
+  return parsed ? format(parsed, fmt) : ''
+}
+
+export function normalizeLocalDateTimeString(value: string | null | undefined): string {
+  if (!value) return ''
+  const normalized = value.trim().replace(' ', 'T')
+  const match = normalized.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?/)
+  if (!match) return ''
+  return `${match[1]}T${match[2]}:${match[3] ?? '00'}`
+}
+
 /**
  * Formats a date value to display string.
  * Handles both "YYYY-MM-DD" (DATE) and "YYYY-MM-DDTHH:mm:ss" (TIMESTAMP) inputs.
@@ -35,18 +74,8 @@ export function getLocalDateTimeInputValue(date = new Date()): string {
 export function formatDate(date: string | Date | null, fmt = 'dd/MM/yyyy'): string {
   if (!date) return ''
   try {
-    let d: Date
-    if (typeof date === 'string') {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        // Pure date string "YYYY-MM-DD" → parse as LOCAL date (no UTC shift)
-        d = parse(date, 'yyyy-MM-dd', new Date())
-      } else {
-        d = new Date(date)
-      }
-    } else {
-      d = date
-    }
-    return isValid(d) ? format(d, fmt) : ''
+    const d = typeof date === 'string' ? parseLocalDateTimeString(date) : date
+    return d && isValid(d) ? format(d, fmt) : ''
   } catch {
     return ''
   }

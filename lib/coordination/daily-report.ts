@@ -1,6 +1,6 @@
 import { addDays, parse } from 'date-fns'
 import { createClient } from '@/lib/supabase/server'
-import { formatDate, normalizeWorkshop, workshopCode } from '@/lib/utils'
+import { formatDate, normalizeLocalDateTimeString, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import { calculateProductionCompletion } from '@/lib/production/workflow'
 import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
 import { shouldShowOpenProductionOrder } from '@/lib/production/status'
@@ -145,10 +145,11 @@ function emptyRowsMap<T>() {
   return new Map<DailyReportWorkshop, T[]>(DAILY_REPORT_WORKSHOPS.map((workshop) => [workshop, []]))
 }
 
-function formatDeadline(deadline: string | null): string {
+export function formatDeadline(deadline: string | null): string {
   if (!deadline) return ''
-  const date = formatDate(deadline, 'dd/MM/yyyy')
-  const time = deadline.includes('T') ? deadline.substring(11, 16) : ''
+  const date = formatDate(deadline.substring(0, 10), 'dd/MM/yyyy')
+  const normalized = normalizeLocalDateTimeString(deadline)
+  const time = normalized ? normalized.substring(11, 16) : ''
   return time ? `${date} ${time}` : date
 }
 
@@ -160,11 +161,22 @@ function formatTimeValue(time: string | null | undefined, createdAt: string | nu
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function compareDeadline(date: string, time: string | null | undefined, createdAt: string | null | undefined, deadline: string | null | undefined): boolean {
-  if (!deadline) return false
-  const actual = time ? `${date}T${time.substring(0, 5)}:00` : createdAt
+function formatCreatedAtAsLocalTimestamp(createdAt: string | null | undefined): string {
+  if (!createdAt) return ''
+  const parsed = new Date(createdAt)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return `${formatDate(parsed, 'yyyy-MM-dd')}T${formatDate(parsed, 'HH:mm')}:00`
+}
+
+export function compareDeadline(date: string, time: string | null | undefined, createdAt: string | null | undefined, deadline: string | null | undefined): boolean {
+  const normalizedDeadline = normalizeLocalDateTimeString(deadline)
+  if (!normalizedDeadline) return false
+
+  const actual = time
+    ? `${date}T${time.substring(0, 5)}:00`
+    : formatCreatedAtAsLocalTimestamp(createdAt)
   if (!actual) return false
-  return new Date(actual).getTime() <= new Date(deadline).getTime()
+  return actual <= normalizedDeadline
 }
 
 function buildPcodeOutputMap(rows: ProductionRow[]): Map<string, number> {
