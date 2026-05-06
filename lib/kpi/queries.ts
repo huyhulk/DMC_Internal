@@ -108,13 +108,9 @@ export async function queryProductionKpiRows(params: {
   }
   const ws = params.workshop ?? null
 
-  const [dataset, sx01T, sx02T, sx04T, sx05T, sx06T, oeeRow] = await Promise.all([
+  const [dataset, targets, oeeRow] = await Promise.all([
     fetchProdDataForPeriod(period.period_start, period.period_end),
-    queryKpiTarget('SX-01', params.periodType),
-    queryKpiTarget('SX-02', params.periodType),
-    queryKpiTarget('SX-04', params.periodType),
-    queryKpiTarget('SX-05', params.periodType),
-    queryKpiTarget('SX-06', params.periodType),
+    queryKpiTargets(['SX-01', 'SX-02', 'SX-04', 'SX-05', 'SX-06'], params.periodType),
     queryProductionOeeRow(params, period),
   ])
 
@@ -125,12 +121,12 @@ export async function queryProductionKpiRows(params: {
   const sx06 = calcSX06(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, ws)
 
   return [
-    buildProdKpiRow(SX01_DEF, sx01T, sx01.actual, sx01.count, params.periodType, periodRef),
-    buildProdKpiRow(SX02_DEF, sx02T, sx02.actual, sx02.count, params.periodType, periodRef),
+    buildProdKpiRow(SX01_DEF, targets.get('SX-01') ?? 90, sx01.actual, sx01.count, params.periodType, periodRef),
+    buildProdKpiRow(SX02_DEF, targets.get('SX-02') ?? 90, sx02.actual, sx02.count, params.periodType, periodRef),
     oeeRow,
-    buildProdKpiRow(SX04_DEF, sx04T, sx04.actual, sx04.count, params.periodType, periodRef),
-    buildProdKpiRow(SX05_DEF, sx05T, sx05.actual, sx05.count, params.periodType, periodRef),
-    buildProdKpiRow(SX06_DEF, sx06T, sx06.actual, sx06.count, params.periodType, periodRef),
+    buildProdKpiRow(SX04_DEF, targets.get('SX-04') ?? 90, sx04.actual, sx04.count, params.periodType, periodRef),
+    buildProdKpiRow(SX05_DEF, targets.get('SX-05') ?? 90, sx05.actual, sx05.count, params.periodType, periodRef),
+    buildProdKpiRow(SX06_DEF, targets.get('SX-06') ?? 90, sx06.actual, sx06.count, params.periodType, periodRef),
   ].sort((a, b) => a.kpi_code.localeCompare(b.kpi_code))
 }
 
@@ -213,18 +209,14 @@ export async function queryProductionKpiComparison(params: {
   const label = period.period_label
   const periodRef = { period_start: from, period_end: to, period_label: label }
 
-  const [dataset, oee, sx01T, sx02T, sx04T, sx05T, sx06T, oeeTarget] = await Promise.all([
+  const [dataset, oee, targets] = await Promise.all([
     fetchProdDataForPeriod(from, to),
     queryOEE(null, from, to),
-    queryKpiTarget('SX-01', params.periodType),
-    queryKpiTarget('SX-02', params.periodType),
-    queryKpiTarget('SX-04', params.periodType),
-    queryKpiTarget('SX-05', params.periodType),
-    queryKpiTarget('SX-06', params.periodType),
-    queryKpiTarget('SX-03', params.periodType),
+    queryKpiTargets(['SX-01', 'SX-02', 'SX-03', 'SX-04', 'SX-05', 'SX-06'], params.periodType),
   ])
 
   // SX-03 OEE per workshop
+  const oeeTarget = targets.get('SX-03') ?? 90
   const oeeWorkshops = oee.workshops ?? []
   const oeeRows: KpiMatrixRow[] = KPI_WORKSHOPS.map((workshop) => {
     const current = oeeWorkshops.find((r) => r.workshop === workshop)
@@ -248,11 +240,11 @@ export async function queryProductionKpiComparison(params: {
     const sx05 = calcSX05(dataset.findingRows, workshop)
     const sx06 = calcSX06(dataset.prodRows, dataset.orderRows, dataset.workshopByPcode, workshop)
     return [
-      buildProdKpiRow(SX01_DEF, sx01T, sx01.actual, sx01.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
-      buildProdKpiRow(SX02_DEF, sx02T, sx02.actual, sx02.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
-      buildProdKpiRow(SX04_DEF, sx04T, sx04.actual, sx04.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
-      buildProdKpiRow(SX05_DEF, sx05T, sx05.actual, sx05.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
-      buildProdKpiRow(SX06_DEF, sx06T, sx06.actual, sx06.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
+      buildProdKpiRow(SX01_DEF, targets.get('SX-01') ?? 90, sx01.actual, sx01.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
+      buildProdKpiRow(SX02_DEF, targets.get('SX-02') ?? 90, sx02.actual, sx02.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
+      buildProdKpiRow(SX04_DEF, targets.get('SX-04') ?? 90, sx04.actual, sx04.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
+      buildProdKpiRow(SX05_DEF, targets.get('SX-05') ?? 90, sx05.actual, sx05.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
+      buildProdKpiRow(SX06_DEF, targets.get('SX-06') ?? 90, sx06.actual, sx06.count, params.periodType, periodRef, workshop) as KpiMatrixRow,
     ]
   })
 
@@ -575,13 +567,26 @@ async function queryProductionOeeRow(
 }
 
 async function queryKpiTarget(kpiCode: string, periodType: PeriodType): Promise<number> {
+  const targets = await queryKpiTargets([kpiCode], periodType)
+  return targets.get(kpiCode) ?? 90
+}
+
+async function queryKpiTargets(kpiCodes: string[], periodType: PeriodType): Promise<Map<string, number>> {
   const supabase = await createClient()
-  const { data, error } = await supabase.rpc('get_kpi_target', {
-    p_kpi_code: kpiCode,
-    p_period: periodType,
-  })
+  const { data, error } = await supabase
+    .from('kpi_targets')
+    .select('kpi_code,target_value,target_weekly,target_monthly,target_quarterly,target_yearly')
+    .in('kpi_code', kpiCodes)
+    .eq('is_active', true)
+
   if (error) throw new Error(error.message)
-  return toNumber(data, 90)
+
+  const targets = new Map<string, number>()
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const periodTarget = row[`target_${periodType}`]
+    targets.set(String(row.kpi_code), toNumber(periodTarget ?? row.target_value, 90))
+  }
+  return targets
 }
 
 async function queryPeriodFromDb(
