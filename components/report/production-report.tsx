@@ -20,7 +20,7 @@ import { format, startOfMonth, startOfYear, endOfMonth, parse, getYear } from 'd
 import * as XLSX from 'xlsx'
 import { Search, Download } from 'lucide-react'
 import { useReportData, type ReportType } from '@/hooks/use-report-data'
-import { cn, formatDate } from '@/lib/utils'
+import { cn, formatDate, formatMonthDisplay, parseDisplayDate, parseDisplayMonth } from '@/lib/utils'
 import type { ProductionReportRow, FactoryKey } from '@/types'
 import { WORKSHOP_LABELS } from '@/types'
 
@@ -435,21 +435,11 @@ function FilterInput({
     )
   if (type === 'day')
     return (
-      <div className="space-y-1">
-        <input type="date" value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={filterInputCls} />
-        <DateHint value={value} />
-      </div>
+      <DisplayDateInput value={value} onChange={onChange} className={filterInputCls} />
     )
   if (type === 'month')
     return (
-      <div className="space-y-1">
-        <input type="month" value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={filterInputCls} />
-        <p className="text-[10px] leading-snug text-[#6e6e73]">Hiển thị: {formatMonthDisplay(value)}</p>
-      </div>
+      <DisplayMonthInput value={value} onChange={onChange} className={filterInputCls} />
     )
   // year
   return (
@@ -459,13 +449,78 @@ function FilterInput({
   )
 }
 
-function DateHint({ value }: { value: string }) {
-  return <p className="text-[10px] leading-snug text-[#6e6e73]">Hiển thị: {formatDate(value)}</p>
+function DisplayDateInput({
+  value,
+  onChange,
+  className,
+}: {
+  value: string
+  onChange: (value: string) => void
+  className?: string
+}) {
+  const [displayValue, setDisplayValue] = useState(formatDate(value))
+
+  useEffect(() => {
+    setDisplayValue(formatDate(value))
+  }, [value])
+
+  function commit(nextDisplayValue: string) {
+    const parsed = parseDisplayDate(nextDisplayValue)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(parsed)) onChange(parsed)
+    else setDisplayValue(formatDate(value))
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={displayValue}
+      placeholder="dd/MM/yyyy"
+      onChange={(e) => setDisplayValue(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+      }}
+      className={className}
+    />
+  )
 }
 
-function formatMonthDisplay(value: string): string {
-  const [year, month] = value.split('-')
-  return year && month ? `${month}/${year}` : ''
+function DisplayMonthInput({
+  value,
+  onChange,
+  className,
+}: {
+  value: string
+  onChange: (value: string) => void
+  className?: string
+}) {
+  const [displayValue, setDisplayValue] = useState(formatMonthDisplay(value))
+
+  useEffect(() => {
+    setDisplayValue(formatMonthDisplay(value))
+  }, [value])
+
+  function commit(nextDisplayValue: string) {
+    const parsed = parseDisplayMonth(nextDisplayValue)
+    if (/^\d{4}-\d{2}$/.test(parsed)) onChange(parsed)
+    else setDisplayValue(formatMonthDisplay(value))
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={displayValue}
+      placeholder="MM/yyyy"
+      onChange={(e) => setDisplayValue(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+      }}
+      className={className}
+    />
+  )
 }
 
 const KPI_VARIANT = {

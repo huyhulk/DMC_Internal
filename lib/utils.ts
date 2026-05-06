@@ -126,14 +126,36 @@ export function parseDisplayDate(displayDate: string): string {
     if (displayDate.includes('/')) {
       const parts = displayDate.split('/')
       if (parts.length === 3 && parts[0].length <= 2) {
-        const d = parse(displayDate, 'dd/MM/yyyy', new Date())
-        return isValid(d) ? format(d, 'yyyy-MM-dd') : displayDate
+        const normalized = `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`
+        const d = parse(normalized, 'dd/MM/yyyy', new Date())
+        return isValid(d) && format(d, 'dd/MM/yyyy') === normalized ? format(d, 'yyyy-MM-dd') : displayDate
       }
     }
     return displayDate.substring(0, 10)
   } catch {
     return displayDate
   }
+}
+
+export function formatMonthDisplay(value: string): string {
+  const [year, month] = value.split('-')
+  return year && month ? `${month}/${year}` : ''
+}
+
+export function parseDisplayMonth(value: string): string {
+  const trimmed = value.trim()
+  const displayMatch = /^(\d{1,2})\/(\d{4})$/.exec(trimmed)
+  if (displayMatch) {
+    const month = Number(displayMatch[1])
+    const year = Number(displayMatch[2])
+    if (month >= 1 && month <= 12) return `${year}-${String(month).padStart(2, '0')}`
+  }
+  const apiMatch = /^(\d{4})-(\d{1,2})$/.exec(trimmed)
+  if (apiMatch) {
+    const month = Number(apiMatch[2])
+    if (month >= 1 && month <= 12) return `${apiMatch[1]}-${String(month).padStart(2, '0')}`
+  }
+  return value
 }
 
 /**
