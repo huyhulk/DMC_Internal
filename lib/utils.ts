@@ -144,6 +144,12 @@ export function apiDateToDisplay(apiDate: string): string {
   return formatDate(apiDate, 'dd/MM/yyyy')
 }
 
+export function formatDateTimeDisplay(date: string | null | undefined, time?: string | null): string {
+  const displayDate = date ? apiDateToDisplay(date) : ''
+  const displayTime = time?.trim() ?? ''
+  return [displayTime, displayDate].filter(Boolean).join(' ')
+}
+
 export function calcDurationHours(start: string, end: string): number {
   try {
     const [sh, sm] = start.trim().split(':').map(Number)

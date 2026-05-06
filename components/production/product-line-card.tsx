@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { cn, getTodayLocal } from '@/lib/utils'
+import { cn, formatDate, getTodayLocal } from '@/lib/utils'
 import type { NormItem, ProductLine } from '@/types'
 
 interface Props {
@@ -64,6 +64,7 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
             onChange={(e) => onChange('pdate', e.target.value)}
             className={inputCls}
           />
+          <DateHint value={line.pdate || getTodayLocal()} />
         </FieldGroup>
       </div>
 
@@ -149,6 +150,10 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
       {children}
     </div>
   )
+}
+
+function DateHint({ value }: { value: string }) {
+  return <p className="text-[10px] leading-snug text-[#6e6e73]">Hiển thị: {formatDate(value)}</p>
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))

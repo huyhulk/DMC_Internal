@@ -20,14 +20,14 @@ import { format, startOfMonth, startOfYear, endOfMonth, parse, getYear } from 'd
 import * as XLSX from 'xlsx'
 import { Search, Download } from 'lucide-react'
 import { useReportData, type ReportType } from '@/hooks/use-report-data'
-import { cn } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import type { ProductionReportRow, FactoryKey } from '@/types'
 import { WORKSHOP_LABELS } from '@/types'
 
 /* ── Column definitions ──────────────────────────────────────────── */
 const colHelper = createColumnHelper<ProductionReportRow>()
 const columns = [
-  colHelper.accessor('pdate',    { header: 'Ngày SX',     cell: (i) => i.getValue() }),
+  colHelper.accessor('pdate',    { header: 'Ngày SX',     cell: (i) => formatDate(i.getValue()) }),
   colHelper.accessor('pcode',    { header: 'Mã LSX',      cell: (i) => i.getValue() }),
   colHelper.accessor('workshop', { header: 'Xưởng',       cell: (i) => WORKSHOP_LABELS[i.getValue() as FactoryKey] ?? i.getValue() }),
   colHelper.accessor('product',  { header: 'Sản phẩm',    cell: (i) => i.getValue() }),
@@ -435,15 +435,21 @@ function FilterInput({
     )
   if (type === 'day')
     return (
-      <input type="date" value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={filterInputCls} />
+      <div className="space-y-1">
+        <input type="date" value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={filterInputCls} />
+        <DateHint value={value} />
+      </div>
     )
   if (type === 'month')
     return (
-      <input type="month" value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={filterInputCls} />
+      <div className="space-y-1">
+        <input type="month" value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={filterInputCls} />
+        <p className="text-[10px] leading-snug text-[#6e6e73]">Hiển thị: {formatMonthDisplay(value)}</p>
+      </div>
     )
   // year
   return (
@@ -451,6 +457,15 @@ function FilterInput({
       onChange={(e) => onChange(e.target.value)}
       className={cn(filterInputCls, 'w-24')} />
   )
+}
+
+function DateHint({ value }: { value: string }) {
+  return <p className="text-[10px] leading-snug text-[#6e6e73]">Hiển thị: {formatDate(value)}</p>
+}
+
+function formatMonthDisplay(value: string): string {
+  const [year, month] = value.split('-')
+  return year && month ? `${month}/${year}` : ''
 }
 
 const KPI_VARIANT = {

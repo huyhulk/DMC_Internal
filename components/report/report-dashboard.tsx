@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { format } from 'date-fns'
 import { Search, BarChart2, Layers } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import type { ReportMode, WorkshopCode, GroupBy, FilterBy } from '@/lib/reports/report-types'
 import { WORKSHOP_CODES, WORKSHOP_LABEL } from '@/lib/reports/report-types'
 import { ProgressDetail, ProgressComparison } from './sections/progress-section'
@@ -63,10 +63,12 @@ function FilterBar({
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Từ</label>
         <input type="date" value={from} onChange={(e) => onFrom(e.target.value)} className={inp} />
+        <DateHint value={from} />
       </div>
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Đến</label>
         <input type="date" value={to} onChange={(e) => onTo(e.target.value)} className={inp} />
+        <DateHint value={to} />
       </div>
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Nhóm theo</label>
@@ -115,6 +117,10 @@ function FilterBar({
       </div>
     </div>
   )
+}
+
+function DateHint({ value }: { value: string }) {
+  return <p className="text-[10px] leading-snug text-[#6e6e73]">Hiển thị: {formatDate(value)}</p>
 }
 
 // ── Section card wrapper ──────────────────────────────────────────────────
