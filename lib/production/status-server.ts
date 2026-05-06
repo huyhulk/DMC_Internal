@@ -11,6 +11,23 @@ import type { ProductionOrderInternalStatus } from '@/types'
 
 type StatusRow = Database['public']['Tables']['production_order_status']['Row']
 
+type SupabaseLikeError = {
+  code?: string
+  message?: string
+}
+
+function isMissingProductionOrderStatusTableError(error: SupabaseLikeError): boolean {
+  const message = error.message?.toLowerCase() ?? ''
+  return (
+    error.code === '42P01' ||
+    error.code === 'PGRST205' ||
+    error.code === 'PGRST200' ||
+    (message.includes('production_order_status') && message.includes('schema')) ||
+    (message.includes('production_order_status') && message.includes('not find')) ||
+    (message.includes('production_order_status') && message.includes('does not exist'))
+  )
+}
+
 export interface ProductionSourceRow {
   pcode: string | null
   poutput: number | null
@@ -88,12 +105,16 @@ export async function getProductionStatusMap(
   ])
 
   if (productionRes.error) throw new Error(productionRes.error.message)
-  if (statusRes.error) throw new Error(statusRes.error.message)
+  if (statusRes.error && !isMissingProductionOrderStatusTableError(statusRes.error)) {
+    throw new Error(statusRes.error.message)
+  }
 
   return buildProductionStatusMapFromRows({
     pcodes: uniquePcodes,
     productionRows: (productionRes.data ?? []) as ProductionSourceRow[],
-    statusRows: (statusRes.data ?? []) as Array<Pick<StatusRow, 'pcode' | 'status' | 'produced_quantity' | 'quantity' | 'completion_pct'>>,
+    statusRows: statusRes.error
+      ? []
+      : (statusRes.data ?? []) as Array<Pick<StatusRow, 'pcode' | 'status' | 'produced_quantity' | 'quantity' | 'completion_pct'>>,
     quantityByPcode,
   })
 }
@@ -180,5 +201,5 @@ export async function upsertProductionOrderStatuses(input: {
     .from('production_order_status')
     .upsert(rows, { onConflict: 'pcode' })
 
-  if (error) throw new Error(error.message)
+  if (error && !isMissingProductionOrderStatusTableError(error)) throw new Error(error.message)
 }
