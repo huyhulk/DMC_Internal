@@ -52,12 +52,13 @@ describe('HR workflow helpers', () => {
   })
 
   it('moves available labor hours from source to destination factories', () => {
+    const transferRecords = [{ employeeId: 2, fromFactory: 'DMC1' as const, toFactory: 'DMC3' as const, startTime: '08:00', endTime: '12:00' }]
     const result = calculateHRLaborHoursByFactory([
       {
         factory: 'DMC1',
         totalem: 10,
         absentIds: [1],
-        transferRecords: [{ employeeId: 2, fromFactory: 'DMC1', toFactory: 'DMC3', startTime: '08:00', endTime: '12:00' }],
+        transferRecords,
       },
       {
         factory: 'DMC3',
@@ -67,6 +68,7 @@ describe('HR workflow helpers', () => {
       },
     ], 8)
 
+    expect(JSON.parse(JSON.stringify(transferRecords))).toEqual(transferRecords)
     expect(result.get('DMC1')).toMatchObject({ actualHeadcount: 9, availableLaborHours: 68.5, transferredOutHours: 3.5 })
     expect(result.get('DMC3')).toMatchObject({ actualHeadcount: 5, availableLaborHours: 43.5, transferredInHours: 3.5 })
   })

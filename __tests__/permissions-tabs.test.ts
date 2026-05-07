@@ -1,3 +1,4 @@
+import { USER_ROLES } from '@/types'
 import {
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_KEYS,
@@ -9,9 +10,16 @@ import {
 
 describe('role tab permissions', () => {
   it('defines a default level for every role and permission key', () => {
+    expect(Object.keys(DEFAULT_ROLE_PERMISSIONS).sort()).toEqual([...USER_ROLES].sort())
+
     for (const matrix of Object.values(DEFAULT_ROLE_PERMISSIONS)) {
       expect(Object.keys(matrix).sort()).toEqual([...PERMISSION_KEYS].sort())
     }
+  })
+
+  it('allows configurable HR edit access for workshop managers', () => {
+    expect(DEFAULT_ROLE_PERMISSIONS.WORKSHOP_MANAGER['administration.hr']).toBe('view')
+    expect(normalizePermissionLevel('WORKSHOP_MANAGER', 'administration.hr', 'edit')).toBe('edit')
   })
 
   it('keeps system permissions admin-only even if configured otherwise', () => {

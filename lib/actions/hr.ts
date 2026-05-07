@@ -97,10 +97,7 @@ const humanResourceSchema = z.object({
 })
 
 async function requireHREditUser(): Promise<SessionUser | null> {
-  const user = await requireTabEdit('administration.hr')
-  if (!user) return null
-  if (!['ADMIN', 'MANAGER'].includes(user.role)) return null
-  return user
+  return requireTabEdit('administration.hr')
 }
 
 function canAccessFactory(profile: HRProfile, factory: string): boolean {
