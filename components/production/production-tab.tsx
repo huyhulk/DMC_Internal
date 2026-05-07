@@ -26,6 +26,9 @@ import {
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
+import {
+  normalizeProductionStatus,
+} from '@/lib/production/status'
 import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
 import { cn, formatDate, formatDateTimeDisplay, formatLocalDateTimeString, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
@@ -35,7 +38,8 @@ interface Props {
   canEdit: boolean
 }
 
-type ProductionStatusFilter = 'ALL' | 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
+type ProductionStatusFilter = 'ALL' | 'NOT_STARTED' | 'IN_PROGRESS' | 'INSPECTION'
+type ProductionOrderStatusKey = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
 
 interface OpenOrdersTabProps extends Props {
   refreshSignal: number
@@ -157,14 +161,14 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
     const byWorkshop = workshopFilter === 'ALL'
       ? allOrders
       : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
-    return sortProductionOrdersForEntry(filterProductionOrdersByPcode(byWorkshop, searchQuery)) as OpenProductionOrder[]
+    return sortOpenProductionOrders(filterProductionOrdersByPcode(byWorkshop, searchQuery) as OpenProductionOrder[])
   }, [allOrders, searchQuery, workshopFilter])
   const kpiCounts = useMemo(() => ({
     all: baseCatalog.length,
     notStarted: baseCatalog.filter((order) => isNotStartedOrder(order)).length,
     inProgress: baseCatalog.filter((order) => isInProgressOrder(order)).length,
-    completed: baseCatalog.filter((order) => closedPcodes.includes(order.pcode)).length,
-  }), [baseCatalog, closedPcodes])
+    inspection: baseCatalog.filter((order) => isInspectionOrder(order)).length,
+  }), [baseCatalog])
   const kpiItems: Array<{
     label: string
     value: number
@@ -175,14 +179,14 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
     { label: 'Tổng LSX', value: kpiCounts.all, filter: 'ALL', color: 'text-[#1d1d1f]', activeColor: 'bg-[#1d1d1f]/8 border-[#1d1d1f]/20' },
     { label: 'Chưa SX', value: kpiCounts.notStarted, filter: 'NOT_STARTED', color: 'text-[#007aff]', activeColor: 'bg-[#007aff]/10 border-[#007aff]/25' },
     { label: 'Đang SX', value: kpiCounts.inProgress, filter: 'IN_PROGRESS', color: 'text-[#b37700]', activeColor: 'bg-[#ff9500]/10 border-[#ff9500]/30' },
-    { label: 'HT', value: kpiCounts.completed, filter: 'COMPLETED', color: 'text-[#2f9e44]', activeColor: 'bg-[#34c759]/15 border-[#2f9e44]/30' },
+    { label: 'Lệnh đang kiểm', value: kpiCounts.inspection, filter: 'INSPECTION', color: 'text-[#5856d6]', activeColor: 'bg-[#5856d6]/10 border-[#5856d6]/25' },
   ]
   const orderCatalog = useMemo(() => {
     if (statusFilter === 'NOT_STARTED') return baseCatalog.filter((order) => isNotStartedOrder(order))
     if (statusFilter === 'IN_PROGRESS') return baseCatalog.filter((order) => isInProgressOrder(order))
-    if (statusFilter === 'COMPLETED') return baseCatalog.filter((order) => closedPcodes.includes(order.pcode))
+    if (statusFilter === 'INSPECTION') return baseCatalog.filter((order) => isInspectionOrder(order))
     return baseCatalog
-  }, [baseCatalog, closedPcodes, statusFilter])
+  }, [baseCatalog, statusFilter])
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
@@ -822,7 +826,7 @@ function isOpenProductionOrderRow(order: Order): order is OpenProductionOrder {
   return 'completionPct' in order && 'producedQuantity' in order && 'remainingQuantity' in order
 }
 
-function getOrderStatusKey(order: OpenProductionOrder): ProductionStatusFilter {
+function getOrderStatusKey(order: OpenProductionOrder): ProductionOrderStatusKey {
   const rank = getProductionOrderStatusRank(order.status)
   if (rank === 0) return 'NOT_STARTED'
   if (rank === 1) return 'IN_PROGRESS'
@@ -838,8 +842,29 @@ function isInProgressOrder(order: OpenProductionOrder): boolean {
   return getOrderStatusKey(order) === 'IN_PROGRESS'
 }
 
-function isCompletedOrder(order: OpenProductionOrder): boolean {
-  return getOrderStatusKey(order) === 'COMPLETED'
+function isInspectionOrder(order: OpenProductionOrder): boolean {
+  return normalizeProductionStatus(order.status).includes('dang kiem')
+}
+
+function getDeadlineColorRank(order: Order): number {
+  const color = getDeadlineColor(order.deadlinedate, order.deadlinetime)
+  if (color === 'red') return 0
+  if (color === 'orange') return 1
+  if (color === 'yellow') return 2
+  if (color === 'green') return 3
+  return 4
+}
+
+function sortOpenProductionOrders(orders: OpenProductionOrder[]): OpenProductionOrder[] {
+  return [...orders].sort((a, b) => {
+    const rankDiff = getProductionOrderStatusRank(a.status) - getProductionOrderStatusRank(b.status)
+    if (rankDiff !== 0) return rankDiff
+
+    const deadlineRankDiff = getDeadlineColorRank(a) - getDeadlineColorRank(b)
+    if (deadlineRankDiff !== 0) return deadlineRankDiff
+
+    return a.pcode.localeCompare(b.pcode, 'vi', { numeric: true, sensitivity: 'base' })
+  })
 }
 
 function DeadlineBadge({ order }: { order: Order }) {
