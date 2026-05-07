@@ -236,7 +236,7 @@ describe('production workflow helpers', () => {
       endtime: '09:00',
     }
 
-    expect(getProductionRowsValidationError([validRow])).toBeNull()
+    expect(getProductionRowsValidationError([validRow], new Date(2026, 4, 2, 10, 0))).toBeNull()
     expect(getProductionRowsValidationError([]))
       .toBe('Vui lòng chọn ít nhất 1 sản phẩm.')
     expect(getProductionRowsValidationError([{ ...validRow, pdate: '' }]))
@@ -245,9 +245,32 @@ describe('production workflow helpers', () => {
       .toBe('Dòng 1: vui lòng chọn mã LSX.')
     expect(getProductionRowsValidationError([{ ...validRow, starttime: '' }]))
       .toBe('Dòng 1: vui lòng nhập giờ bắt đầu và kết thúc.')
-    expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }]))
+    expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }], new Date(2026, 4, 2, 10, 0)))
       .toBe('Dòng 1: giờ kết thúc phải lớn hơn giờ bắt đầu.')
-    expect(getProductionRowsValidationError([{ ...validRow, poutput: -1 }]))
+    expect(getProductionRowsValidationError([{ ...validRow, poutput: -1 }], new Date(2026, 4, 2, 10, 0)))
       .toBe('Dòng 1: số lượng và nhân sự không được âm.')
+  })
+
+  it('rejects production end time after current local time', () => {
+    const validRow = {
+      pdate: '2026-05-02',
+      pcode: 'LSX-001',
+      products: 'Product A',
+      poutput: 1,
+      eoutput: 0,
+      routput: 0,
+      workforce: 2,
+      starttime: '08:00',
+      endtime: '09:00',
+    }
+    const now = new Date(2026, 4, 2, 10, 0)
+
+    expect(getProductionRowsValidationError([validRow], now)).toBeNull()
+    expect(getProductionRowsValidationError([{ ...validRow, endtime: '11:00' }], now))
+      .toBe('Dòng 1: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.')
+    expect(getProductionRowsValidationError([{ ...validRow, pdate: '2026-05-03' }], now))
+      .toBe('Dòng 1: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.')
+    expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }], now))
+      .toBe('Dòng 1: giờ kết thúc phải lớn hơn giờ bắt đầu.')
   })
 })
