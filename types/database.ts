@@ -222,6 +222,7 @@ export interface Database {
           totalem: number | null
           absent_ids: number[] | null
           transferred_ids: number[] | null
+          transfer_records: Json
           auto_filled: boolean
           auto_filled_at: string | null
           created_at: string
@@ -233,6 +234,7 @@ export interface Database {
           totalem?: number | null
           absent_ids?: number[] | null
           transferred_ids?: number[] | null
+          transfer_records?: Json
           auto_filled?: boolean
           auto_filled_at?: string | null
         }
@@ -240,6 +242,7 @@ export interface Database {
           totalem?: number | null
           absent_ids?: number[] | null
           transferred_ids?: number[] | null
+          transfer_records?: Json
           auto_filled?: boolean
           auto_filled_at?: string | null
           updated_at?: string | null
