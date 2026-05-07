@@ -6,7 +6,12 @@ import { WORKSHOP_CODES } from '@/lib/reports/report-types'
 import type { SessionUser } from '@/types'
 
 const VALID_GROUP_BY: GroupBy[] = ['day', 'week', 'month', 'year', 'hour']
-const VALID_FILTER_BY: FilterBy[] = ['deadline', 'initialdate', 'completed_date']
+const VALID_FILTER_BY: FilterBy[] = ['deadline', 'initialdate', 'production_date', 'completed_date']
+const CANONICAL_FILTER_BY: FilterBy[] = ['deadline', 'initialdate', 'production_date']
+
+export function normalizeReportFilterBy(value: FilterBy): FilterBy {
+  return value === 'completed_date' ? 'production_date' : value
+}
 
 export async function requireAuth() {
   return getSessionUser()
@@ -26,7 +31,8 @@ export function parseReportParams(searchParams: URLSearchParams) {
   const from       = searchParams.get('from') ?? dfltDate(-7)
   const to         = searchParams.get('to')   ?? dfltDate(0)
   const groupBy    = (searchParams.get('groupBy') ?? 'day') as GroupBy
-  const filterBy   = (searchParams.get('filterBy') ?? 'deadline') as FilterBy
+  const rawFilterBy = (searchParams.get('filterBy') ?? 'deadline') as FilterBy
+  const filterBy   = normalizeReportFilterBy(rawFilterBy)
 
   const errors: string[] = []
   if (!['detail', 'comparison'].includes(mode)) errors.push('mode phải là detail hoặc comparison')
@@ -36,8 +42,8 @@ export function parseReportParams(searchParams: URLSearchParams) {
   if (!VALID_GROUP_BY.includes(groupBy)) {
     errors.push(`groupBy không hợp lệ: "${groupBy}". Dùng: ${VALID_GROUP_BY.join(', ')}`)
   }
-  if (!VALID_FILTER_BY.includes(filterBy)) {
-    errors.push(`filterBy không hợp lệ: "${filterBy}". Dùng: ${VALID_FILTER_BY.join(', ')}`)
+  if (!VALID_FILTER_BY.includes(rawFilterBy)) {
+    errors.push(`filterBy không hợp lệ: "${rawFilterBy}". Dùng: ${CANONICAL_FILTER_BY.join(', ')}`)
   }
   if (!isValidDateOnly(from)) errors.push('from phải là ngày hợp lệ YYYY-MM-DD')
   if (!isValidDateOnly(to)) errors.push('to phải là ngày hợp lệ YYYY-MM-DD')

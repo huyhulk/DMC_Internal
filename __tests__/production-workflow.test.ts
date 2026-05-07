@@ -1,6 +1,11 @@
 import type { Order } from '@/types'
 import { compareLocalDateTimeStrings, normalizeLocalDateTimeString } from '@/lib/utils'
-import { isProgressReportCompleted } from '@/lib/reports/report-queries'
+import {
+  getActiveProductionPcodes,
+  isProductionDateProgressFilter,
+  isProgressReportCompleted,
+  normalizeProgressFilterBy,
+} from '@/lib/reports/report-queries'
 import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
@@ -56,6 +61,23 @@ describe('production workflow helpers', () => {
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: false })).toBe('Đang SX')
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 100, quantity: 100, closed: false })).toBe('Đã SX')
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: true })).toBe('Đã SX')
+  })
+
+  it('normalizes old completed-date progress filter to production date', () => {
+    expect(normalizeProgressFilterBy('completed_date')).toBe('production_date')
+    expect(normalizeProgressFilterBy('production_date')).toBe('production_date')
+    expect(isProductionDateProgressFilter('completed_date')).toBe(true)
+    expect(isProductionDateProgressFilter('production_date')).toBe(true)
+    expect(isProductionDateProgressFilter('initialdate')).toBe(false)
+  })
+
+  it('collects active production pcodes from all production save statuses', () => {
+    expect(getActiveProductionPcodes([
+      { pcode: 'LSX-001', save_status: 'draft' },
+      { pcode: 'LSX-002', save_status: 'closed' },
+      { pcode: 'LSX-001', save_status: 'closed' },
+      { pcode: null, save_status: 'draft' },
+    ])).toEqual(['LSX-001', 'LSX-002'])
   })
 
   it('requires progress report completion to come from production quantity', () => {
