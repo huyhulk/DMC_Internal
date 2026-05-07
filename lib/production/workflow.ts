@@ -61,21 +61,48 @@ export function calculateProductionCompletion(quantity: number, produced: number
 }
 
 function buildProductionTimestamp(pdate: string | null, endtime: string | null): string | null {
+  const endDate = buildProductionEndDate(pdate, endtime)
+  if (!endDate) return null
+
+  const year = endDate.getFullYear()
+  const month = String(endDate.getMonth() + 1).padStart(2, '0')
+  const day = String(endDate.getDate()).padStart(2, '0')
+  const hours = String(endDate.getHours()).padStart(2, '0')
+  const minutes = String(endDate.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}:00`
+}
+
+function buildProductionEndDate(pdate: string | null, endtime: string | null): Date | null {
   if (!pdate || !endtime) return null
 
   const date = pdate.trim()
   const time = endtime.trim()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  if (!dateMatch) return null
 
-  const match = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
-  if (!match) return null
+  const timeMatch = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (!timeMatch) return null
 
-  const hours = Number(match[1])
-  const minutes = Number(match[2])
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const day = Number(dateMatch[3])
+  const hours = Number(timeMatch[1])
+  const minutes = Number(timeMatch[2])
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
   if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
 
-  return `${date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`
+  const parsed = new Date(year, month - 1, day, hours, minutes)
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day ||
+    parsed.getHours() !== hours ||
+    parsed.getMinutes() !== minutes
+  ) return null
+
+  return parsed
 }
 
 export function buildProductionDeadlineCutoff(deadline: string | null | undefined): string | null {
@@ -164,7 +191,7 @@ export function isProductionTimeRangeValid(starttime: string, endtime: string): 
   return end > start
 }
 
-export function getProductionRowsValidationError(rows: ProductionInputRow[]): string | null {
+export function getProductionRowsValidationError(rows: ProductionInputRow[], now = new Date()): string | null {
   if (rows.length === 0) return 'Vui lòng chọn ít nhất 1 sản phẩm.'
 
   for (const [index, row] of rows.entries()) {
@@ -177,6 +204,11 @@ export function getProductionRowsValidationError(rows: ProductionInputRow[]): st
     }
     if (!isProductionTimeRangeValid(row.starttime, row.endtime)) {
       return `Dòng ${line}: giờ kết thúc phải lớn hơn giờ bắt đầu.`
+    }
+
+    const productionEnd = buildProductionEndDate(row.pdate, row.endtime)
+    if (productionEnd && productionEnd.getTime() > now.getTime()) {
+      return `Dòng ${line}: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.`
     }
 
     const numericValues = [row.poutput, row.eoutput, row.routput, row.workforce]

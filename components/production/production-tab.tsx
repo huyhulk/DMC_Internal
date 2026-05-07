@@ -27,13 +27,27 @@ import {
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
 import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
-import { cn, formatDate, formatLocalDateTimeString, getTodayLocal, workshopCode } from '@/lib/utils'
+import { cn, formatDate, formatDateTimeDisplay, formatLocalDateTimeString, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
 
 interface Props {
   user: SessionUser
   canEdit: boolean
 }
+
+type ProductionStatusFilter = 'ALL' | 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
+
+interface OpenOrdersTabProps extends Props {
+  refreshSignal: number
+}
+
+const deadlineBadgeClasses = {
+  none: 'border-[#d2d2d7]/70 bg-[#f2f2f7] text-[#6e6e73]',
+  red: 'border-red-200 bg-red-50 text-red-700',
+  orange: 'border-orange-200 bg-orange-50 text-orange-700',
+  yellow: 'border-yellow-200 bg-yellow-50 text-yellow-700',
+  green: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+} as const
 
 const inputCls =
   'w-full h-10 px-3 rounded-xl text-[13px] font-medium ' +
@@ -46,6 +60,7 @@ const inputCls =
 export function ProductionTab({ user, canEdit }: Props) {
   const [activeSubTab, setActiveSubTab] = useState<'open-orders' | 'daily-entry'>('open-orders')
   const [showHistory, setShowHistory] = useState(false)
+  const [refreshSignal, setRefreshSignal] = useState(0)
 
   if (showHistory) {
     return <ProductionInputHistoryTab onBack={() => setShowHistory(false)} />
@@ -68,19 +83,30 @@ export function ProductionTab({ user, canEdit }: Props) {
               Theo dõi lệnh theo ngày tạo
             </SubTabButton>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowHistory(true)}
-            className="h-9 px-3 rounded-xl border border-[#d2d2d7]/70 text-[12px] font-medium text-dmc-primary bg-white hover:bg-[#f2f2f7] active:scale-95 flex items-center justify-center gap-1.5 transition-all duration-150 sm:ml-auto"
-          >
-            <History size={12} />
-            <span>Lịch sử nhập</span>
-          </button>
+          <div className="flex items-center gap-2 sm:ml-auto">
+            <button
+              type="button"
+              onClick={() => setRefreshSignal((value) => value + 1)}
+              disabled={activeSubTab !== 'open-orders'}
+              className="h-9 px-3 rounded-xl border border-[#d2d2d7]/70 text-[12px] font-medium text-[#6e6e73] bg-white hover:bg-[#f2f2f7] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-all duration-150"
+            >
+              <RefreshCw size={12} />
+              <span>Làm mới</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowHistory(true)}
+              className="h-9 px-3 rounded-xl border border-[#d2d2d7]/70 text-[12px] font-medium text-dmc-primary bg-white hover:bg-[#f2f2f7] active:scale-95 flex items-center justify-center gap-1.5 transition-all duration-150"
+            >
+              <History size={12} />
+              <span>Lịch sử nhập</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {activeSubTab === 'open-orders'
-        ? <OpenOrdersTab user={user} canEdit={canEdit} />
+        ? <OpenOrdersTab user={user} canEdit={canEdit} refreshSignal={refreshSignal} />
         : <DailyEntryTab user={user} canEdit={canEdit} />}
     </div>
   )
@@ -103,7 +129,7 @@ function SubTabButton({ active, onClick, children }: { active: boolean; onClick:
   )
 }
 
-function OpenOrdersTab({ user, canEdit }: Props) {
+function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
   const {
     state, visibleRows,
     loadOpenOrders, selectOrder,
@@ -114,25 +140,37 @@ function OpenOrdersTab({ user, canEdit }: Props) {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [workshopFilter, setWorkshopFilter] = useState('ALL')
+  const [statusFilter, setStatusFilter] = useState<ProductionStatusFilter>('ALL')
   const [entryOpen, setEntryOpen] = useState(false)
   const [unlockPcodeOpen, setUnlockPcodeOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'draft' | 'closed'>('draft')
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => { loadOpenOrders() }, [loadOpenOrders])
+  useEffect(() => { loadOpenOrders() }, [loadOpenOrders, refreshSignal])
 
   const allOrders = useMemo(() => state.initData?.orders as OpenProductionOrder[] ?? [], [state.initData?.orders])
   const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => workshopCode(order.workshop)).filter(Boolean))].sort(), [allOrders])
   const submittedPcodes = state.initData?.submittedPcodes ?? []
   const closedPcodes = state.initData?.closedPcodes ?? []
-  const orderCatalog = useMemo(() => {
+  const baseCatalog = useMemo(() => {
     const byWorkshop = workshopFilter === 'ALL'
       ? allOrders
       : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
     return sortProductionOrdersForEntry(filterProductionOrdersByPcode(byWorkshop, searchQuery)) as OpenProductionOrder[]
   }, [allOrders, searchQuery, workshopFilter])
-  const totalRemaining = orderCatalog.reduce((sum, order) => sum + order.remainingQuantity, 0)
+  const kpiCounts = useMemo(() => ({
+    all: baseCatalog.length,
+    notStarted: baseCatalog.filter((order) => isNotStartedOrder(order)).length,
+    inProgress: baseCatalog.filter((order) => isInProgressOrder(order)).length,
+    completed: baseCatalog.filter((order) => isCompletedOrder(order)).length,
+  }), [baseCatalog])
+  const orderCatalog = useMemo(() => {
+    if (statusFilter === 'NOT_STARTED') return baseCatalog.filter((order) => isNotStartedOrder(order))
+    if (statusFilter === 'IN_PROGRESS') return baseCatalog.filter((order) => isInProgressOrder(order))
+    if (statusFilter === 'COMPLETED') return baseCatalog.filter((order) => isCompletedOrder(order))
+    return baseCatalog
+  }, [baseCatalog, statusFilter])
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
@@ -196,7 +234,7 @@ function OpenOrdersTab({ user, canEdit }: Props) {
           Danh sách lệnh sản xuất tháng hiện hành
         </SectionLabel>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(150px,190px)_minmax(220px,1fr)_auto] gap-3 lg:items-end">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(150px,190px)_minmax(220px,300px)_minmax(420px,1fr)] gap-3 lg:items-end">
           <FieldGroup label="Xưởng">
             <select
               value={workshopFilter}
@@ -229,15 +267,31 @@ function OpenOrdersTab({ user, canEdit }: Props) {
             </div>
           </FieldGroup>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="h-10 px-3 rounded-xl bg-white border border-[#d2d2d7]/70 flex flex-col justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Số lệnh</span>
-              <span className="text-[13px] font-semibold text-[#1d1d1f]">{orderCatalog.length}</span>
-            </div>
-            <div className="h-10 px-3 rounded-xl bg-white border border-[#d2d2d7]/70 flex flex-col justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6e73]">Còn lại mở</span>
-              <span className="text-[13px] font-semibold text-[#1d1d1f]">{totalRemaining.toLocaleString('vi-VN')}</span>
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <KpiFilterButton
+              label="Tổng LSX"
+              count={kpiCounts.all}
+              active={statusFilter === 'ALL'}
+              onClick={() => setStatusFilter('ALL')}
+            />
+            <KpiFilterButton
+              label="Chưa SX"
+              count={kpiCounts.notStarted}
+              active={statusFilter === 'NOT_STARTED'}
+              onClick={() => setStatusFilter((current) => current === 'NOT_STARTED' ? 'ALL' : 'NOT_STARTED')}
+            />
+            <KpiFilterButton
+              label="Đang SX"
+              count={kpiCounts.inProgress}
+              active={statusFilter === 'IN_PROGRESS'}
+              onClick={() => setStatusFilter((current) => current === 'IN_PROGRESS' ? 'ALL' : 'IN_PROGRESS')}
+            />
+            <KpiFilterButton
+              label="HT"
+              count={kpiCounts.completed}
+              active={statusFilter === 'COMPLETED'}
+              onClick={() => setStatusFilter((current) => current === 'COMPLETED' ? 'ALL' : 'COMPLETED')}
+            />
           </div>
         </div>
       </div>
@@ -299,6 +353,36 @@ function OpenOrdersTab({ user, canEdit }: Props) {
         />
       )}
     </div>
+  )
+}
+
+function KpiFilterButton({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string
+  count: number
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'h-10 px-3 rounded-xl border flex flex-col justify-center text-left transition-all duration-150 active:scale-[0.98]',
+        active
+          ? 'bg-dmc-primary text-white border-dmc-primary shadow-[0_6px_16px_rgba(0,122,255,0.18)]'
+          : 'bg-white border-[#d2d2d7]/70 text-[#1d1d1f] hover:border-dmc-primary/35 hover:bg-[#f5f9ff] shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
+      )}
+    >
+      <span className={cn('text-[10px] font-semibold uppercase tracking-wide', active ? 'text-white/75' : 'text-[#6e6e73]')}>
+        {label}
+      </span>
+      <span className="text-[13px] font-semibold">{count.toLocaleString('vi-VN')}</span>
+    </button>
   )
 }
 
@@ -619,12 +703,13 @@ function OrderCatalog({
 
   return (
     <div className="space-y-2">
-      <div className="hidden md:grid grid-cols-[minmax(150px,0.9fr)_minmax(160px,1fr)_minmax(220px,1.7fr)_100px_120px] gap-3 px-3 text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73]">
+      <div className="hidden md:grid grid-cols-[minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(200px,1.4fr)_minmax(115px,0.75fr)_90px_120px] gap-3 px-3 text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73]">
         <span>Lệnh sản xuất</span>
         <span>Khách hàng</span>
         <span>Diễn giải</span>
+        <span>Deadline</span>
         <span className="text-right">Số lượng</span>
-          <span>Tiến độ</span>
+        <span>Tiến độ</span>
       </div>
 
       {orders.map((order) => (
@@ -668,7 +753,7 @@ function OrderRow({
           : 'border-[#d2d2d7]/60'
       )}
     >
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(150px,0.9fr)_minmax(160px,1fr)_minmax(220px,1.7fr)_100px_120px] gap-2 md:gap-3 md:items-center">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(200px,1.4fr)_minmax(115px,0.75fr)_90px_120px] gap-2 md:gap-3 md:items-center">
         <div className="min-w-0">
           <MobileLabel>Lệnh sản xuất</MobileLabel>
           <div className="flex items-center gap-2 min-w-0">
@@ -693,6 +778,11 @@ function OrderRow({
         <div className="min-w-0">
           <MobileLabel>Diễn giải</MobileLabel>
           <p className="text-[12px] text-[#6e6e73] md:truncate leading-relaxed">{order.description || '—'}</p>
+        </div>
+
+        <div>
+          <MobileLabel>Deadline</MobileLabel>
+          <DeadlineBadge order={order} />
         </div>
 
         <div>
@@ -726,6 +816,82 @@ function OrderRow({
 
 function isOpenProductionOrderRow(order: Order): order is OpenProductionOrder {
   return 'completionPct' in order && 'producedQuantity' in order && 'remainingQuantity' in order
+}
+
+function getOrderStatusKey(order: OpenProductionOrder): ProductionStatusFilter {
+  const rank = getProductionOrderStatusRank(order.status)
+  if (rank === 0) return 'NOT_STARTED'
+  if (rank === 1 || order.completionPct >= 100) return 'COMPLETED'
+  return 'IN_PROGRESS'
+}
+
+function isNotStartedOrder(order: OpenProductionOrder): boolean {
+  return getOrderStatusKey(order) === 'NOT_STARTED'
+}
+
+function isInProgressOrder(order: OpenProductionOrder): boolean {
+  return getOrderStatusKey(order) === 'IN_PROGRESS'
+}
+
+function isCompletedOrder(order: OpenProductionOrder): boolean {
+  return getOrderStatusKey(order) === 'COMPLETED'
+}
+
+function DeadlineBadge({ order }: { order: Order }) {
+  const label = formatDateTimeDisplay(order.deadlinedate, order.deadlinetime) || '—'
+  const color = getDeadlineColor(order.deadlinedate, order.deadlinetime)
+
+  return (
+    <span className={cn(
+      'inline-flex min-h-6 items-center rounded-lg border px-2 py-1 text-[11px] font-semibold leading-tight',
+      deadlineBadgeClasses[color]
+    )}>
+      {label}
+    </span>
+  )
+}
+
+function getDeadlineColor(date: string | null | undefined, time?: string | null): keyof typeof deadlineBadgeClasses {
+  const deadline = parseDeadlineDate(date, time)
+  if (!deadline) return 'none'
+
+  const hoursRemaining = (deadline.getTime() - Date.now()) / 3_600_000
+  if (hoursRemaining < 1) return 'red'
+  if (hoursRemaining < 2) return 'orange'
+  if (hoursRemaining < 4) return 'yellow'
+  return 'green'
+}
+
+function parseDeadlineDate(date: string | null | undefined, time?: string | null): Date | null {
+  if (!date) return null
+
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim())
+  if (!dateMatch) return null
+
+  const timeValue = time?.trim()
+  if (!timeValue) return null
+
+  const timeMatch = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(timeValue)
+  if (!timeMatch) return null
+
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const day = Number(dateMatch[3])
+  const hours = Number(timeMatch[1])
+  const minutes = Number(timeMatch[2])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+
+  const parsed = new Date(year, month - 1, day, hours, minutes)
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day ||
+    parsed.getHours() !== hours ||
+    parsed.getMinutes() !== minutes
+  ) return null
+
+  return parsed
 }
 
 function ProductionEntryDialog({
