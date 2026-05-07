@@ -163,6 +163,18 @@ export function isProgressReportCompleted(completionPct: number): boolean {
   return completionPct >= 100
 }
 
+export function normalizeProgressFilterBy(filterBy: FilterBy): FilterBy {
+  return filterBy === 'completed_date' ? 'production_date' : filterBy
+}
+
+export function isProductionDateProgressFilter(filterBy: FilterBy): boolean {
+  return normalizeProgressFilterBy(filterBy) === 'production_date'
+}
+
+export function getActiveProductionPcodes(rows: Array<{ pcode: string | null; [key: string]: unknown }>): string[] {
+  return [...new Set(rows.map((row) => row.pcode).filter(Boolean))] as string[]
+}
+
 export async function queryProgress(
   workshopId: WorkshopCode | null,
   from: string,
@@ -209,15 +221,17 @@ export async function queryProgress(
 
   let periodProductionRows: ProgressProductionRow[] | null = null
 
-  if (filterBy === 'completed_date') {
+  const progressFilterBy = normalizeProgressFilterBy(filterBy)
+
+  if (isProductionDateProgressFilter(progressFilterBy)) {
     const { data: prodRows } = await supabase
-      .from('Production').select('pcode,poutput,pdate,endtime')
+      .from('Production').select('pcode,poutput,pdate,endtime,save_status')
       .gte('pdate', from).lte('pdate', to) as { data: ProgressProductionRow[] | null }
     periodProductionRows = prodRows ?? []
-    const activePcodes = [...new Set(periodProductionRows.map((r) => r.pcode).filter(Boolean))] as string[]
+    const activePcodes = getActiveProductionPcodes(periodProductionRows)
     if (activePcodes.length === 0) return emptyResult()
     dataQuery = dataQuery.in('PCODE', activePcodes)
-  } else if (filterBy === 'initialdate') {
+  } else if (progressFilterBy === 'initialdate') {
     dataQuery = dataQuery.gte('INITIALDATE', from).lte('INITIALDATE', to)
   } else {
     // default: deadline

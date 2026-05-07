@@ -33,10 +33,16 @@ const GROUP_BY_OPTS: { value: GroupBy; label: string; requiresShortRange?: boole
 ]
 
 const FILTER_BY_OPTS: { value: FilterBy; label: string }[] = [
-  { value: 'deadline',       label: 'Theo deadline' },
-  { value: 'initialdate',    label: 'Theo ngày SX' },
-  { value: 'completed_date', label: 'Đã có SX' },
+  { value: 'production_date', label: 'Theo ngày SX' },
+  { value: 'deadline',        label: 'Theo deadline' },
+  { value: 'initialdate',     label: 'Theo ngày tạo lệnh' },
 ]
+
+function normalizeDashboardFilterBy(value: string | null): FilterBy {
+  if (value === 'completed_date') return 'production_date'
+  if (value === 'deadline' || value === 'initialdate' || value === 'production_date') return value
+  return 'production_date'
+}
 
 function daysBetween(from: string, to: string) {
   return Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
@@ -157,8 +163,8 @@ export function ReportDashboard() {
   const [to, setTo]               = useState(format(new Date(), 'yyyy-MM-dd'))
   const [groupBy, setGroupBy]     = useState<GroupBy>('day')
   const [filterBy, setFilterBy]   = useState<FilterBy>(() => {
-    if (typeof window === 'undefined') return 'initialdate'
-    return (localStorage.getItem('report_filterBy') as FilterBy) ?? 'initialdate'
+    if (typeof window === 'undefined') return 'production_date'
+    return normalizeDashboardFilterBy(localStorage.getItem('report_filterBy'))
   })
 
   const handleFilterBy = (v: FilterBy) => {
