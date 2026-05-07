@@ -1,7 +1,7 @@
 import { addDays, parse } from 'date-fns'
 import { createClient } from '@/lib/supabase/server'
 import { formatDate, normalizeLocalDateTimeString, normalizeWorkshop, workshopCode } from '@/lib/utils'
-import { calculateProductionCompletion } from '@/lib/production/workflow'
+import { calculateProductionCompletion, buildProductionDeadlineCutoff } from '@/lib/production/workflow'
 import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
 import { shouldShowOpenProductionOrder } from '@/lib/production/status'
 
@@ -169,14 +169,14 @@ function formatCreatedAtAsLocalTimestamp(createdAt: string | null | undefined): 
 }
 
 export function compareDeadline(date: string, time: string | null | undefined, createdAt: string | null | undefined, deadline: string | null | undefined): boolean {
-  const normalizedDeadline = normalizeLocalDateTimeString(deadline)
-  if (!normalizedDeadline) return false
+  const deadlineCutoff = buildProductionDeadlineCutoff(deadline)
+  if (!deadlineCutoff) return false
 
   const actual = time
     ? `${date}T${time.substring(0, 5)}:00`
     : formatCreatedAtAsLocalTimestamp(createdAt)
   if (!actual) return false
-  return actual <= normalizedDeadline
+  return actual <= deadlineCutoff
 }
 
 function buildPcodeOutputMap(rows: ProductionRow[]): Map<string, number> {

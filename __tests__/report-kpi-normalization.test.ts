@@ -1,5 +1,5 @@
 import { wsNormalize, productionCompletionTimestamp } from '@/lib/kpi/queries'
-import { getOrderProductionDate, resolveReportWorkshop } from '@/lib/reports/report-queries'
+import { getOrderProductionDate, isProductionCompletionLate, resolveReportWorkshop } from '@/lib/reports/report-queries'
 
 describe('report workshop normalization', () => {
   it('does not count empty or unknown workshops as DMC1', () => {
@@ -20,6 +20,12 @@ describe('report workshop normalization', () => {
       { pdate: '2026-05-06', poutput: 10 },
       { pdate: '2026-05-07', poutput: 5 },
     ])).toBe('2026-05-07')
+  })
+
+  it('evaluates completed production against 16:30 deadline cutoff', () => {
+    expect(isProductionCompletionLate('2026-05-07T16:00:00', '2026-05-07T14:00:00')).toBe(false)
+    expect(isProductionCompletionLate('2026-05-07T16:30:00', '2026-05-07T14:00:00')).toBe(false)
+    expect(isProductionCompletionLate('2026-05-07T16:31:00', '2026-05-07T14:00:00')).toBe(true)
   })
 })
 
