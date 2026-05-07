@@ -20,7 +20,8 @@ import { format, startOfMonth, startOfYear, endOfMonth, parse, getYear } from 'd
 import * as XLSX from 'xlsx'
 import { Search, Download } from 'lucide-react'
 import { useReportData, type ReportType } from '@/hooks/use-report-data'
-import { cn, formatDate, formatMonthDisplay, parseDisplayDate, parseDisplayMonth } from '@/lib/utils'
+import { VietnameseDatePicker, VietnameseMonthPicker } from '@/components/ui/vietnamese-date-picker'
+import { cn, formatDate } from '@/lib/utils'
 import type { ProductionReportRow, FactoryKey } from '@/types'
 import { WORKSHOP_LABELS } from '@/types'
 
@@ -435,91 +436,17 @@ function FilterInput({
     )
   if (type === 'day')
     return (
-      <DisplayDateInput value={value} onChange={onChange} className={filterInputCls} />
+      <VietnameseDatePicker value={value} onChange={onChange} className={filterInputCls} />
     )
   if (type === 'month')
     return (
-      <DisplayMonthInput value={value} onChange={onChange} className={filterInputCls} />
+      <VietnameseMonthPicker value={value} onChange={onChange} className={filterInputCls} />
     )
   // year
   return (
     <input type="number" value={value} min={2020} max={2099}
       onChange={(e) => onChange(e.target.value)}
       className={cn(filterInputCls, 'w-24')} />
-  )
-}
-
-function DisplayDateInput({
-  value,
-  onChange,
-  className,
-}: {
-  value: string
-  onChange: (value: string) => void
-  className?: string
-}) {
-  const [displayValue, setDisplayValue] = useState(formatDate(value))
-
-  useEffect(() => {
-    setDisplayValue(formatDate(value))
-  }, [value])
-
-  function commit(nextDisplayValue: string) {
-    const parsed = parseDisplayDate(nextDisplayValue)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(parsed)) onChange(parsed)
-    else setDisplayValue(formatDate(value))
-  }
-
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={displayValue}
-      placeholder="dd/MM/yyyy"
-      onChange={(e) => setDisplayValue(e.target.value)}
-      onBlur={(e) => commit(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-      }}
-      className={className}
-    />
-  )
-}
-
-function DisplayMonthInput({
-  value,
-  onChange,
-  className,
-}: {
-  value: string
-  onChange: (value: string) => void
-  className?: string
-}) {
-  const [displayValue, setDisplayValue] = useState(formatMonthDisplay(value))
-
-  useEffect(() => {
-    setDisplayValue(formatMonthDisplay(value))
-  }, [value])
-
-  function commit(nextDisplayValue: string) {
-    const parsed = parseDisplayMonth(nextDisplayValue)
-    if (/^\d{4}-\d{2}$/.test(parsed)) onChange(parsed)
-    else setDisplayValue(formatMonthDisplay(value))
-  }
-
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={displayValue}
-      placeholder="MM/yyyy"
-      onChange={(e) => setDisplayValue(e.target.value)}
-      onBlur={(e) => commit(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-      }}
-      className={className}
-    />
   )
 }
 

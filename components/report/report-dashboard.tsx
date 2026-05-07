@@ -3,7 +3,8 @@
 import { useState, useCallback, useEffect } from 'react'
 import { format } from 'date-fns'
 import { Search, BarChart2, Layers } from 'lucide-react'
-import { cn, formatDate, parseDisplayDate } from '@/lib/utils'
+import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
+import { cn } from '@/lib/utils'
 import type { ReportMode, WorkshopCode, GroupBy, FilterBy } from '@/lib/reports/report-types'
 import { WORKSHOP_CODES, WORKSHOP_LABEL } from '@/lib/reports/report-types'
 import { ProgressDetail, ProgressComparison } from './sections/progress-section'
@@ -62,11 +63,11 @@ function FilterBar({
     <div className="flex flex-wrap items-end gap-3 p-4 bg-white rounded-2xl border border-[#d2d2d7]/60 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Từ</label>
-        <DisplayDateInput value={from} onChange={onFrom} className={inp} />
+        <VietnameseDatePicker value={from} onChange={onFrom} className={inp} />
       </div>
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Đến</label>
-        <DisplayDateInput value={to} onChange={onTo} className={inp} />
+        <VietnameseDatePicker value={to} onChange={onTo} className={inp} />
       </div>
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Nhóm theo</label>
@@ -114,43 +115,6 @@ function FilterBar({
         </button>
       </div>
     </div>
-  )
-}
-
-function DisplayDateInput({
-  value,
-  onChange,
-  className,
-}: {
-  value: string
-  onChange: (value: string) => void
-  className?: string
-}) {
-  const [displayValue, setDisplayValue] = useState(formatDate(value))
-
-  useEffect(() => {
-    setDisplayValue(formatDate(value))
-  }, [value])
-
-  function commit(nextDisplayValue: string) {
-    const parsed = parseDisplayDate(nextDisplayValue)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(parsed)) onChange(parsed)
-    else setDisplayValue(formatDate(value))
-  }
-
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={displayValue}
-      placeholder="dd/MM/yyyy"
-      onChange={(e) => setDisplayValue(e.target.value)}
-      onBlur={(e) => commit(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-      }}
-      className={className}
-    />
   )
 }
 
