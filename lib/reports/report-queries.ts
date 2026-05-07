@@ -175,6 +175,13 @@ export function getActiveProductionPcodes(rows: Array<{ pcode: string | null; [k
   return [...new Set(rows.map((row) => row.pcode).filter(Boolean))] as string[]
 }
 
+export function getOrderProductionDate(rows: Array<{ pdate: string | null; poutput: number | null }>): string {
+  return rows
+    .filter((row) => row.pdate && (row.poutput ?? 0) > 0)
+    .map((row) => row.pdate as string)
+    .sort((a, b) => b.localeCompare(a))[0] ?? ''
+}
+
 export async function queryProgress(
   workshopId: WorkshopCode | null,
   from: string,
@@ -294,6 +301,9 @@ export async function queryProgress(
     const isCompleted = isProgressReportCompleted(completion.completionPct)
     const completionPct = completion.completionPct
     const completionAt = calculateProductionCompletionTime(qty, productionRowsByPcode.get(r.PCODE) ?? [])
+    const productionDate = getOrderProductionDate(periodProductionRows
+      ? (periodProductionRows.filter((row) => row.pcode === r.PCODE))
+      : (productionRowsByPcode.get(r.PCODE) ?? []))
     const deadlineLocal = normalizeLocalDateTimeString(r.DEADLINEDATE)
     const completionDeadlineComparison = compareLocalDateTimeStrings(completionAt, r.DEADLINEDATE)
 
@@ -313,6 +323,7 @@ export async function queryProgress(
       customer:      r.CUSTOMER ?? '',
       quantity:      qty > 0 ? String(qty) : '',
       initialdate:   r.INITIALDATE ?? '',
+      productionDate,
       deadlinedate:  dlStr.substring(0, 10),
       deadlinetime:  dlStr.includes('T') ? dlStr.substring(11, 16) : '',
       status,

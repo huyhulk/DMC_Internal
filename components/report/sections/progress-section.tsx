@@ -112,7 +112,7 @@ export function ProgressDetail({ orders, summary }: {
                 <td className="px-3 py-2 font-mono font-semibold text-[#3b5bdb]">{o.pcode}</td>
                 <td className="px-3 py-2 max-w-[200px] truncate">{o.description}</td>
                 <td className="px-3 py-2 text-[#6e6e73]">{o.customer}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{apiDateToDisplay(o.initialdate)}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{apiDateToDisplay(o.productionDate) || '—'}</td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   {formatDateTimeDisplay(o.deadlinedate, o.deadlinetime) || '—'}
                 </td>

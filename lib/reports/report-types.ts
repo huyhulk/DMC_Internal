@@ -80,6 +80,7 @@ export interface OrderStatus {
   customer:      string
   quantity:      string
   initialdate:   string
+  productionDate: string
   deadlinedate:  string
   deadlinetime:  string
   status:        OrderStatusCode

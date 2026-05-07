@@ -1,5 +1,5 @@
 import { wsNormalize, productionCompletionTimestamp } from '@/lib/kpi/queries'
-import { resolveReportWorkshop } from '@/lib/reports/report-queries'
+import { getOrderProductionDate, resolveReportWorkshop } from '@/lib/reports/report-queries'
 
 describe('report workshop normalization', () => {
   it('does not count empty or unknown workshops as DMC1', () => {
@@ -13,6 +13,13 @@ describe('report workshop normalization', () => {
     expect(resolveReportWorkshop('Phân xưởng 3 - Cửa')).toBe('DMC3')
     expect(resolveReportWorkshop('Phân xưởng 4')).toBe('DMC4')
     expect(resolveReportWorkshop('Phân xưởng 5')).toBe('DMC5')
+  })
+  it('uses actual Production.pdate for progress Ngày SX', () => {
+    expect(getOrderProductionDate([
+      { pdate: '2026-05-05', poutput: 0 },
+      { pdate: '2026-05-06', poutput: 10 },
+      { pdate: '2026-05-07', poutput: 5 },
+    ])).toBe('2026-05-07')
   })
 })
 
