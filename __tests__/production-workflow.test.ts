@@ -1,5 +1,6 @@
 import type { Order } from '@/types'
 import { compareLocalDateTimeStrings, normalizeLocalDateTimeString } from '@/lib/utils'
+import { isProgressReportCompleted } from '@/lib/reports/report-queries'
 import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
@@ -55,6 +56,12 @@ describe('production workflow helpers', () => {
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: false })).toBe('Đang SX')
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 100, quantity: 100, closed: false })).toBe('Đã SX')
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: true })).toBe('Đã SX')
+  })
+
+  it('requires progress report completion to come from production quantity', () => {
+    expect(isProgressReportCompleted(calculateProductionCompletion(100, 0).completionPct)).toBe(false)
+    expect(isProgressReportCompleted(calculateProductionCompletion(100, 99).completionPct)).toBe(false)
+    expect(isProgressReportCompleted(calculateProductionCompletion(100, 100).completionPct)).toBe(true)
   })
 
   it('detects open production orders from effective status and completion metadata', () => {
