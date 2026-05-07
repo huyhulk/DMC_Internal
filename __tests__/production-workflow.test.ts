@@ -44,9 +44,9 @@ function order(pcode: string, status: string): Order {
 describe('production workflow helpers', () => {
   it('ranks production statuses in data-entry priority order', () => {
     expect(getProductionOrderStatusRank('Chua san xuat')).toBe(0)
-    expect(getProductionOrderStatusRank('Da SX')).toBe(1)
-    expect(getProductionOrderStatusRank('Da giao')).toBe(2)
-    expect(getProductionOrderStatusRank('Dang san xuat')).toBe(3)
+    expect(getProductionOrderStatusRank('Dang san xuat')).toBe(1)
+    expect(getProductionOrderStatusRank('Da SX')).toBe(2)
+    expect(getProductionOrderStatusRank('Da giao')).toBe(3)
   })
 
   it('treats delivered source status as closed but not completed production status', () => {
@@ -124,7 +124,7 @@ describe('production workflow helpers', () => {
       order('LSX-000', 'Dang san xuat'),
     ])
 
-    expect(sorted.map((o) => o.pcode)).toEqual(['LSX-002', 'LSX-003', 'LSX-004', 'LSX-000', 'LSX-001'])
+    expect(sorted.map((o) => o.pcode)).toEqual(['LSX-002', 'LSX-000', 'LSX-001', 'LSX-003', 'LSX-004'])
   })
 
   it('filters order catalog by production code case-insensitively', () => {

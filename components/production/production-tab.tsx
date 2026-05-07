@@ -152,7 +152,7 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
   const allOrders = useMemo(() => state.initData?.orders as OpenProductionOrder[] ?? [], [state.initData?.orders])
   const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => workshopCode(order.workshop)).filter(Boolean))].sort(), [allOrders])
   const submittedPcodes = state.initData?.submittedPcodes ?? []
-  const closedPcodes = state.initData?.closedPcodes ?? []
+  const closedPcodes = useMemo(() => state.initData?.closedPcodes ?? [], [state.initData?.closedPcodes])
   const baseCatalog = useMemo(() => {
     const byWorkshop = workshopFilter === 'ALL'
       ? allOrders
@@ -163,14 +163,26 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
     all: baseCatalog.length,
     notStarted: baseCatalog.filter((order) => isNotStartedOrder(order)).length,
     inProgress: baseCatalog.filter((order) => isInProgressOrder(order)).length,
-    completed: baseCatalog.filter((order) => isCompletedOrder(order)).length,
-  }), [baseCatalog])
+    completed: baseCatalog.filter((order) => closedPcodes.includes(order.pcode)).length,
+  }), [baseCatalog, closedPcodes])
+  const kpiItems: Array<{
+    label: string
+    value: number
+    filter: ProductionStatusFilter
+    color: string
+    activeColor: string
+  }> = [
+    { label: 'Tổng LSX', value: kpiCounts.all, filter: 'ALL', color: 'text-[#1d1d1f]', activeColor: 'bg-[#1d1d1f]/8 border-[#1d1d1f]/20' },
+    { label: 'Chưa SX', value: kpiCounts.notStarted, filter: 'NOT_STARTED', color: 'text-[#007aff]', activeColor: 'bg-[#007aff]/10 border-[#007aff]/25' },
+    { label: 'Đang SX', value: kpiCounts.inProgress, filter: 'IN_PROGRESS', color: 'text-[#b37700]', activeColor: 'bg-[#ff9500]/10 border-[#ff9500]/30' },
+    { label: 'HT', value: kpiCounts.completed, filter: 'COMPLETED', color: 'text-[#2f9e44]', activeColor: 'bg-[#34c759]/15 border-[#2f9e44]/30' },
+  ]
   const orderCatalog = useMemo(() => {
     if (statusFilter === 'NOT_STARTED') return baseCatalog.filter((order) => isNotStartedOrder(order))
     if (statusFilter === 'IN_PROGRESS') return baseCatalog.filter((order) => isInProgressOrder(order))
-    if (statusFilter === 'COMPLETED') return baseCatalog.filter((order) => isCompletedOrder(order))
+    if (statusFilter === 'COMPLETED') return baseCatalog.filter((order) => closedPcodes.includes(order.pcode))
     return baseCatalog
-  }, [baseCatalog, statusFilter])
+  }, [baseCatalog, closedPcodes, statusFilter])
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
@@ -268,30 +280,20 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
           </FieldGroup>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <KpiFilterButton
-              label="Tổng LSX"
-              count={kpiCounts.all}
-              active={statusFilter === 'ALL'}
-              onClick={() => setStatusFilter('ALL')}
-            />
-            <KpiFilterButton
-              label="Chưa SX"
-              count={kpiCounts.notStarted}
-              active={statusFilter === 'NOT_STARTED'}
-              onClick={() => setStatusFilter((current) => current === 'NOT_STARTED' ? 'ALL' : 'NOT_STARTED')}
-            />
-            <KpiFilterButton
-              label="Đang SX"
-              count={kpiCounts.inProgress}
-              active={statusFilter === 'IN_PROGRESS'}
-              onClick={() => setStatusFilter((current) => current === 'IN_PROGRESS' ? 'ALL' : 'IN_PROGRESS')}
-            />
-            <KpiFilterButton
-              label="HT"
-              count={kpiCounts.completed}
-              active={statusFilter === 'COMPLETED'}
-              onClick={() => setStatusFilter((current) => current === 'COMPLETED' ? 'ALL' : 'COMPLETED')}
-            />
+            {kpiItems.map(({ label, value, filter, color, activeColor }) => {
+              const isActive = statusFilter === filter
+              return (
+                <KpiFilterButton
+                  key={filter}
+                  label={label}
+                  count={value}
+                  active={isActive}
+                  color={color}
+                  activeColor={activeColor}
+                  onClick={() => setStatusFilter((current) => current === filter && filter !== 'ALL' ? 'ALL' : filter)}
+                />
+              )
+            })}
           </div>
         </div>
       </div>
@@ -360,11 +362,15 @@ function KpiFilterButton({
   label,
   count,
   active,
+  color,
+  activeColor,
   onClick,
 }: {
   label: string
   count: number
   active: boolean
+  color: string
+  activeColor: string
   onClick: () => void
 }) {
   return (
@@ -372,16 +378,14 @@ function KpiFilterButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'h-10 px-3 rounded-xl border flex flex-col justify-center text-left transition-all duration-150 active:scale-[0.98]',
+        'flex flex-col items-center min-w-[72px] px-3 py-2 rounded-xl border transition-all cursor-pointer select-none active:scale-[0.97]',
         active
-          ? 'bg-dmc-primary text-white border-dmc-primary shadow-[0_6px_16px_rgba(0,122,255,0.18)]'
-          : 'bg-white border-[#d2d2d7]/70 text-[#1d1d1f] hover:border-dmc-primary/35 hover:bg-[#f5f9ff] shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
+          ? cn('shadow-sm', activeColor)
+          : 'bg-[#f2f2f7] border-transparent hover:border-[#d2d2d7]'
       )}
     >
-      <span className={cn('text-[10px] font-semibold uppercase tracking-wide', active ? 'text-white/75' : 'text-[#6e6e73]')}>
-        {label}
-      </span>
-      <span className="text-[13px] font-semibold">{count.toLocaleString('vi-VN')}</span>
+      <span className={cn('text-[20px] font-bold leading-none', color)}>{count.toLocaleString('vi-VN')}</span>
+      <span className="mt-1 text-[11px] text-[#6e6e73] leading-none">{label}</span>
     </button>
   )
 }
