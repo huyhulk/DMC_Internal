@@ -825,7 +825,8 @@ function isOpenProductionOrderRow(order: Order): order is OpenProductionOrder {
 function getOrderStatusKey(order: OpenProductionOrder): ProductionStatusFilter {
   const rank = getProductionOrderStatusRank(order.status)
   if (rank === 0) return 'NOT_STARTED'
-  if (rank === 1 || order.completionPct >= 100) return 'COMPLETED'
+  if (rank === 1) return 'IN_PROGRESS'
+  if (rank === 2 || order.completionPct >= 100) return 'COMPLETED'
   return 'IN_PROGRESS'
 }
 
