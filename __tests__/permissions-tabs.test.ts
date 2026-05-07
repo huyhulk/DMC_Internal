@@ -1,4 +1,7 @@
-import { USER_ROLES } from '@/types'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
+import { HR_DAILY_GROUPS, USER_ROLES } from '@/types'
 import {
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_KEYS,
@@ -37,6 +40,17 @@ describe('role tab permissions', () => {
     expect(canEditLevel('invisible')).toBe(false)
     expect(canEditLevel('view')).toBe(false)
     expect(canEditLevel('edit')).toBe(true)
+  })
+
+  it('keeps the hr_daily database constraint aligned with HR daily groups', () => {
+    const migration = readFileSync(
+      join(process.cwd(), 'supabase/migrations/036_expand_hr_daily_factory_constraint.sql'),
+      'utf8'
+    )
+
+    for (const group of HR_DAILY_GROUPS) {
+      expect(migration).toContain(`'${group}'`)
+    }
   })
 
   it('recognizes every declared permission key and rejects unknown keys', () => {
