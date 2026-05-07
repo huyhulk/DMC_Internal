@@ -244,8 +244,10 @@ function getLockedProductionPcodes(
   return getClosedPcodesFromProduction(rows, quantityByPcode)
 }
 
-function getLocalMonthStart(dateString: string): string {
-  return `${dateString.slice(0, 7)}-01`
+function getLocalPreviousMonthStart(dateString: string): string {
+  const year = Number(dateString.slice(0, 4))
+  const monthIndex = Number(dateString.slice(5, 7)) - 1
+  return new Date(year, monthIndex - 1, 1).toLocaleDateString('en-CA')
 }
 
 async function autoCloseCompletedProductionOrders(
@@ -294,7 +296,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const userWorkspaces = getUserWorkspaces(rawWorkspace ?? '')
 
     const today = getTodayLocal()
-    const fromDate = getLocalMonthStart(today)
+    const fromDate = getLocalPreviousMonthStart(today)
 
     const [norms, materials, dataRes] = await Promise.all([
       getCachedNorms(),
