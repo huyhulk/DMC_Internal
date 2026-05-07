@@ -26,7 +26,8 @@ import {
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
-import { cn, formatDate, formatLocalDateTimeString, getTodayLocal, parseDisplayDate, workshopCode } from '@/lib/utils'
+import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
+import { cn, formatDate, formatLocalDateTimeString, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
 
 interface Props {
@@ -435,7 +436,7 @@ function DailyEntryTab({ user, canEdit }: Props) {
 
         <div className="grid grid-cols-1 sm:grid-cols-[minmax(150px,190px)_minmax(150px,190px)_minmax(220px,1fr)] gap-3">
           <FieldGroup label="Ngày lập phiếu">
-            <DisplayDateInput
+            <VietnameseDatePicker
               value={state.selectedDate}
               onChange={loadData}
               className={inputCls}
@@ -917,10 +918,10 @@ function ProductionInputHistoryTab({ onBack }: { onBack: () => void }) {
 
         <div className="grid grid-cols-1 sm:grid-cols-[150px_150px_minmax(220px,1fr)_auto_auto] gap-2">
           <FieldGroup label="Từ ngày">
-            <DisplayDateInput value={fromDate} onChange={setFromDate} className={inputCls} />
+            <VietnameseDatePicker value={fromDate} onChange={setFromDate} className={inputCls} />
           </FieldGroup>
           <FieldGroup label="Đến ngày">
-            <DisplayDateInput value={toDate} onChange={setToDate} className={inputCls} />
+            <VietnameseDatePicker value={toDate} onChange={setToDate} className={inputCls} />
           </FieldGroup>
           <FieldGroup label="Tìm kiếm">
             <input
@@ -1093,43 +1094,6 @@ function FieldGroup({
       </div>
       {children}
     </div>
-  )
-}
-
-function DisplayDateInput({
-  value,
-  onChange,
-  className,
-}: {
-  value: string
-  onChange: (value: string) => void
-  className?: string
-}) {
-  const [displayValue, setDisplayValue] = useState(formatDate(value))
-
-  useEffect(() => {
-    setDisplayValue(formatDate(value))
-  }, [value])
-
-  function commit(nextDisplayValue: string) {
-    const parsed = parseDisplayDate(nextDisplayValue)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(parsed)) onChange(parsed)
-    else setDisplayValue(formatDate(value))
-  }
-
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={displayValue}
-      placeholder="dd/MM/yyyy"
-      onChange={(e) => setDisplayValue(e.target.value)}
-      onBlur={(e) => commit(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-      }}
-      className={className}
-    />
   )
 }
 

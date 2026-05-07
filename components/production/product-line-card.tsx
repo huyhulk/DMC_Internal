@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { cn, formatDate, getTodayLocal, parseDisplayDate } from '@/lib/utils'
+import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
+import { cn, getTodayLocal } from '@/lib/utils'
 import type { NormItem, ProductLine } from '@/types'
 
 interface Props {
@@ -58,7 +59,7 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
         </FieldGroup>
 
         <FieldGroup label="Ngày sản xuất">
-          <DisplayDateInput
+          <VietnameseDatePicker
             value={line.pdate || getTodayLocal()}
             onChange={(value) => onChange('pdate', value)}
             disabled={disabled}
@@ -148,46 +149,6 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
       </label>
       {children}
     </div>
-  )
-}
-
-function DisplayDateInput({
-  value,
-  onChange,
-  disabled,
-  className,
-}: {
-  value: string
-  onChange: (value: string) => void
-  disabled?: boolean
-  className?: string
-}) {
-  const [displayValue, setDisplayValue] = useState(formatDate(value))
-
-  useEffect(() => {
-    setDisplayValue(formatDate(value))
-  }, [value])
-
-  function commit(nextDisplayValue: string) {
-    const parsed = parseDisplayDate(nextDisplayValue)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(parsed)) onChange(parsed)
-    else setDisplayValue(formatDate(value))
-  }
-
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={displayValue}
-      placeholder="dd/MM/yyyy"
-      disabled={disabled}
-      onChange={(e) => setDisplayValue(e.target.value)}
-      onBlur={(e) => commit(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-      }}
-      className={className}
-    />
   )
 }
 
