@@ -7,6 +7,7 @@ import {
   normalizeProgressFilterBy,
 } from '@/lib/reports/report-queries'
 import {
+  buildProductionDeadlineCutoff,
   calculateProductionCompletion,
   calculateProductionCompletionTime,
   filterProductionOrdersByPcode,
@@ -149,6 +150,14 @@ describe('production workflow helpers', () => {
 
   it('detects production completion after local deadline as late', () => {
     expect(compareLocalDateTimeStrings('2026-05-06T15:01:00', '2026-05-06T15:00:00')).toBeGreaterThan(0)
+  })
+
+  it('builds production deadline cutoff at 16:30 on the deadline date', () => {
+    expect(buildProductionDeadlineCutoff('2026-05-07T14:00:00')).toBe('2026-05-07T16:30:00')
+    expect(buildProductionDeadlineCutoff('2026-05-07 14:00:00')).toBe('2026-05-07T16:30:00')
+    expect(buildProductionDeadlineCutoff(null)).toBeNull()
+    expect(buildProductionDeadlineCutoff('invalid')).toBeNull()
+    expect(buildProductionDeadlineCutoff('2026-02-31T14:00:00')).toBeNull()
   })
 
   it('calculates cumulative production completion', () => {

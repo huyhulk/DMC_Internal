@@ -1,6 +1,8 @@
 import { normalizeProductionStatus } from '@/lib/production/status'
 import type { Order } from '@/types'
 
+export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
+
 export interface ProductionInputRow {
   pdate: string
   pcode: string
@@ -101,6 +103,29 @@ function buildProductionEndDate(pdate: string | null, endtime: string | null): D
   ) return null
 
   return parsed
+}
+
+export function buildProductionDeadlineCutoff(deadline: string | null | undefined): string | null {
+  if (!deadline) return null
+
+  const value = deadline.trim()
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!dateMatch) return null
+
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const day = Number(dateMatch[3])
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+
+  const parsed = new Date(year, month - 1, day)
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) return null
+
+  return `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T${PRODUCTION_DEADLINE_CUTOFF_TIME}`
 }
 
 export function calculateProductionCompletionTime(quantity: number, rows: ProductionCompletionTimeRow[]): string | null {

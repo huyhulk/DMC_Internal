@@ -67,9 +67,10 @@ describe('coordination daily report helpers', () => {
     expect(formatDeadline('2026-05-06 15:30:00')).toBe('06/05/2026 15:30')
   })
 
-  it('compares actual completion time against local planned deadline', () => {
-    expect(compareDeadline('2026-05-06', '15:00:00', null, '2026-05-06T15:30:00')).toBe(true)
-    expect(compareDeadline('2026-05-06', '15:31:00', null, '2026-05-06T15:30:00')).toBe(false)
+  it('compares actual completion time against 16:30 deadline cutoff', () => {
+    expect(compareDeadline('2026-05-06', '16:00:00', null, '2026-05-06T15:30:00')).toBe(true)
+    expect(compareDeadline('2026-05-06', '16:30:00', null, '2026-05-06T15:30:00')).toBe(true)
+    expect(compareDeadline('2026-05-06', '16:31:00', null, '2026-05-06T15:30:00')).toBe(false)
   })
 
   it('builds plan title from the next day and result title from report date', () => {

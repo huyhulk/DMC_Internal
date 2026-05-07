@@ -10,7 +10,7 @@ import type {
 } from './report-types'
 import { WORKSHOP_CODES, SHIFT_LABELS } from './report-types'
 import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
-import { calculateProductionCompletion, calculateProductionCompletionTime } from '@/lib/production/workflow'
+import { calculateProductionCompletion, calculateProductionCompletionTime, buildProductionDeadlineCutoff } from '@/lib/production/workflow'
 
 function toVietnamLocalDateTimeString(date: Date): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -182,6 +182,12 @@ export function getOrderProductionDate(rows: Array<{ pdate: string | null; poutp
     .sort((a, b) => b.localeCompare(a))[0] ?? ''
 }
 
+export function isProductionCompletionLate(completionAt: string | null, deadline: string | null | undefined): boolean {
+  const deadlineCutoff = buildProductionDeadlineCutoff(deadline)
+  const comparison = compareLocalDateTimeStrings(completionAt, deadlineCutoff)
+  return comparison !== null && comparison > 0
+}
+
 export async function queryProgress(
   workshopId: WorkshopCode | null,
   from: string,
@@ -305,11 +311,10 @@ export async function queryProgress(
       ? (periodProductionRows.filter((row) => row.pcode === r.PCODE))
       : (productionRowsByPcode.get(r.PCODE) ?? []))
     const deadlineLocal = normalizeLocalDateTimeString(r.DEADLINEDATE)
-    const completionDeadlineComparison = compareLocalDateTimeStrings(completionAt, r.DEADLINEDATE)
 
     let status: OrderStatus['status'] = 'in_progress'
     if (isCompleted) {
-      status = completionDeadlineComparison !== null && completionDeadlineComparison > 0 ? 'completed_late' : 'completed'
+      status = isProductionCompletionLate(completionAt, r.DEADLINEDATE) ? 'completed_late' : 'completed'
     } else if (deadlineLocal) {
       if (deadlineLocal < now) status = 'overdue'
       else if (deadlineLocal < dueSoonCutoff) status = 'due_soon'
