@@ -184,6 +184,19 @@ function parseTimeToMinutes(value: string): number | null {
   return hours * 60 + minutes
 }
 
+function getVietnamLocalDateTimeString(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date).replace(', ', 'T')
+}
+
 export function isProductionTimeRangeValid(starttime: string, endtime: string): boolean {
   const start = parseTimeToMinutes(starttime)
   const end = parseTimeToMinutes(endtime)
@@ -206,8 +219,8 @@ export function getProductionRowsValidationError(rows: ProductionInputRow[], now
       return `Dòng ${line}: giờ kết thúc phải lớn hơn giờ bắt đầu.`
     }
 
-    const productionEnd = buildProductionEndDate(row.pdate, row.endtime)
-    if (productionEnd && productionEnd.getTime() > now.getTime()) {
+    const productionEnd = buildProductionTimestamp(row.pdate, row.endtime)
+    if (productionEnd && productionEnd > getVietnamLocalDateTimeString(now)) {
       return `Dòng ${line}: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.`
     }
 

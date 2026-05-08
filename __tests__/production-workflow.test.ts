@@ -282,4 +282,23 @@ describe('production workflow helpers', () => {
     expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }], now))
       .toBe('Dòng 1: giờ kết thúc phải lớn hơn giờ bắt đầu.')
   })
+
+  it('validates production end time against Vietnam local time on UTC servers', () => {
+    const validRow = {
+      pdate: '2026-05-08',
+      pcode: 'LSX-001',
+      products: 'Product A',
+      poutput: 1,
+      eoutput: 0,
+      routput: 0,
+      workforce: 2,
+      starttime: '08:00',
+      endtime: '10:04',
+    }
+    const now = new Date('2026-05-08T03:12:00.000Z')
+
+    expect(getProductionRowsValidationError([validRow], now)).toBeNull()
+    expect(getProductionRowsValidationError([{ ...validRow, endtime: '10:13' }], now))
+      .toBe('Dòng 1: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.')
+  })
 })
