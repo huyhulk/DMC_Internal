@@ -245,7 +245,8 @@ describe('production workflow helpers', () => {
       endtime: '09:00',
     }
 
-    expect(getProductionRowsValidationError([validRow], new Date(2026, 4, 2, 10, 0))).toBeNull()
+    const nowVN = new Date('2026-05-02T10:00:00+07:00')
+    expect(getProductionRowsValidationError([validRow], nowVN)).toBeNull()
     expect(getProductionRowsValidationError([]))
       .toBe('Vui lòng chọn ít nhất 1 sản phẩm.')
     expect(getProductionRowsValidationError([{ ...validRow, pdate: '' }]))
@@ -254,9 +255,9 @@ describe('production workflow helpers', () => {
       .toBe('Dòng 1: vui lòng chọn mã LSX.')
     expect(getProductionRowsValidationError([{ ...validRow, starttime: '' }]))
       .toBe('Dòng 1: vui lòng nhập giờ bắt đầu và kết thúc.')
-    expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }], new Date(2026, 4, 2, 10, 0)))
+    expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }], nowVN))
       .toBe('Dòng 1: giờ kết thúc phải lớn hơn giờ bắt đầu.')
-    expect(getProductionRowsValidationError([{ ...validRow, poutput: -1 }], new Date(2026, 4, 2, 10, 0)))
+    expect(getProductionRowsValidationError([{ ...validRow, poutput: -1 }], nowVN))
       .toBe('Dòng 1: số lượng và nhân sự không được âm.')
   })
 
@@ -272,7 +273,8 @@ describe('production workflow helpers', () => {
       starttime: '08:00',
       endtime: '09:00',
     }
-    const now = new Date(2026, 4, 2, 10, 0)
+    // Neo absolute time về Asia/Ho_Chi_Minh để test không phụ thuộc TZ của runner.
+    const now = new Date('2026-05-02T10:00:00+07:00')
 
     expect(getProductionRowsValidationError([validRow], now)).toBeNull()
     expect(getProductionRowsValidationError([{ ...validRow, endtime: '11:00' }], now))
@@ -281,5 +283,28 @@ describe('production workflow helpers', () => {
       .toBe('Dòng 1: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.')
     expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }], now))
       .toBe('Dòng 1: giờ kết thúc phải lớn hơn giờ bắt đầu.')
+  })
+
+  // Reproducer cho bug TZ trên Vercel UTC: user nhập giờ VN, server validate phải hiểu là +07:00.
+  it('treats production end time as Asia/Ho_Chi_Minh regardless of runtime timezone', () => {
+    const validRow = {
+      pdate: '2026-05-08',
+      pcode: 'LSX-001',
+      products: 'Product A',
+      poutput: 1,
+      eoutput: 0,
+      routput: 0,
+      workforce: 2,
+      starttime: '08:00',
+      endtime: '14:00',
+    }
+    // Bây giờ là 15:00 VN = 08:00Z. endtime 14:00 VN = 07:00Z → phải PASS.
+    const nowVN15 = new Date('2026-05-08T15:00:00+07:00')
+    expect(getProductionRowsValidationError([validRow], nowVN15)).toBeNull()
+
+    // Edge: endtime 14:01 VN, now 14:00 VN → 1 phút trong tương lai → phải reject.
+    const nowVN14 = new Date('2026-05-08T14:00:00+07:00')
+    expect(getProductionRowsValidationError([{ ...validRow, endtime: '14:01' }], nowVN14))
+      .toBe('Dòng 1: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.')
   })
 })

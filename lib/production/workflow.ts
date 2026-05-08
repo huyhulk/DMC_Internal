@@ -2,6 +2,7 @@ import { normalizeProductionStatus } from '@/lib/production/status'
 import type { Order } from '@/types'
 
 export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
+const PRODUCTION_TIMEZONE_OFFSET = '+07:00'
 
 export interface ProductionInputRow {
   pdate: string
@@ -191,6 +192,36 @@ export function isProductionTimeRangeValid(starttime: string, endtime: string): 
   return end > start
 }
 
+/**
+ * Trả về epoch (ms) của (pdate, endtime) được neo theo timezone Asia/Ho_Chi_Minh (+07:00),
+ * không phụ thuộc TZ của runtime. Dùng để so sánh với `Date.now()` an toàn trên server UTC.
+ */
+export function getProductionEndEpoch(pdate: string | null, endtime: string | null): number | null {
+  if (!pdate || !endtime) return null
+
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(pdate.trim())
+  if (!dateMatch) return null
+
+  const timeMatch = endtime.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (!timeMatch) return null
+
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const day = Number(dateMatch[3])
+  const hours = Number(timeMatch[1])
+  const minutes = Number(timeMatch[2])
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+
+  const hh = String(hours).padStart(2, '0')
+  const mm = String(minutes).padStart(2, '0')
+  const iso = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T${hh}:${mm}:00${PRODUCTION_TIMEZONE_OFFSET}`
+  const ms = Date.parse(iso)
+  return Number.isFinite(ms) ? ms : null
+}
+
 export function getProductionRowsValidationError(rows: ProductionInputRow[], now = new Date()): string | null {
   if (rows.length === 0) return 'Vui lòng chọn ít nhất 1 sản phẩm.'
 
@@ -206,8 +237,9 @@ export function getProductionRowsValidationError(rows: ProductionInputRow[], now
       return `Dòng ${line}: giờ kết thúc phải lớn hơn giờ bắt đầu.`
     }
 
-    const productionEnd = buildProductionEndDate(row.pdate, row.endtime)
-    if (productionEnd && productionEnd.getTime() > now.getTime()) {
+    // So sánh theo Asia/Ho_Chi_Minh để tránh phụ thuộc TZ của runtime (Vercel chạy UTC).
+    const productionEndMs = getProductionEndEpoch(row.pdate, row.endtime)
+    if (productionEndMs !== null && productionEndMs > now.getTime()) {
       return `Dòng ${line}: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.`
     }
 
