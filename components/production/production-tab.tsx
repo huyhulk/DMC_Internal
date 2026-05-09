@@ -23,6 +23,7 @@ import { ProductLineCard } from './product-line-card'
 import { UnlockDialog } from './unlock-dialog'
 import {
   filterProductionOrdersByPcode,
+  getOpenOrdersSearchState,
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
@@ -157,12 +158,16 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
   const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => workshopCode(order.workshop)).filter(Boolean))].sort(), [allOrders])
   const submittedPcodes = state.initData?.submittedPcodes ?? []
   const closedPcodes = useMemo(() => state.initData?.closedPcodes ?? [], [state.initData?.closedPcodes])
+  const searchState = useMemo(
+    () => getOpenOrdersSearchState(allOrders, statusFilter, searchQuery),
+    [allOrders, searchQuery, statusFilter],
+  )
   const baseCatalog = useMemo(() => {
     const byWorkshop = workshopFilter === 'ALL'
       ? allOrders
       : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
-    return sortOpenProductionOrders(filterProductionOrdersByPcode(byWorkshop, searchQuery) as OpenProductionOrder[])
-  }, [allOrders, searchQuery, workshopFilter])
+    return sortOpenProductionOrders(filterProductionOrdersByPcode(byWorkshop, searchState.query) as OpenProductionOrder[])
+  }, [allOrders, searchState.query, workshopFilter])
   const kpiCounts = useMemo(() => ({
     all: baseCatalog.length,
     notStarted: baseCatalog.filter((order) => isNotStartedOrder(order)).length,
@@ -182,11 +187,11 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
     { label: 'Lệnh đang kiểm', value: kpiCounts.inspection, filter: 'INSPECTION', color: 'text-[#5856d6]', activeColor: 'bg-[#5856d6]/10 border-[#5856d6]/25' },
   ]
   const orderCatalog = useMemo(() => {
-    if (statusFilter === 'NOT_STARTED') return baseCatalog.filter((order) => isNotStartedOrder(order))
-    if (statusFilter === 'IN_PROGRESS') return baseCatalog.filter((order) => isInProgressOrder(order))
-    if (statusFilter === 'INSPECTION') return baseCatalog.filter((order) => isInspectionOrder(order))
+    if (searchState.statusFilter === 'NOT_STARTED') return baseCatalog.filter((order) => isNotStartedOrder(order))
+    if (searchState.statusFilter === 'IN_PROGRESS') return baseCatalog.filter((order) => isInProgressOrder(order))
+    if (searchState.statusFilter === 'INSPECTION') return baseCatalog.filter((order) => isInspectionOrder(order))
     return baseCatalog
-  }, [baseCatalog, statusFilter])
+  }, [baseCatalog, searchState.statusFilter])
   const isOther = state.selectedWorkshop.startsWith('Việc khác')
   const productOptions = isOther ? [] : getProductOptions(state.selectedWorkshop)
   const canSubmit = canEdit && Boolean(state.selectedPcode && !state.loading)
