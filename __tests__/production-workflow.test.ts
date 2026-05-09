@@ -28,6 +28,7 @@ import {
   isEffectiveClosedProductionStatus,
   isEffectiveCompletedProductionStatus,
   isProductionOrderInternalStatus,
+  resolveOpenProductionOrderStatus,
   resolveProductionOrderStatus,
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
@@ -76,14 +77,68 @@ describe('production workflow helpers', () => {
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: true })).toBe('Đã SX')
   })
 
-  it('keeps inspection status when internal status comes from the shared status table', () => {
+  it('can treat recently delivered orders as internal production statuses for open orders', () => {
+    const now = new Date('2026-05-09T09:00:00+07:00')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 0,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now,
+    })).toBe('Chưa SX')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 40,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now,
+    })).toBe('Đang SX')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 100,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now,
+    })).toBe('Đã SX')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 0,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-05',
+      deadlinetime: '08:59',
+      now,
+    })).toBe('Đã giao')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 0,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-10',
+      deadlinetime: '08:59',
+      now,
+    })).toBe('Đã giao')
+  })
+
+  it('does not let stale shared inspection status override explicit raw not-started status', () => {
     expect(resolveProductionOrderStatus({
       sourceStatus: 'Chưa sản xuất',
       internalStatus: 'Đang Kiểm',
       produced: 0,
       quantity: 100,
       closed: false,
-    })).toBe('Đang kiểm')
+    })) .toBe('Chưa SX')
   })
 
   it('resolves to inspection status when data source carries Đang kiểm even without an explicit internalStatus', () => {
@@ -93,15 +148,15 @@ describe('production workflow helpers', () => {
       produced: 0,
       quantity: 100,
       closed: false,
-    })).toBe('Đang kiểm')
+    })) .toBe('Đang kiểm')
 
     // Accent variant from Google Sheet
     expect(resolveProductionOrderStatus({
-      sourceStatus: 'Đang Kiểm',
+      sourceStatus: 'Đang kiểm',
       produced: 0,
       quantity: 100,
       closed: false,
-    })).toBe('Đang kiểm')
+    })) .toBe('Đang kiểm')
 
     // Auto-computed internalStatus 'Chưa SX' must NOT override sourceStatus 'Đang kiểm'
     expect(resolveProductionOrderStatus({
@@ -110,7 +165,7 @@ describe('production workflow helpers', () => {
       produced: 0,
       quantity: 100,
       closed: false,
-    })).toBe('Đang kiểm')
+    })) .toBe('Đang kiểm')
   })
 
   it('normalizes old completed-date progress filter to production date', () => {
@@ -504,3 +559,5 @@ describe('production workflow helpers', () => {
       .toBe('Dòng 1: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.')
   })
 })
+
+

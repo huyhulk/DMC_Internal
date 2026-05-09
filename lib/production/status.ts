@@ -62,14 +62,16 @@ export function resolveProductionOrderStatus(input: {
   const produced = Math.max(0, input.produced)
   if (input.closed || (quantity > 0 && produced >= quantity)) return 'Đã SX'
   if (produced > 0) return 'Đang SX'
-  // Prefer an explicit internalStatus (e.g. 'Đang kiểm' stored in production_order_status).
+  const fromSource = normalizeProductionOrderInternalStatus(input.sourceStatus)
   const fromInternal = normalizeProductionOrderInternalStatus(input.internalStatus)
-  if (fromInternal !== null && fromInternal !== 'Chưa SX') return fromInternal
   // Inspection status from the data source (Google Sheet) should surface even when the
-  // system has not yet recorded any production. Other source statuses (e.g. 'Đang sản xuất')
-  // are not inherited when produced = 0 — trust actual production data instead.
-  if (normalizeProductionOrderInternalStatus(input.sourceStatus) === 'Đang kiểm') return 'Đang kiểm'
-  return fromInternal ?? 'Chưa SX'
+  // system has not yet recorded any production.
+  if (fromSource === 'Đang kiểm') return 'Đang kiểm'
+  // Persisted internal status must not override explicit raw statuses like 'Chưa sản xuất'
+  // after raw data is re-imported. Only use shared inspection status when the source data
+  // is empty or unrecognized.
+  if (fromInternal === 'Đang kiểm' && fromSource === null) return 'Đang kiểm'
+  return 'Chưa SX'
 }
 
 export function resolveProductionOrderInternalStatus(input: {
@@ -85,6 +87,35 @@ export function resolveProductionOrderInternalStatus(input: {
   }) as ProductionOrderInternalStatus
 }
 
+export function resolveOpenProductionOrderStatus(input: {
+  sourceStatus: string
+  quantity: number
+  produced: number
+  closed: boolean
+  internalStatus?: string | null
+  deadlinedate?: string | null
+  deadlinetime?: string | null
+  now?: Date
+}): ProductionOrderEffectiveStatus {
+  const sourceStatus = input.sourceStatus.trim()
+
+  if (isSourceDeliveredStatus(sourceStatus) && isDeliveredOrderWithinRecentDeadlineWindow(input.deadlinedate, input.deadlinetime, input.now)) {
+    return resolveProductionOrderInternalStatus({
+      quantity: input.quantity,
+      produced: input.produced,
+      closed: input.closed,
+    })
+  }
+
+  return resolveProductionOrderStatus({
+    sourceStatus,
+    quantity: input.quantity,
+    produced: input.produced,
+    closed: input.closed,
+    internalStatus: input.internalStatus,
+  })
+}
+
 export function isEffectiveCompletedProductionStatus(status: string): boolean {
   return isSourceCompletedStatus(status)
 }
@@ -95,6 +126,19 @@ export function isEffectiveDeliveredProductionStatus(status: string): boolean {
 
 export function isEffectiveClosedProductionStatus(status: string): boolean {
   return isEffectiveCompletedProductionStatus(status) || isEffectiveDeliveredProductionStatus(status)
+}
+
+function isDeliveredOrderWithinRecentDeadlineWindow(
+  deadlinedate: string | null | undefined,
+  deadlinetime: string | null | undefined,
+  nowInput?: Date,
+): boolean {
+  const deadlineMs = getProductionDeadlineEpoch(deadlinedate, deadlinetime)
+  if (deadlineMs === null) return false
+
+  const now = nowInput ?? new Date()
+  const elapsedMs = now.getTime() - deadlineMs
+  return elapsedMs >= 0 && elapsedMs <= COMPLETED_ORDER_DEADLINE_VISIBILITY_WINDOW_MS
 }
 
 function getProductionDeadlineEpoch(deadlinedate: string | null | undefined, deadlinetime: string | null | undefined): number | null {
