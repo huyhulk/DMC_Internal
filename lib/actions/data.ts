@@ -7,11 +7,8 @@ import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
   getOpenProductionOrdersQueryWindow,
-  getProductionOrderStatusRank,
   getProductionRowsValidationError,
-  isProductionOrderCreatedOnOrAfter,
   shouldAutoCloseProductionOrder,
-  shouldKeepNotStartedOrderVisible,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
 import {
@@ -40,7 +37,7 @@ type DataRow = Database['public']['Tables']['data']['Row']
 type ProductionRow = Database['public']['Tables']['Production']['Row']
 type ProductionOrderStatusRow = Pick<
   Database['public']['Tables']['production_order_status']['Row'],
-  'pcode' | 'status' | 'produced_quantity' | 'quantity' | 'completion_pct'
+  'pcode' | 'status' | 'produced_quantity' | 'quantity' | 'completion_pct' | 'updated_at'
 >
 
 // Columns that exist in the "data" table (uppercase, no deadlinetime, no created_at)
@@ -245,7 +242,7 @@ async function fetchProductionOrderStatusRows(
   for (const chunk of chunkArray([...new Set(pcodes.filter(Boolean))], 200)) {
     const statusRes = await supabase
       .from('production_order_status')
-      .select('pcode,status,produced_quantity,quantity,completion_pct')
+      .select('pcode,status,produced_quantity,quantity,completion_pct,updated_at')
       .in('pcode', chunk)
 
     if (statusRes.error) {
@@ -341,9 +338,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const { role, workspace: rawWorkspace } = profileData as { role: string; workspace: string }
     const userWorkspaces = getUserWorkspaces(rawWorkspace ?? '')
 
-    const { today, fromDate, deadlineFrom } = getOpenProductionOrdersQueryWindow()
-    // Also include orders whose DEADLINEDATE is within the last 2 days (covers 36h grace window),
-    // so orders created before fromDate but with an active/recent deadline are not missed.
+    const { today } = getOpenProductionOrdersQueryWindow()
 
     const [norms, materials, dataRes] = await Promise.all([
       getCachedNorms(),
@@ -351,8 +346,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       supabase
         .from('data')
         .select(DATA_SELECT)
-        .lte('INITIALDATE', today)
-        .or(`INITIALDATE.gte.${fromDate},DEADLINEDATE.gte.${deadlineFrom}`),
+        .lte('INITIALDATE', today),
     ])
 
     if (dataRes.error) return { success: false, error: dataRes.error.message }
@@ -388,6 +382,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       statusRows,
       quantityByPcode,
     })
+    const statusUpdatedAtByPcode = new Map(statusRows.map((row) => [row.pcode, row.updated_at]))
 
     const productionRowsByPcode = new Map<string, Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>>>()
     for (const row of productionRows) {
@@ -418,7 +413,6 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       .map((order) => order.pcode)
 
     const now = new Date()
-    const NOT_STARTED_BASELINE_DATE = '2026-04-01'
     const closedPcodeSet = new Set(closedPcodes)
     const orders = sortProductionOrdersForEntry(
       effectiveOrders.filter((order) => {
@@ -426,18 +420,12 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
           status: order.status,
           closed: closedPcodeSet.has(order.pcode),
           completion: order,
+          completedAt: order.completedAt,
+          statusUpdatedAt: statusUpdatedAtByPcode.get(order.pcode) ?? null,
           deadlinedate: order.deadlinedate,
           deadlinetime: order.deadlinetime,
           now,
         })) return false
-
-        if (getProductionOrderStatusRank(order.status) === 0) {
-          if (!isProductionOrderCreatedOnOrAfter(order.initialdate, NOT_STARTED_BASELINE_DATE)) return false
-          if (!shouldKeepNotStartedOrderVisible({
-            initialdate: order.initialdate,
-            baselineDate: NOT_STARTED_BASELINE_DATE,
-          })) return false
-        }
 
         return true
       })

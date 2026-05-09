@@ -163,6 +163,48 @@ describe('production workflow helpers', () => {
     })).toBe(true)
   })
 
+  it('keeps completed production orders visible for up to one day after completion even when the deadline is older', () => {
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 100),
+      completedAt: '2026-05-08T10:00:00',
+      deadlinedate: '2026-05-01',
+      deadlinetime: '10:00',
+      now: new Date('2026-05-09T09:59:59+07:00'),
+    })).toBe(true)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 100),
+      completedAt: '2026-05-08T10:00:00',
+      deadlinedate: '2026-05-01',
+      deadlinetime: '10:00',
+      now: new Date('2026-05-09T10:00:01+07:00'),
+    })).toBe(false)
+  })
+
+  it('keeps newly closed production orders visible for up to one day after the latest status update when completion time is unavailable', () => {
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 40),
+      deadlinedate: '2026-05-01',
+      deadlinetime: '10:00',
+      statusUpdatedAt: '2026-05-09T08:30:00+07:00',
+      now: new Date('2026-05-09T17:29:59+07:00'),
+    })).toBe(true)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 40),
+      deadlinedate: '2026-05-01',
+      deadlinetime: '10:00',
+      statusUpdatedAt: '2026-05-09T08:30:00+07:00',
+      now: new Date('2026-05-10T08:30:01+07:00'),
+    })).toBe(false)
+  })
+
   it('keeps not-started orders from the 2026-04-01 baseline and excludes older ones', () => {
     expect(isProductionOrderCreatedOnOrAfter('2026-04-01', '2026-04-01')).toBe(true)
     expect(isProductionOrderCreatedOnOrAfter('2026-04-02', '2026-04-01')).toBe(true)

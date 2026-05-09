@@ -2,6 +2,8 @@ import type { ProductionCompletion } from '@/lib/production/workflow'
 import type { ProductionOrderInternalStatus, ProductionOrderEffectiveStatus } from '@/types'
 
 const COMPLETED_ORDER_DEADLINE_VISIBILITY_WINDOW_MS = 72 * 60 * 60 * 1000
+const COMPLETED_ORDER_RECENT_VISIBILITY_WINDOW_MS = 24 * 60 * 60 * 1000
+const VIETNAM_TIMEZONE_OFFSET = '+07:00'
 
 export const PRODUCTION_ORDER_INTERNAL_STATUSES: ProductionOrderInternalStatus[] = [
   'Chưa SX',
@@ -122,17 +124,51 @@ function isCompletedOrderVisibleWithinWindow(
   return elapsedMs <= COMPLETED_ORDER_DEADLINE_VISIBILITY_WINDOW_MS
 }
 
+function getCompletionEpoch(completedAt: string | null | undefined): number | null {
+  if (!completedAt) return null
+
+  const trimmed = completedAt.trim().replace(' ', 'T')
+  const withoutSeconds = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.exec(trimmed)
+  const withSeconds = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})$/.exec(trimmed)
+
+  let candidate: string | null = null
+  if (withoutSeconds) candidate = `${withoutSeconds[1]}:00${VIETNAM_TIMEZONE_OFFSET}`
+  if (withSeconds) candidate = `${withSeconds[1]}${VIETNAM_TIMEZONE_OFFSET}`
+
+  if (!candidate) return null
+
+  const completedMs = Date.parse(candidate)
+  return Number.isFinite(completedMs) ? completedMs : null
+}
+
+function getStatusUpdatedEpoch(statusUpdatedAt: string | null | undefined): number | null {
+  if (!statusUpdatedAt) return null
+  const updatedMs = Date.parse(statusUpdatedAt)
+  return Number.isFinite(updatedMs) ? updatedMs : null
+}
+
+function isRecentCompletedOrderVisible(timestampMs: number | null, now: Date): boolean {
+  if (timestampMs === null) return false
+  const elapsedMs = now.getTime() - timestampMs
+  return elapsedMs <= COMPLETED_ORDER_RECENT_VISIBILITY_WINDOW_MS
+}
+
 export function shouldShowOpenProductionOrder(input: {
   status: string
   closed: boolean
   completion: ProductionCompletion
   completedAt?: string | null
+  statusUpdatedAt?: string | null
   deadlinedate?: string | null
   deadlinetime?: string | null
   now?: Date
 }): boolean {
+  const now = input.now ?? new Date()
+
   if (isEffectiveDeliveredProductionStatus(input.status) || isEffectiveCompletedProductionStatus(input.status)) {
-    return isCompletedOrderVisibleWithinWindow(input.deadlinedate, input.deadlinetime, input.now ?? new Date())
+    if (isRecentCompletedOrderVisible(getCompletionEpoch(input.completedAt), now)) return true
+    if (isRecentCompletedOrderVisible(getStatusUpdatedEpoch(input.statusUpdatedAt), now)) return true
+    return isCompletedOrderVisibleWithinWindow(input.deadlinedate, input.deadlinetime, now)
   }
   if (input.closed) return false
   return input.completion.completionPct < 100
