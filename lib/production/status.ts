@@ -34,8 +34,17 @@ export function isProtectedSourceProductionStatus(status: string): boolean {
   return isSourceCompletedStatus(status) || isSourceDeliveredStatus(status)
 }
 
+export function normalizeProductionOrderInternalStatus(value: string | null | undefined): ProductionOrderInternalStatus | null {
+  const normalized = normalizeProductionStatus(value ?? '')
+  if (normalized.includes('dang kiem')) return 'Đang kiểm'
+  if (normalized.includes('dang sx') || normalized.includes('dang san xuat')) return 'Đang SX'
+  if (normalized.includes('da sx') || normalized.includes('da san xuat') || normalized.includes('hoan thanh')) return 'Đã SX'
+  if (normalized.includes('chua sx') || normalized.includes('chua san xuat') || normalized === '') return 'Chưa SX'
+  return null
+}
+
 export function isProductionOrderInternalStatus(value: string | null | undefined): value is ProductionOrderInternalStatus {
-  return PRODUCTION_ORDER_INTERNAL_STATUSES.includes(value as ProductionOrderInternalStatus)
+  return normalizeProductionOrderInternalStatus(value) !== null
 }
 
 export function resolveProductionOrderStatus(input: {
@@ -52,8 +61,7 @@ export function resolveProductionOrderStatus(input: {
   const produced = Math.max(0, input.produced)
   if (input.closed || (quantity > 0 && produced >= quantity)) return 'Đã SX'
   if (produced > 0) return 'Đang SX'
-  if (isProductionOrderInternalStatus(input.internalStatus)) return input.internalStatus
-  return 'Chưa SX'
+  return normalizeProductionOrderInternalStatus(input.internalStatus) ?? 'Chưa SX'
 }
 
 export function resolveProductionOrderInternalStatus(input: {

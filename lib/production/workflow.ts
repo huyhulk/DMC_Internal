@@ -1,7 +1,9 @@
 import { normalizeProductionStatus } from '@/lib/production/status'
-import type { Order } from '@/types'
+import type { OpenProductionOrder, Order } from '@/types'
 
 export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
+
+export type OpenOrdersStatusFilter = 'ALL' | 'NOT_STARTED' | 'IN_PROGRESS' | 'INSPECTION'
 
 export interface ProductionInputRow {
   pdate: string
@@ -171,6 +173,32 @@ export function filterProductionOrdersByPcode(orders: Order[], query: string): O
   const normalizedQuery = query.trim().toLowerCase()
   if (!normalizedQuery) return orders
   return orders.filter((order) => order.pcode.toLowerCase().includes(normalizedQuery))
+}
+
+function matchesOpenOrdersStatusFilter(order: OpenProductionOrder, statusFilter: OpenOrdersStatusFilter): boolean {
+  if (statusFilter === 'ALL') return true
+  if (statusFilter === 'INSPECTION') return normalizeProductionStatus(order.status).includes('dang kiem')
+
+  const rank = getProductionOrderStatusRank(order.status)
+  if (statusFilter === 'NOT_STARTED') return rank === 0
+  if (statusFilter === 'IN_PROGRESS') return rank === 1
+  return true
+}
+
+export function getOpenOrdersSearchState(
+  orders: OpenProductionOrder[],
+  statusFilter: OpenOrdersStatusFilter,
+  query: string,
+): { query: string; statusFilter: OpenOrdersStatusFilter } {
+  const trimmedQuery = query.trim()
+  if (!trimmedQuery) return { query: trimmedQuery, statusFilter }
+
+  const exactMatch = orders.find((order) => order.pcode.toLowerCase() === trimmedQuery.toLowerCase())
+  if (exactMatch && !matchesOpenOrdersStatusFilter(exactMatch, statusFilter)) {
+    return { query: trimmedQuery, statusFilter: 'ALL' }
+  }
+
+  return { query: trimmedQuery, statusFilter }
 }
 
 function parseTimeToMinutes(value: string): number | null {
