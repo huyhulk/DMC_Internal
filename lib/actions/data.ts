@@ -18,7 +18,11 @@ import {
   upsertProductionOrderStatuses,
   type ProductionSourceRow,
 } from '@/lib/production/status-server'
-import { shouldShowOpenProductionOrder } from '@/lib/production/status'
+import {
+  isProductionOrderInternalStatus,
+  resolveOpenProductionOrderStatus,
+  shouldShowOpenProductionOrder,
+} from '@/lib/production/status'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
 import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
@@ -392,6 +396,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       productionRowsByPcode.set(row.pcode, rows)
     }
 
+    const now = new Date()
     const effectiveOrders = scopedOrders.map((order) => {
       const info = statusMap.get(order.pcode)
       const completion = calculateProductionCompletion(Number(order.quantity) || 0, info?.producedQuantity ?? 0)
@@ -399,7 +404,23 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
         Number(order.quantity) || 0,
         productionRowsByPcode.get(order.pcode) ?? [],
       )
-      return applyEffectiveStatusToOrder({ ...order, ...completion, completedAt }, statusMap)
+      const effectiveOrder = applyEffectiveStatusToOrder({ ...order, ...completion, completedAt }, statusMap)
+      const status = resolveOpenProductionOrderStatus({
+        sourceStatus: effectiveOrder.sourceStatus ?? effectiveOrder.status,
+        quantity: Number(order.quantity) || info?.quantity || 0,
+        produced: info?.producedQuantity ?? 0,
+        closed: info?.closed ?? false,
+        internalStatus: effectiveOrder.internalStatus,
+        deadlinedate: order.deadlinedate,
+        deadlinetime: order.deadlinetime,
+        now,
+      })
+
+      return {
+        ...effectiveOrder,
+        status,
+        internalStatus: isProductionOrderInternalStatus(status) ? status : effectiveOrder.internalStatus,
+      }
     })
 
     const submittedPcodes = effectiveOrders
@@ -412,7 +433,6 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       })
       .map((order) => order.pcode)
 
-    const now = new Date()
     const closedPcodeSet = new Set(closedPcodes)
     const orders = sortProductionOrdersForEntry(
       effectiveOrders.filter((order) => {
