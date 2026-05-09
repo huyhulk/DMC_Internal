@@ -90,7 +90,6 @@ export interface OpenProductionOrder extends Order {
   producedQuantity: number
   remainingQuantity: number
   completionPct: number
-  completedAt?: string | null
 }
 
 export interface OpenProductionOrdersData {
@@ -118,7 +117,7 @@ export interface ProductionReportRow {
 }
 
 export type ProductionSaveStatus = 'draft' | 'closed'
-export type ProductionOrderInternalStatus = 'Chưa SX' | 'Đang SX' | 'Đang kiểm' | 'Đã SX'
+export type ProductionOrderInternalStatus = 'Chưa SX' | 'Đang SX' | 'Đã SX'
 export type ProductionOrderEffectiveStatus = ProductionOrderInternalStatus | 'Đã giao' | string
 
 export interface ProductionInputHistoryRow {

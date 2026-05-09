@@ -33,15 +33,14 @@ export function getProductionOrderStatusRank(status: string): number {
 
   if (normalized.includes('chua sx') || normalized.includes('chua san xuat') || normalized === '') return 0
   if (normalized.includes('dang sx') || normalized.includes('dang san xuat')) return 1
-  if (normalized.includes('dang kiem')) return 2
   if (
     normalized.includes('da sx') ||
     normalized.includes('da san xuat') ||
     normalized.includes('hoan thanh')
-  ) return 3
-  if (normalized.includes('da giao') || normalized.includes('giao hang')) return 4
+  ) return 2
+  if (normalized.includes('da giao') || normalized.includes('giao hang')) return 3
 
-  return 5
+  return 4
 }
 
 export function shouldAutoCloseProductionOrder(quantity: number, produced: number): boolean {

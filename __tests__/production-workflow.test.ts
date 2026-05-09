@@ -45,9 +45,8 @@ describe('production workflow helpers', () => {
   it('ranks production statuses in data-entry priority order', () => {
     expect(getProductionOrderStatusRank('Chua san xuat')).toBe(0)
     expect(getProductionOrderStatusRank('Dang san xuat')).toBe(1)
-    expect(getProductionOrderStatusRank('Dang kiem')).toBe(2)
-    expect(getProductionOrderStatusRank('Da SX')).toBe(3)
-    expect(getProductionOrderStatusRank('Da giao')).toBe(4)
+    expect(getProductionOrderStatusRank('Da SX')).toBe(2)
+    expect(getProductionOrderStatusRank('Da giao')).toBe(3)
   })
 
   it('treats delivered source status as closed but not completed production status', () => {
@@ -88,23 +87,6 @@ describe('production workflow helpers', () => {
     expect(isProgressReportCompleted(calculateProductionCompletion(100, 100).completionPct)).toBe(true)
   })
 
-  it('keeps completed production orders visible for up to one day after completion', () => {
-    expect(shouldShowOpenProductionOrder({
-      status: 'Đã SX',
-      closed: false,
-      completion: calculateProductionCompletion(100, 100),
-      completedAt: '2026-05-08T10:00:00',
-      now: new Date('2026-05-09T09:59:59+07:00'),
-    })).toBe(true)
-    expect(shouldShowOpenProductionOrder({
-      status: 'Đã SX',
-      closed: false,
-      completion: calculateProductionCompletion(100, 100),
-      completedAt: '2026-05-08T10:00:00',
-      now: new Date('2026-05-09T10:00:01+07:00'),
-    })).toBe(false)
-  })
-
   it('detects open production orders from effective status and completion metadata', () => {
     expect(shouldShowOpenProductionOrder({
       status: 'Chưa SX',
@@ -117,11 +99,6 @@ describe('production workflow helpers', () => {
       completion: calculateProductionCompletion(100, 40),
     })).toBe(true)
     expect(shouldShowOpenProductionOrder({
-      status: 'Đang kiểm',
-      closed: false,
-      completion: calculateProductionCompletion(100, 40),
-    })).toBe(true)
-    expect(shouldShowOpenProductionOrder({
       status: 'Đã SX',
       closed: false,
       completion: calculateProductionCompletion(100, 100),
@@ -130,7 +107,7 @@ describe('production workflow helpers', () => {
       status: 'Đã giao',
       closed: false,
       completion: calculateProductionCompletion(100, 40),
-    })).toBe(false)
+    })).toBe(true)
     expect(shouldShowOpenProductionOrder({
       status: 'Đang SX',
       closed: true,

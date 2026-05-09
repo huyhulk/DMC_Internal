@@ -1,13 +1,9 @@
-import { parseLocalDateTimeString } from '@/lib/utils'
 import type { ProductionCompletion } from '@/lib/production/workflow'
 import type { ProductionOrderInternalStatus, ProductionOrderEffectiveStatus } from '@/types'
-
-const COMPLETED_ORDER_VISIBILITY_WINDOW_MS = 24 * 60 * 60 * 1000
 
 export const PRODUCTION_ORDER_INTERNAL_STATUSES: ProductionOrderInternalStatus[] = [
   'Chưa SX',
   'Đang SX',
-  'Đang kiểm',
   'Đã SX',
 ]
 
@@ -81,27 +77,11 @@ export function isEffectiveClosedProductionStatus(status: string): boolean {
   return isEffectiveCompletedProductionStatus(status) || isEffectiveDeliveredProductionStatus(status)
 }
 
-function isCompletedOrderVisibleWithinWindow(completedAt: string | null | undefined, now: Date): boolean {
-  if (!completedAt) return false
-
-  const completedDate = parseLocalDateTimeString(completedAt)
-  if (!completedDate) return false
-
-  const elapsedMs = now.getTime() - completedDate.getTime()
-  return elapsedMs >= 0 && elapsedMs <= COMPLETED_ORDER_VISIBILITY_WINDOW_MS
-}
-
 export function shouldShowOpenProductionOrder(input: {
   status: string
   closed: boolean
   completion: ProductionCompletion
-  completedAt?: string | null
-  now?: Date
 }): boolean {
-  if (isEffectiveDeliveredProductionStatus(input.status)) return false
-  if (isEffectiveCompletedProductionStatus(input.status)) {
-    return isCompletedOrderVisibleWithinWindow(input.completedAt, input.now ?? new Date())
-  }
   if (input.closed) return false
   return input.completion.completionPct < 100
 }
