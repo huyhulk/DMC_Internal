@@ -6,6 +6,7 @@ import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import {
   calculateProductionCompletion,
   getProductionRowsValidationError,
+  isProductionOrderDeadlineExpired,
   shouldAutoCloseProductionOrder,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
@@ -339,11 +340,16 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       quantityByPcode,
     })
     const effectiveOrders = scopedOrders.map((order) => applyEffectiveStatusToOrder(order, statusMap))
-    const orders = sortProductionOrdersForEntry(effectiveOrders.filter((order) => shouldShowOpenProductionOrder({
-      status: order.status,
-      closed: closedPcodes.includes(order.pcode),
-      completion: order,
-    }))) as OpenProductionOrdersData['orders']
+    const now = new Date()
+    const orders = sortProductionOrdersForEntry(
+      effectiveOrders.filter((order) =>
+        shouldShowOpenProductionOrder({
+          status: order.status,
+          closed: closedPcodes.includes(order.pcode),
+          completion: order,
+        }) && !isProductionOrderDeadlineExpired(order.deadlinedate, order.deadlinetime, now)
+      )
+    ) as OpenProductionOrdersData['orders']
 
     return { success: true, data: { orders, norms, materials, submittedPcodes, closedPcodes } }
   } catch (err) {

@@ -222,6 +222,34 @@ export function getProductionEndEpoch(pdate: string | null, endtime: string | nu
   return Number.isFinite(ms) ? ms : null
 }
 
+/**
+ * Trả về true nếu deadline của lệnh đã qua hơn gracePeriodMs (mặc định 24h).
+ * Deadline được neo theo Asia/Ho_Chi_Minh (+07:00) để tránh lỗi TZ trên server UTC.
+ * Nếu không có deadline → không ẩn lệnh.
+ */
+export function isProductionOrderDeadlineExpired(
+  deadlinedate: string | null | undefined,
+  deadlinetime: string | null | undefined,
+  now: Date,
+  gracePeriodMs = 24 * 60 * 60 * 1000,
+): boolean {
+  if (!deadlinedate) return false
+  const dateTrim = deadlinedate.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTrim)) return false
+
+  // Nếu không có giờ deadline → coi là cuối ngày (23:59)
+  const rawTime = (deadlinetime ?? '').trim()
+  const timeMatch = (rawTime || '23:59').match(/^(\d{1,2}):(\d{2})/)
+  if (!timeMatch) return false
+
+  const hh = timeMatch[1].padStart(2, '0')
+  const mm = timeMatch[2]
+  const deadlineMs = Date.parse(`${dateTrim}T${hh}:${mm}:00+07:00`)
+  if (!Number.isFinite(deadlineMs)) return false
+
+  return now.getTime() - deadlineMs > gracePeriodMs
+}
+
 export function getProductionRowsValidationError(rows: ProductionInputRow[], now = new Date()): string | null {
   if (rows.length === 0) return 'Vui lòng chọn ít nhất 1 sản phẩm.'
 

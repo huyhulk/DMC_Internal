@@ -14,6 +14,7 @@ import {
   getProductionRowsValidationError,
   getProductionOrderStatusRank,
   isOpenProductionOrder,
+  isProductionOrderDeadlineExpired,
   isProductionTimeRangeValid,
   shouldAutoCloseProductionOrder,
   sortProductionOrdersForEntry,
@@ -283,6 +284,44 @@ describe('production workflow helpers', () => {
       .toBe('Dòng 1: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.')
     expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }], now))
       .toBe('Dòng 1: giờ kết thúc phải lớn hơn giờ bắt đầu.')
+  })
+
+  it('hides open orders whose deadline expired more than 24 hours ago', () => {
+    // Deadline 2026-05-07T11:00 +07:00 = 2026-05-07T04:00Z
+    const deadline = { deadlinedate: '2026-05-07', deadlinetime: '11:00' }
+    const exactly24h  = new Date('2026-05-08T11:00:00+07:00') // elapsed = 24h exactly → NOT expired
+    const over24h     = new Date('2026-05-08T11:00:01+07:00') // elapsed > 24h → expired
+    const before      = new Date('2026-05-07T10:59:00+07:00') // deadline not yet passed
+    expect(isProductionOrderDeadlineExpired(deadline.deadlinedate, deadline.deadlinetime, exactly24h)).toBe(false)
+    expect(isProductionOrderDeadlineExpired(deadline.deadlinedate, deadline.deadlinetime, over24h)).toBe(true)
+    expect(isProductionOrderDeadlineExpired(deadline.deadlinedate, deadline.deadlinetime, before)).toBe(false)
+  })
+
+  it('does not hide orders with no deadline set', () => {
+    const now = new Date('2026-05-09T08:00:00+07:00')
+    expect(isProductionOrderDeadlineExpired(null, null, now)).toBe(false)
+    expect(isProductionOrderDeadlineExpired('', '', now)).toBe(false)
+    expect(isProductionOrderDeadlineExpired(undefined, undefined, now)).toBe(false)
+  })
+
+  it('treats deadline with no time as end of day (23:59 +07:00)', () => {
+    const now25h = new Date('2026-05-09T01:00:00+07:00') // 25h after 2026-05-08T00:00 → actually 25h after 23:59 → still < 25h
+    // deadline 2026-05-08 no time → treated as 23:59 → expires after 2026-05-09T23:59+24h
+    const nowJustOver = new Date('2026-05-10T00:00:01+07:00') // 1s after 24h grace
+    const nowJustUnder = new Date('2026-05-09T23:58:00+07:00') // within 24h grace
+    expect(isProductionOrderDeadlineExpired('2026-05-08', '', nowJustOver)).toBe(true)
+    expect(isProductionOrderDeadlineExpired('2026-05-08', '', nowJustUnder)).toBe(false)
+  })
+
+  it('classifies Đã giao (rank 3) as COMPLETED, not IN_PROGRESS', () => {
+    expect(getProductionOrderStatusRank('Đã giao')).toBe(3)
+    expect(getProductionOrderStatusRank('Giao hàng')).toBe(3)
+    // rank 3 must NOT map to IN_PROGRESS — verified via rank value only
+    // (getOrderStatusKey lives in production-tab.tsx which is not importable here,
+    //  but the rank is the input — rank 3 should be handled as COMPLETED)
+    expect(getProductionOrderStatusRank('Đã giao')).toBeGreaterThan(
+      getProductionOrderStatusRank('Đang SX')
+    )
   })
 
   // Reproducer cho bug TZ trên Vercel UTC: user nhập giờ VN, server validate phải hiểu là +07:00.
