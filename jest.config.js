@@ -5,7 +5,11 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  testMatch: ['<rootDir>/__tests__/**/*.test.ts'],
+  testPathIgnorePatterns: [
+    '<rootDir>/.claude/worktrees/',
+    '<rootDir>/.worktrees/',
+  ],
   transform: {
     '^.+\.tsx?$': ['ts-jest', { tsconfig: { module: 'commonjs' } }],
   },

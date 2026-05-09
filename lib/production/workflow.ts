@@ -30,6 +30,8 @@ export interface ProductionCompletionTimeRow {
   poutput: number | null
 }
 
+const PRODUCTION_APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+
 export function getProductionOrderStatusRank(status: string): number {
   const normalized = normalizeProductionStatus(status)
 
@@ -295,6 +297,74 @@ export function shouldKeepNotStartedOrderVisible(input: {
   baselineDate: string
 }): boolean {
   return isProductionOrderCreatedOnOrAfter(input.initialdate, input.baselineDate)
+}
+
+function getDatePartsInTimeZone(date: Date, timeZone: string): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const year = Number(parts.find((part) => part.type === 'year')?.value)
+  const month = Number(parts.find((part) => part.type === 'month')?.value)
+  const day = Number(parts.find((part) => part.type === 'day')?.value)
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new Error(`Unable to derive date parts for timezone ${timeZone}`)
+  }
+
+  return { year, month, day }
+}
+
+function formatDateParts(parts: { year: number; month: number; day: number }): string {
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`
+}
+
+function shiftDateString(dateString: string, days: number): string {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString)
+  if (!dateMatch) throw new Error(`Invalid date string: ${dateString}`)
+
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const day = Number(dateMatch[3])
+  const shifted = new Date(Date.UTC(year, month - 1, day + days))
+
+  return formatDateParts({
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  })
+}
+
+function getPreviousMonthStart(dateString: string): string {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString)
+  if (!dateMatch) throw new Error(`Invalid date string: ${dateString}`)
+
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const previousMonthStart = new Date(Date.UTC(year, month - 2, 1))
+
+  return formatDateParts({
+    year: previousMonthStart.getUTCFullYear(),
+    month: previousMonthStart.getUTCMonth() + 1,
+    day: previousMonthStart.getUTCDate(),
+  })
+}
+
+export function getOpenProductionOrdersQueryWindow(now = new Date()): {
+  today: string
+  fromDate: string
+  deadlineFrom: string
+} {
+  const today = formatDateParts(getDatePartsInTimeZone(now, PRODUCTION_APP_TIME_ZONE))
+
+  return {
+    today,
+    fromDate: getPreviousMonthStart(today),
+    deadlineFrom: shiftDateString(today, -2),
+  }
 }
 
 export function getProductionRowsValidationError(rows: ProductionInputRow[], now = new Date()): string | null {

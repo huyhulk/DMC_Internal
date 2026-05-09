@@ -12,6 +12,7 @@ import {
   calculateProductionCompletionTime,
   filterProductionOrdersByPcode,
   getOpenOrdersSearchState,
+  getOpenProductionOrdersQueryWindow,
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isOpenProductionOrder,
@@ -179,6 +180,14 @@ describe('production workflow helpers', () => {
       new Date('2026-05-12T09:00:00+07:00'),
       72 * 60 * 60 * 1000,
     )).toBe(true)
+  })
+
+  it('builds the open-orders query window from the Vietnam calendar date even before 07:00 UTC+7', () => {
+    expect(getOpenProductionOrdersQueryWindow(new Date('2026-05-08T18:30:00.000Z'))).toEqual({
+      today: '2026-05-09',
+      fromDate: '2026-04-01',
+      deadlineFrom: '2026-05-07',
+    })
   })
 
   it('detects open production orders from effective status and completion metadata', () => {

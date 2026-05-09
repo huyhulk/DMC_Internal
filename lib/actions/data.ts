@@ -6,6 +6,7 @@ import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
+  getOpenProductionOrdersQueryWindow,
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isProductionOrderCreatedOnOrAfter,
@@ -22,7 +23,7 @@ import {
 } from '@/lib/production/status-server'
 import { shouldShowOpenProductionOrder } from '@/lib/production/status'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
-import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode, getTodayLocal, getLocalDateAfterDays } from '@/lib/utils'
+import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
@@ -283,12 +284,6 @@ function getLockedProductionPcodes(
   return getClosedPcodesFromProduction(rows, quantityByPcode)
 }
 
-function getLocalPreviousMonthStart(dateString: string): string {
-  const year = Number(dateString.slice(0, 4))
-  const monthIndex = Number(dateString.slice(5, 7)) - 1
-  return new Date(year, monthIndex - 1, 1).toLocaleDateString('en-CA')
-}
-
 function isMissingProductionOrderStatusTableError(error: { code?: string; message?: string } | null): boolean {
   const message = error?.message?.toLowerCase() ?? ''
   return (
@@ -346,11 +341,9 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const { role, workspace: rawWorkspace } = profileData as { role: string; workspace: string }
     const userWorkspaces = getUserWorkspaces(rawWorkspace ?? '')
 
-    const today = getTodayLocal()
-    const fromDate = getLocalPreviousMonthStart(today)
+    const { today, fromDate, deadlineFrom } = getOpenProductionOrdersQueryWindow()
     // Also include orders whose DEADLINEDATE is within the last 2 days (covers 36h grace window),
     // so orders created before fromDate but with an active/recent deadline are not missed.
-    const deadlineFrom = getLocalDateAfterDays(-2)
 
     const [norms, materials, dataRes] = await Promise.all([
       getCachedNorms(),
