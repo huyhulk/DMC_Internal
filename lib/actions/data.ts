@@ -20,7 +20,7 @@ import {
 } from '@/lib/production/status-server'
 import { shouldShowOpenProductionOrder } from '@/lib/production/status'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
-import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode, getTodayLocal } from '@/lib/utils'
+import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode, getTodayLocal, getLocalDateAfterDays } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
@@ -346,6 +346,9 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
 
     const today = getTodayLocal()
     const fromDate = getLocalPreviousMonthStart(today)
+    // Also include orders whose DEADLINEDATE is within the last 2 days (covers 36h grace window),
+    // so orders created before fromDate but with an active/recent deadline are not missed.
+    const deadlineFrom = getLocalDateAfterDays(-2)
 
     const [norms, materials, dataRes] = await Promise.all([
       getCachedNorms(),
@@ -353,8 +356,8 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       supabase
         .from('data')
         .select(DATA_SELECT)
-        .gte('INITIALDATE', fromDate)
-        .lte('INITIALDATE', today),
+        .lte('INITIALDATE', today)
+        .or(`INITIALDATE.gte.${fromDate},DEADLINEDATE.gte.${deadlineFrom}`),
     ])
 
     if (dataRes.error) return { success: false, error: dataRes.error.message }
