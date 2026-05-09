@@ -9,8 +9,8 @@ import {
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isProductionOrderCreatedOnOrAfter,
-  isProductionOrderDeadlineExpired,
   shouldAutoCloseProductionOrder,
+  shouldKeepNotStartedOrderVisible,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
 import {
@@ -426,7 +426,6 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
 
     const now = new Date()
     const NOT_STARTED_BASELINE_DATE = '2026-04-01'
-    const DEADLINE_VISIBILITY_WINDOW_MS = 72 * 60 * 60 * 1000
     const closedPcodeSet = new Set(closedPcodes)
     const orders = sortProductionOrdersForEntry(
       effectiveOrders.filter((order) => {
@@ -441,7 +440,10 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
 
         if (getProductionOrderStatusRank(order.status) === 0) {
           if (!isProductionOrderCreatedOnOrAfter(order.initialdate, NOT_STARTED_BASELINE_DATE)) return false
-          if (isProductionOrderDeadlineExpired(order.deadlinedate, order.deadlinetime, now, DEADLINE_VISIBILITY_WINDOW_MS)) return false
+          if (!shouldKeepNotStartedOrderVisible({
+            initialdate: order.initialdate,
+            baselineDate: NOT_STARTED_BASELINE_DATE,
+          })) return false
         }
 
         return true

@@ -19,6 +19,7 @@ import {
   isProductionOrderDeadlineExpired,
   isProductionTimeRangeValid,
   shouldAutoCloseProductionOrder,
+  shouldKeepNotStartedOrderVisible,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
 
@@ -165,6 +166,19 @@ describe('production workflow helpers', () => {
     expect(isProductionOrderCreatedOnOrAfter('2026-04-01', '2026-04-01')).toBe(true)
     expect(isProductionOrderCreatedOnOrAfter('2026-04-02', '2026-04-01')).toBe(true)
     expect(isProductionOrderCreatedOnOrAfter('2026-03-31', '2026-04-01')).toBe(false)
+  })
+
+  it('keeps not-started orders visible based on initial date even if deadline is older than 72 hours', () => {
+    expect(shouldKeepNotStartedOrderVisible({
+      initialdate: '2026-05-08',
+      baselineDate: '2026-04-01',
+    })).toBe(true)
+    expect(isProductionOrderDeadlineExpired(
+      '2026-05-09',
+      '08:30',
+      new Date('2026-05-12T09:00:00+07:00'),
+      72 * 60 * 60 * 1000,
+    )).toBe(true)
   })
 
   it('detects open production orders from effective status and completion metadata', () => {

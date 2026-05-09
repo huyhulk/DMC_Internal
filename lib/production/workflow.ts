@@ -290,6 +290,13 @@ export function isProductionOrderCreatedOnOrAfter(
   return initialDateTrim >= baselineDate
 }
 
+export function shouldKeepNotStartedOrderVisible(input: {
+  initialdate: string | null | undefined
+  baselineDate: string
+}): boolean {
+  return isProductionOrderCreatedOnOrAfter(input.initialdate, input.baselineDate)
+}
+
 export function getProductionRowsValidationError(rows: ProductionInputRow[], now = new Date()): string | null {
   if (rows.length === 0) return 'Vui lòng chọn ít nhất 1 sản phẩm.'
 
