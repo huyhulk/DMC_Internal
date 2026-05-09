@@ -260,7 +260,7 @@ export function isProductionOrderDeadlineExpired(
   deadlinedate: string | null | undefined,
   deadlinetime: string | null | undefined,
   now: Date,
-  gracePeriodMs = 24 * 60 * 60 * 1000,
+  gracePeriodMs = 36 * 60 * 60 * 1000,
 ): boolean {
   if (!deadlinedate) return false
   const dateTrim = deadlinedate.trim()
