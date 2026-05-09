@@ -46,8 +46,9 @@ describe('production workflow helpers', () => {
   it('ranks production statuses in data-entry priority order', () => {
     expect(getProductionOrderStatusRank('Chua san xuat')).toBe(0)
     expect(getProductionOrderStatusRank('Dang san xuat')).toBe(1)
-    expect(getProductionOrderStatusRank('Da SX')).toBe(2)
-    expect(getProductionOrderStatusRank('Da giao')).toBe(3)
+    expect(getProductionOrderStatusRank('Dang kiem')).toBe(2)
+    expect(getProductionOrderStatusRank('Da SX')).toBe(3)
+    expect(getProductionOrderStatusRank('Da giao')).toBe(4)
   })
 
   it('treats delivered source status as closed but not completed production status', () => {
@@ -88,6 +89,23 @@ describe('production workflow helpers', () => {
     expect(isProgressReportCompleted(calculateProductionCompletion(100, 100).completionPct)).toBe(true)
   })
 
+  it('keeps completed production orders visible for up to one day after completion', () => {
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 100),
+      completedAt: '2026-05-08T10:00:00',
+      now: new Date('2026-05-09T09:59:59+07:00'),
+    })).toBe(true)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 100),
+      completedAt: '2026-05-08T10:00:00',
+      now: new Date('2026-05-09T10:00:01+07:00'),
+    })).toBe(false)
+  })
+
   it('detects open production orders from effective status and completion metadata', () => {
     expect(shouldShowOpenProductionOrder({
       status: 'Chưa SX',
@@ -100,6 +118,11 @@ describe('production workflow helpers', () => {
       completion: calculateProductionCompletion(100, 40),
     })).toBe(true)
     expect(shouldShowOpenProductionOrder({
+      status: 'Đang kiểm',
+      closed: false,
+      completion: calculateProductionCompletion(100, 40),
+    })).toBe(true)
+    expect(shouldShowOpenProductionOrder({
       status: 'Đã SX',
       closed: false,
       completion: calculateProductionCompletion(100, 100),
@@ -108,7 +131,7 @@ describe('production workflow helpers', () => {
       status: 'Đã giao',
       closed: false,
       completion: calculateProductionCompletion(100, 40),
-    })).toBe(true)
+    })).toBe(false)
     expect(shouldShowOpenProductionOrder({
       status: 'Đang SX',
       closed: true,
@@ -313,15 +336,12 @@ describe('production workflow helpers', () => {
     expect(isProductionOrderDeadlineExpired('2026-05-08', '', nowJustUnder)).toBe(false)
   })
 
-  it('classifies Đã giao (rank 3) as COMPLETED, not IN_PROGRESS', () => {
-    expect(getProductionOrderStatusRank('Đã giao')).toBe(3)
-    expect(getProductionOrderStatusRank('Giao hàng')).toBe(3)
-    // rank 3 must NOT map to IN_PROGRESS — verified via rank value only
-    // (getOrderStatusKey lives in production-tab.tsx which is not importable here,
-    //  but the rank is the input — rank 3 should be handled as COMPLETED)
-    expect(getProductionOrderStatusRank('Đã giao')).toBeGreaterThan(
-      getProductionOrderStatusRank('Đang SX')
-    )
+  it('classifies Đã giao as higher rank than Đang SX and Đang kiểm', () => {
+    // rank 4 = Đã giao / Giao hàng (must be > IN_PROGRESS and INSPECTION ranks)
+    expect(getProductionOrderStatusRank('Đã giao')).toBe(4)
+    expect(getProductionOrderStatusRank('Giao hàng')).toBe(4)
+    expect(getProductionOrderStatusRank('Đã giao')).toBeGreaterThan(getProductionOrderStatusRank('Đang SX'))
+    expect(getProductionOrderStatusRank('Đã giao')).toBeGreaterThan(getProductionOrderStatusRank('Đang kiểm'))
   })
 
   // Reproducer cho bug TZ trên Vercel UTC: user nhập giờ VN, server validate phải hiểu là +07:00.
