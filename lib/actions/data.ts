@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import {
   calculateProductionCompletion,
+  calculateProductionCompletionTime,
   getProductionRowsValidationError,
   shouldAutoCloseProductionOrder,
   sortProductionOrdersForEntry,
@@ -33,6 +34,10 @@ export async function revalidateNormsAction(): Promise<void> {
 // Actual column names in Supabase table "data" use quoted uppercase identifiers
 type DataRow = Database['public']['Tables']['data']['Row']
 type ProductionRow = Database['public']['Tables']['Production']['Row']
+type ProductionOrderStatusRow = Pick<
+  Database['public']['Tables']['production_order_status']['Row'],
+  'pcode' | 'status' | 'produced_quantity' | 'quantity' | 'completion_pct'
+>
 
 // Columns that exist in the "data" table (uppercase, no deadlinetime, no created_at)
 const DATA_SELECT = 'PCODE,INITIALDATE,CUSTOMER,WORKSHOP,DESCRIPTION,QUANTITY,DEADLINEDATE,STATUS'
@@ -219,6 +224,37 @@ function buildPcodeOutputMap(rows: Array<Pick<ProductionRow, 'pcode' | 'poutput'
   return map
 }
 
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
+async function fetchProductionOrderStatusRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  pcodes: string[],
+): Promise<ProductionOrderStatusRow[]> {
+  const rows: ProductionOrderStatusRow[] = []
+
+  for (const chunk of chunkArray([...new Set(pcodes.filter(Boolean))], 200)) {
+    const statusRes = await supabase
+      .from('production_order_status')
+      .select('pcode,status,produced_quantity,quantity,completion_pct')
+      .in('pcode', chunk)
+
+    if (statusRes.error) {
+      if (isMissingProductionOrderStatusTableError(statusRes.error)) return []
+      throw new Error(statusRes.error.message)
+    }
+
+    rows.push(...((statusRes.data ?? []) as ProductionOrderStatusRow[]))
+  }
+
+  return rows
+}
+
 function getClosedPcodesFromProduction(
   rows: Array<{ pcode: string | null; poutput: number | null; save_status?: 'draft' | 'closed' | null }>,
   quantityByPcode: Map<string, number>
@@ -248,6 +284,18 @@ function getLocalPreviousMonthStart(dateString: string): string {
   const year = Number(dateString.slice(0, 4))
   const monthIndex = Number(dateString.slice(5, 7)) - 1
   return new Date(year, monthIndex - 1, 1).toLocaleDateString('en-CA')
+}
+
+function isMissingProductionOrderStatusTableError(error: { code?: string; message?: string } | null): boolean {
+  const message = error?.message?.toLowerCase() ?? ''
+  return (
+    error?.code === '42P01' ||
+    error?.code === 'PGRST205' ||
+    error?.code === 'PGRST200' ||
+    (message.includes('production_order_status') && message.includes('schema')) ||
+    (message.includes('production_order_status') && message.includes('not find')) ||
+    (message.includes('production_order_status') && message.includes('does not exist'))
+  )
 }
 
 async function autoCloseCompletedProductionOrders(
@@ -314,34 +362,66 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const scopedDataRows = dataRows.filter((row) =>
       isWorkspaceAllowed(normalizeWorkshop(row.WORKSHOP ?? ''), role, userWorkspaces)
     )
-    const pcodes = [...new Set(scopedDataRows.map((row) => row.PCODE).filter(Boolean))]
-    const productionRes = pcodes.length > 0
-      ? await supabase.from('Production').select('pcode,poutput,save_status').in('pcode', pcodes)
-      : { data: [], error: null }
-
-    if (productionRes.error) return { success: false, error: productionRes.error.message }
-
-    const prodRows = (productionRes.data ?? []) as ProductionSourceRow[]
-    const outputByPcode = buildPcodeOutputMap(prodRows)
-    const submittedPcodes = [...new Set(prodRows.map((p) => p.pcode).filter(Boolean) as string[])]
-
-    const scopedOrders = scopedDataRows.map((row) => {
-      const order = mapDataRowToOrder(row)
-      const produced = outputByPcode.get(order.pcode) ?? 0
-      const completion = calculateProductionCompletion(Number(order.quantity) || 0, produced)
-      return { ...order, ...completion }
-    })
+    const scopedOrders = scopedDataRows.map(mapDataRowToOrder)
+    const pcodes = [...new Set(scopedOrders.map((order) => order.pcode).filter(Boolean))]
     const quantityByPcode = new Map(scopedOrders.map((order) => [order.pcode, Number(order.quantity) || 0]))
-    const closedPcodes = getClosedPcodesFromProduction(prodRows, quantityByPcode)
+
+    let statusRows: ProductionOrderStatusRow[] = []
+    let productionRows: Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>> = []
+
+    if (pcodes.length > 0) {
+      const [fetchedStatusRows, productionRowsRes] = await Promise.all([
+        fetchProductionOrderStatusRows(supabase, pcodes),
+        supabase
+          .from('Production')
+          .select('pcode,pdate,endtime,poutput')
+          .in('pcode', pcodes),
+      ])
+
+      statusRows = fetchedStatusRows
+      if (productionRowsRes.error) return { success: false, error: productionRowsRes.error.message }
+      productionRows = (productionRowsRes.data ?? []) as Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>>
+    }
+
     const statusMap = buildProductionStatusMapFromRows({
-      pcodes: scopedOrders.map((order) => order.pcode),
-      productionRows: prodRows,
+      pcodes,
+      productionRows: [],
+      statusRows,
       quantityByPcode,
     })
-    const effectiveOrders = scopedOrders.map((order) => applyEffectiveStatusToOrder(order, statusMap))
+
+    const productionRowsByPcode = new Map<string, Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>>>()
+    for (const row of productionRows) {
+      if (!row.pcode) continue
+      const rows = productionRowsByPcode.get(row.pcode) ?? []
+      rows.push(row)
+      productionRowsByPcode.set(row.pcode, rows)
+    }
+
+    const effectiveOrders = scopedOrders.map((order) => {
+      const info = statusMap.get(order.pcode)
+      const completion = calculateProductionCompletion(Number(order.quantity) || 0, info?.producedQuantity ?? 0)
+      const completedAt = calculateProductionCompletionTime(
+        Number(order.quantity) || 0,
+        productionRowsByPcode.get(order.pcode) ?? [],
+      )
+      return applyEffectiveStatusToOrder({ ...order, ...completion, completedAt }, statusMap)
+    })
+
+    const submittedPcodes = effectiveOrders
+      .filter((order) => (statusMap.get(order.pcode)?.producedQuantity ?? 0) > 0)
+      .map((order) => order.pcode)
+    const closedPcodes = effectiveOrders
+      .filter((order) => {
+        const info = statusMap.get(order.pcode)
+        return (info?.closed ?? false) || (info?.completionPct ?? 0) >= 100
+      })
+      .map((order) => order.pcode)
+
+    const closedPcodeSet = new Set(closedPcodes)
     const orders = sortProductionOrdersForEntry(effectiveOrders.filter((order) => shouldShowOpenProductionOrder({
       status: order.status,
-      closed: closedPcodes.includes(order.pcode),
+      closed: closedPcodeSet.has(order.pcode),
       completion: order,
     }))) as OpenProductionOrdersData['orders']
 
@@ -530,15 +610,13 @@ export async function listProductionInputHistoryAction(filters: {
     if (!viewer) return { success: false, error: 'Bạn không có quyền xem lịch sử nhập.' }
 
     const supabase = await createClient()
-    const fromISO = `${filters.fromDate}T00:00:00+07:00`
-    const toISO = `${filters.toDate}T23:59:59.999+07:00`
 
     const [prodRes, dataRes] = await Promise.all([
       supabase
         .from('Production')
         .select('id,pdate,pcode,products,poutput,eoutput,routput,workforce,realnorm,starttime,endtime,log,save_status,created_at')
-        .gte('created_at', fromISO)
-        .lte('created_at', toISO)
+        .gte('pdate', filters.fromDate)
+        .lte('pdate', filters.toDate)
         .order('created_at', { ascending: false })
         .limit(1000),
       supabase.from('data').select('PCODE,CUSTOMER,WORKSHOP,DESCRIPTION'),
