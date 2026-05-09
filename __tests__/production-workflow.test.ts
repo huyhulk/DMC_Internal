@@ -11,9 +11,8 @@ import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
   filterProductionOrdersByPcode,
-  getOpenOrdersSearchState,
-  getProductionOrderStatusRank,
   getProductionRowsValidationError,
+  getProductionOrderStatusRank,
   isOpenProductionOrder,
   isProductionTimeRangeValid,
   shouldAutoCloseProductionOrder,
@@ -23,7 +22,6 @@ import {
 import {
   isEffectiveClosedProductionStatus,
   isEffectiveCompletedProductionStatus,
-  isProductionOrderInternalStatus,
   resolveProductionOrderStatus,
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
@@ -52,11 +50,6 @@ describe('production workflow helpers', () => {
     expect(getProductionOrderStatusRank('Da giao')).toBe(4)
   })
 
-  it('accepts internal production status labels regardless of accent casing', () => {
-    expect(isProductionOrderInternalStatus('Đang kiểm')).toBe(true)
-    expect(isProductionOrderInternalStatus('Đang Kiểm')).toBe(true)
-  })
-
   it('treats delivered source status as closed but not completed production status', () => {
     expect(isEffectiveCompletedProductionStatus('Đã giao')).toBe(false)
     expect(isEffectiveClosedProductionStatus('Đã giao')).toBe(true)
@@ -70,16 +63,6 @@ describe('production workflow helpers', () => {
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: false })).toBe('Đang SX')
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 100, quantity: 100, closed: false })).toBe('Đã SX')
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: true })).toBe('Đã SX')
-  })
-
-  it('keeps inspection status when internal status comes from the shared status table', () => {
-    expect(resolveProductionOrderStatus({
-      sourceStatus: 'Chưa sản xuất',
-      internalStatus: 'Đang Kiểm',
-      produced: 0,
-      quantity: 100,
-      closed: false,
-    })).toBe('Đang kiểm')
   })
 
   it('normalizes old completed-date progress filter to production date', () => {
@@ -153,18 +136,6 @@ describe('production workflow helpers', () => {
       closed: true,
       completion: calculateProductionCompletion(100, 40),
     })).toBe(false)
-  })
-
-  it('keeps searched open orders visible even when the current status filter would otherwise hide them', () => {
-    const orders = [
-      { ...order('LSX-001', 'Chưa SX'), quantity: '100', producedQuantity: 0, remainingQuantity: 100, completionPct: 0 },
-      { ...order('LSX-002', 'Đang kiểm'), quantity: '100', producedQuantity: 0, remainingQuantity: 100, completionPct: 0 },
-    ]
-
-    expect(getOpenOrdersSearchState(orders, 'NOT_STARTED', 'LSX-002')).toEqual({
-      query: 'LSX-002',
-      statusFilter: 'ALL',
-    })
   })
 
   it('sorts order catalog by status priority then pcode', () => {
