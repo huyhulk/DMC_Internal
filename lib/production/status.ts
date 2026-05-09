@@ -61,14 +61,7 @@ export function resolveProductionOrderStatus(input: {
   const produced = Math.max(0, input.produced)
   if (input.closed || (quantity > 0 && produced >= quantity)) return 'Đã SX'
   if (produced > 0) return 'Đang SX'
-  // Prefer an explicit internalStatus (e.g. 'Đang kiểm' stored in production_order_status).
-  const fromInternal = normalizeProductionOrderInternalStatus(input.internalStatus)
-  if (fromInternal !== null && fromInternal !== 'Chưa SX') return fromInternal
-  // Inspection status from the data source (Google Sheet) should surface even when the
-  // system has not yet recorded any production. Other source statuses (e.g. 'Đang sản xuất')
-  // are not inherited when produced = 0 — trust actual production data instead.
-  if (normalizeProductionOrderInternalStatus(input.sourceStatus) === 'Đang kiểm') return 'Đang kiểm'
-  return fromInternal ?? 'Chưa SX'
+  return normalizeProductionOrderInternalStatus(input.internalStatus) ?? 'Chưa SX'
 }
 
 export function resolveProductionOrderInternalStatus(input: {

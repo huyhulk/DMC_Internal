@@ -82,33 +82,6 @@ describe('production workflow helpers', () => {
     })).toBe('Đang kiểm')
   })
 
-  it('resolves to inspection status when data source carries Đang kiểm even without an explicit internalStatus', () => {
-    // Core case: sourceStatus from data table = 'Đang kiểm', no internalStatus row
-    expect(resolveProductionOrderStatus({
-      sourceStatus: 'Đang kiểm',
-      produced: 0,
-      quantity: 100,
-      closed: false,
-    })).toBe('Đang kiểm')
-
-    // Accent variant from Google Sheet
-    expect(resolveProductionOrderStatus({
-      sourceStatus: 'Đang Kiểm',
-      produced: 0,
-      quantity: 100,
-      closed: false,
-    })).toBe('Đang kiểm')
-
-    // Auto-computed internalStatus 'Chưa SX' must NOT override sourceStatus 'Đang kiểm'
-    expect(resolveProductionOrderStatus({
-      sourceStatus: 'Đang kiểm',
-      internalStatus: 'Chưa SX',
-      produced: 0,
-      quantity: 100,
-      closed: false,
-    })).toBe('Đang kiểm')
-  })
-
   it('normalizes old completed-date progress filter to production date', () => {
     expect(normalizeProgressFilterBy('completed_date')).toBe('production_date')
     expect(normalizeProgressFilterBy('production_date')).toBe('production_date')
