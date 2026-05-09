@@ -2,7 +2,7 @@ import { parseLocalDateTimeString } from '@/lib/utils'
 import type { ProductionCompletion } from '@/lib/production/workflow'
 import type { ProductionOrderInternalStatus, ProductionOrderEffectiveStatus } from '@/types'
 
-const COMPLETED_ORDER_VISIBILITY_WINDOW_MS = 24 * 60 * 60 * 1000
+const COMPLETED_ORDER_VISIBILITY_WINDOW_MS = 48 * 60 * 60 * 1000
 
 export const PRODUCTION_ORDER_INTERNAL_STATUSES: ProductionOrderInternalStatus[] = [
   'Chưa SX',

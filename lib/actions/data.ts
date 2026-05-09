@@ -6,6 +6,7 @@ import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
+  getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isProductionOrderDeadlineExpired,
   shouldAutoCloseProductionOrder,
@@ -423,17 +424,29 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       .map((order) => order.pcode)
 
     const now = new Date()
+    // "YYYY-MM" of the current month — used to filter "Chưa SX" orders by creation month
+    const currentYearMonth = today.substring(0, 7)
+    const GRACE_48H = 48 * 60 * 60 * 1000
     const closedPcodeSet = new Set(closedPcodes)
     const orders = sortProductionOrdersForEntry(
-      effectiveOrders.filter((order) =>
-        shouldShowOpenProductionOrder({
+      effectiveOrders.filter((order) => {
+        if (!shouldShowOpenProductionOrder({
           status: order.status,
           closed: closedPcodeSet.has(order.pcode),
           completion: order,
           completedAt: order.completedAt,
           now,
-        }) && !isProductionOrderDeadlineExpired(order.deadlinedate, order.deadlinetime, now)
-      )
+        })) return false
+
+        // "Chưa SX" (rank 0): only show if created in current month AND deadline within 48h.
+        // "Đang SX / Đang kiểm" (rank 1-2): show all — no deadline or creation-date filter.
+        if (getProductionOrderStatusRank(order.status) === 0) {
+          if (!order.initialdate.startsWith(currentYearMonth)) return false
+          if (isProductionOrderDeadlineExpired(order.deadlinedate, order.deadlinetime, now, GRACE_48H)) return false
+        }
+
+        return true
+      })
     ) as OpenProductionOrdersData['orders']
 
     return { success: true, data: { orders, norms, materials, submittedPcodes, closedPcodes } }

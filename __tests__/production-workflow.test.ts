@@ -133,20 +133,20 @@ describe('production workflow helpers', () => {
     expect(isProgressReportCompleted(calculateProductionCompletion(100, 100).completionPct)).toBe(true)
   })
 
-  it('keeps completed production orders visible for up to one day after completion', () => {
+  it('keeps completed production orders visible for up to 48 hours after completion', () => {
     expect(shouldShowOpenProductionOrder({
       status: 'Đã SX',
       closed: false,
       completion: calculateProductionCompletion(100, 100),
       completedAt: '2026-05-08T10:00:00',
-      now: new Date('2026-05-09T09:59:59+07:00'),
+      now: new Date('2026-05-10T09:59:59+07:00'), // 47h59m59s → still visible
     })).toBe(true)
     expect(shouldShowOpenProductionOrder({
       status: 'Đã SX',
       closed: false,
       completion: calculateProductionCompletion(100, 100),
       completedAt: '2026-05-08T10:00:00',
-      now: new Date('2026-05-09T10:00:01+07:00'),
+      now: new Date('2026-05-10T10:00:01+07:00'), // 48h0m1s → hidden
     })).toBe(false)
   })
 
