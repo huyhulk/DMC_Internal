@@ -43,5 +43,6 @@ next-env.d.ts
 .claude/session/
 .claude/*.tmp
 .claude/*.bak
+.claude/worktrees/
 .gitnexus
 .worktrees/

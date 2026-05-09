@@ -279,6 +279,17 @@ export function isProductionOrderDeadlineExpired(
   return now.getTime() - deadlineMs > gracePeriodMs
 }
 
+export function isProductionOrderCreatedOnOrAfter(
+  initialdate: string | null | undefined,
+  baselineDate: string,
+): boolean {
+  if (!initialdate) return false
+  const initialDateTrim = initialdate.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(initialDateTrim)) return false
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(baselineDate)) return false
+  return initialDateTrim >= baselineDate
+}
+
 export function getProductionRowsValidationError(rows: ProductionInputRow[], now = new Date()): string | null {
   if (rows.length === 0) return 'Vui lòng chọn ít nhất 1 sản phẩm.'
 

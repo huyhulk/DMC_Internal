@@ -8,6 +8,7 @@ import {
   calculateProductionCompletionTime,
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
+  isProductionOrderCreatedOnOrAfter,
   isProductionOrderDeadlineExpired,
   shouldAutoCloseProductionOrder,
   sortProductionOrdersForEntry,
@@ -424,9 +425,8 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       .map((order) => order.pcode)
 
     const now = new Date()
-    // "YYYY-MM" of the current month — used to filter "Chưa SX" orders by creation month
-    const currentYearMonth = today.substring(0, 7)
-    const GRACE_48H = 48 * 60 * 60 * 1000
+    const NOT_STARTED_BASELINE_DATE = '2026-04-01'
+    const DEADLINE_VISIBILITY_WINDOW_MS = 72 * 60 * 60 * 1000
     const closedPcodeSet = new Set(closedPcodes)
     const orders = sortProductionOrdersForEntry(
       effectiveOrders.filter((order) => {
@@ -434,15 +434,14 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
           status: order.status,
           closed: closedPcodeSet.has(order.pcode),
           completion: order,
-          completedAt: order.completedAt,
+          deadlinedate: order.deadlinedate,
+          deadlinetime: order.deadlinetime,
           now,
         })) return false
 
-        // "Chưa SX" (rank 0): only show if created in current month AND deadline within 48h.
-        // "Đang SX / Đang kiểm" (rank 1-2): show all — no deadline or creation-date filter.
         if (getProductionOrderStatusRank(order.status) === 0) {
-          if (!order.initialdate.startsWith(currentYearMonth)) return false
-          if (isProductionOrderDeadlineExpired(order.deadlinedate, order.deadlinetime, now, GRACE_48H)) return false
+          if (!isProductionOrderCreatedOnOrAfter(order.initialdate, NOT_STARTED_BASELINE_DATE)) return false
+          if (isProductionOrderDeadlineExpired(order.deadlinedate, order.deadlinetime, now, DEADLINE_VISIBILITY_WINDOW_MS)) return false
         }
 
         return true

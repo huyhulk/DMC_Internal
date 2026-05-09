@@ -15,6 +15,7 @@ import {
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isOpenProductionOrder,
+  isProductionOrderCreatedOnOrAfter,
   isProductionOrderDeadlineExpired,
   isProductionTimeRangeValid,
   shouldAutoCloseProductionOrder,
@@ -133,21 +134,37 @@ describe('production workflow helpers', () => {
     expect(isProgressReportCompleted(calculateProductionCompletion(100, 100).completionPct)).toBe(true)
   })
 
-  it('keeps completed production orders visible for up to 48 hours after completion', () => {
+  it('keeps completed and delivered production orders visible while deadline is within 72 hours', () => {
     expect(shouldShowOpenProductionOrder({
       status: 'Đã SX',
       closed: false,
       completion: calculateProductionCompletion(100, 100),
-      completedAt: '2026-05-08T10:00:00',
-      now: new Date('2026-05-10T09:59:59+07:00'), // 47h59m59s → still visible
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now: new Date('2026-05-11T09:59:59+07:00'), // 71h59m59s from deadline → still visible
     })).toBe(true)
     expect(shouldShowOpenProductionOrder({
       status: 'Đã SX',
       closed: false,
       completion: calculateProductionCompletion(100, 100),
-      completedAt: '2026-05-08T10:00:00',
-      now: new Date('2026-05-10T10:00:01+07:00'), // 48h0m1s → hidden
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now: new Date('2026-05-11T10:00:01+07:00'), // 72h0m1s from deadline → hidden
     })).toBe(false)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã giao',
+      closed: false,
+      completion: calculateProductionCompletion(100, 40),
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now: new Date('2026-05-11T09:59:59+07:00'),
+    })).toBe(true)
+  })
+
+  it('keeps not-started orders from the 2026-04-01 baseline and excludes older ones', () => {
+    expect(isProductionOrderCreatedOnOrAfter('2026-04-01', '2026-04-01')).toBe(true)
+    expect(isProductionOrderCreatedOnOrAfter('2026-04-02', '2026-04-01')).toBe(true)
+    expect(isProductionOrderCreatedOnOrAfter('2026-03-31', '2026-04-01')).toBe(false)
   })
 
   it('detects open production orders from effective status and completion metadata', () => {
