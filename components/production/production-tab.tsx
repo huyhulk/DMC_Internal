@@ -835,7 +835,9 @@ function getOrderStatusKey(order: OpenProductionOrder): ProductionOrderStatusKey
   const rank = getProductionOrderStatusRank(order.status)
   if (rank === 0) return 'NOT_STARTED'
   if (rank === 1) return 'IN_PROGRESS'
-  if (rank === 2 || order.completionPct >= 100) return 'COMPLETED'
+  // rank 2 = Đang kiểm, rank 3 = Đã SX, rank 4 = Đã giao — không rơi vào IN_PROGRESS
+  // Đang kiểm được phân loại riêng qua isInspectionOrder; đặt COMPLETED ở đây để không lẫn IN_PROGRESS
+  if (rank >= 3 || order.completionPct >= 100) return 'COMPLETED'
   return 'IN_PROGRESS'
 }
 

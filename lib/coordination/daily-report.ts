@@ -256,7 +256,13 @@ export async function getDailyPlanReport(date: string): Promise<Array<DailyWorks
       deadlinedate: source.DEADLINEDATE ?? '',
       status: source.STATUS ?? '',
     }, statusMap)
-    if (!workshop || !shouldShowOpenProductionOrder({ status: effectiveOrder.status, closed: statusMap.get(source.PCODE)?.closed ?? false, completion })) continue
+    if (!workshop || !shouldShowOpenProductionOrder({
+      status: effectiveOrder.status,
+      closed: statusMap.get(source.PCODE)?.closed ?? false,
+      completion,
+      deadlinedate: source.DEADLINEDATE ? source.DEADLINEDATE.substring(0, 10) : null,
+      deadlinetime: source.DEADLINEDATE?.includes('T') ? source.DEADLINEDATE.substring(11, 16) : null,
+    })) continue
     const { remaining, completionPct } = calculateCompletion(quantity, produced)
 
     const plannedQuantity = produced > 0 ? remaining : quantity

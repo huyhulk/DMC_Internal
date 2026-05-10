@@ -12,11 +12,15 @@ import {
   calculateProductionCompletionTime,
   filterProductionOrdersByPcode,
   getOpenOrdersSearchState,
+  getOpenProductionOrdersQueryWindow,
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isOpenProductionOrder,
+  isProductionOrderCreatedOnOrAfter,
+  isProductionOrderDeadlineExpired,
   isProductionTimeRangeValid,
   shouldAutoCloseProductionOrder,
+  shouldKeepNotStartedOrderVisible,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
 
@@ -24,6 +28,7 @@ import {
   isEffectiveClosedProductionStatus,
   isEffectiveCompletedProductionStatus,
   isProductionOrderInternalStatus,
+  resolveOpenProductionOrderStatus,
   resolveProductionOrderStatus,
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
@@ -72,14 +77,68 @@ describe('production workflow helpers', () => {
     expect(resolveProductionOrderStatus({ sourceStatus: 'Chưa sản xuất', produced: 10, quantity: 100, closed: true })).toBe('Đã SX')
   })
 
-  it('keeps inspection status when internal status comes from the shared status table', () => {
+  it('can treat recently delivered orders as internal production statuses for open orders', () => {
+    const now = new Date('2026-05-09T09:00:00+07:00')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 0,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now,
+    })).toBe('Chưa SX')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 40,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now,
+    })).toBe('Đang SX')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 100,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now,
+    })).toBe('Đã SX')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 0,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-05',
+      deadlinetime: '08:59',
+      now,
+    })).toBe('Đã giao')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 0,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-10',
+      deadlinetime: '08:59',
+      now,
+    })).toBe('Đã giao')
+  })
+
+  it('does not let stale shared inspection status override explicit raw not-started status', () => {
     expect(resolveProductionOrderStatus({
       sourceStatus: 'Chưa sản xuất',
       internalStatus: 'Đang Kiểm',
       produced: 0,
       quantity: 100,
       closed: false,
-    })).toBe('Đang kiểm')
+    })) .toBe('Chưa SX')
   })
 
   it('resolves to inspection status when data source carries Đang kiểm even without an explicit internalStatus', () => {
@@ -89,15 +148,15 @@ describe('production workflow helpers', () => {
       produced: 0,
       quantity: 100,
       closed: false,
-    })).toBe('Đang kiểm')
+    })) .toBe('Đang kiểm')
 
     // Accent variant from Google Sheet
     expect(resolveProductionOrderStatus({
-      sourceStatus: 'Đang Kiểm',
+      sourceStatus: 'Đang kiểm',
       produced: 0,
       quantity: 100,
       closed: false,
-    })).toBe('Đang kiểm')
+    })) .toBe('Đang kiểm')
 
     // Auto-computed internalStatus 'Chưa SX' must NOT override sourceStatus 'Đang kiểm'
     expect(resolveProductionOrderStatus({
@@ -106,7 +165,7 @@ describe('production workflow helpers', () => {
       produced: 0,
       quantity: 100,
       closed: false,
-    })).toBe('Đang kiểm')
+    })) .toBe('Đang kiểm')
   })
 
   it('normalizes old completed-date progress filter to production date', () => {
@@ -132,12 +191,41 @@ describe('production workflow helpers', () => {
     expect(isProgressReportCompleted(calculateProductionCompletion(100, 100).completionPct)).toBe(true)
   })
 
-  it('keeps completed production orders visible for up to one day after completion', () => {
+  it('keeps completed and delivered production orders visible while deadline is within 72 hours', () => {
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 100),
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now: new Date('2026-05-11T09:59:59+07:00'), // 71h59m59s from deadline → still visible
+    })).toBe(true)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 100),
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now: new Date('2026-05-11T10:00:01+07:00'), // 72h0m1s from deadline → hidden
+    })).toBe(false)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã giao',
+      closed: false,
+      completion: calculateProductionCompletion(100, 40),
+      deadlinedate: '2026-05-08',
+      deadlinetime: '10:00',
+      now: new Date('2026-05-11T09:59:59+07:00'),
+    })).toBe(true)
+  })
+
+  it('keeps completed production orders visible for up to one day after completion even when the deadline is older', () => {
     expect(shouldShowOpenProductionOrder({
       status: 'Đã SX',
       closed: false,
       completion: calculateProductionCompletion(100, 100),
       completedAt: '2026-05-08T10:00:00',
+      deadlinedate: '2026-05-01',
+      deadlinetime: '10:00',
       now: new Date('2026-05-09T09:59:59+07:00'),
     })).toBe(true)
     expect(shouldShowOpenProductionOrder({
@@ -145,8 +233,58 @@ describe('production workflow helpers', () => {
       closed: false,
       completion: calculateProductionCompletion(100, 100),
       completedAt: '2026-05-08T10:00:00',
+      deadlinedate: '2026-05-01',
+      deadlinetime: '10:00',
       now: new Date('2026-05-09T10:00:01+07:00'),
     })).toBe(false)
+  })
+
+  it('keeps newly closed production orders visible for up to one day after the latest status update when completion time is unavailable', () => {
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 40),
+      deadlinedate: '2026-05-01',
+      deadlinetime: '10:00',
+      statusUpdatedAt: '2026-05-09T08:30:00+07:00',
+      now: new Date('2026-05-09T17:29:59+07:00'),
+    })).toBe(true)
+    expect(shouldShowOpenProductionOrder({
+      status: 'Đã SX',
+      closed: false,
+      completion: calculateProductionCompletion(100, 40),
+      deadlinedate: '2026-05-01',
+      deadlinetime: '10:00',
+      statusUpdatedAt: '2026-05-09T08:30:00+07:00',
+      now: new Date('2026-05-10T08:30:01+07:00'),
+    })).toBe(false)
+  })
+
+  it('keeps not-started orders from the 2026-04-01 baseline and excludes older ones', () => {
+    expect(isProductionOrderCreatedOnOrAfter('2026-04-01', '2026-04-01')).toBe(true)
+    expect(isProductionOrderCreatedOnOrAfter('2026-04-02', '2026-04-01')).toBe(true)
+    expect(isProductionOrderCreatedOnOrAfter('2026-03-31', '2026-04-01')).toBe(false)
+  })
+
+  it('keeps not-started orders visible based on initial date even if deadline is older than 72 hours', () => {
+    expect(shouldKeepNotStartedOrderVisible({
+      initialdate: '2026-05-08',
+      baselineDate: '2026-04-01',
+    })).toBe(true)
+    expect(isProductionOrderDeadlineExpired(
+      '2026-05-09',
+      '08:30',
+      new Date('2026-05-12T09:00:00+07:00'),
+      72 * 60 * 60 * 1000,
+    )).toBe(true)
+  })
+
+  it('builds the open-orders query window from the Vietnam calendar date even before 07:00 UTC+7', () => {
+    expect(getOpenProductionOrdersQueryWindow(new Date('2026-05-08T18:30:00.000Z'))).toEqual({
+      today: '2026-05-09',
+      fromDate: '2026-04-01',
+      deadlineFrom: '2026-05-07',
+    })
   })
 
   it('detects open production orders from effective status and completion metadata', () => {
@@ -324,7 +462,8 @@ describe('production workflow helpers', () => {
       endtime: '09:00',
     }
 
-    expect(getProductionRowsValidationError([validRow], new Date(2026, 4, 2, 10, 0))).toBeNull()
+    const nowVN = new Date('2026-05-02T10:00:00+07:00')
+    expect(getProductionRowsValidationError([validRow], nowVN)).toBeNull()
     expect(getProductionRowsValidationError([]))
       .toBe('Vui lòng chọn ít nhất 1 sản phẩm.')
     expect(getProductionRowsValidationError([{ ...validRow, pdate: '' }]))
@@ -333,9 +472,9 @@ describe('production workflow helpers', () => {
       .toBe('Dòng 1: vui lòng chọn mã LSX.')
     expect(getProductionRowsValidationError([{ ...validRow, starttime: '' }]))
       .toBe('Dòng 1: vui lòng nhập giờ bắt đầu và kết thúc.')
-    expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }], new Date(2026, 4, 2, 10, 0)))
+    expect(getProductionRowsValidationError([{ ...validRow, endtime: '07:59' }], nowVN))
       .toBe('Dòng 1: giờ kết thúc phải lớn hơn giờ bắt đầu.')
-    expect(getProductionRowsValidationError([{ ...validRow, poutput: -1 }], new Date(2026, 4, 2, 10, 0)))
+    expect(getProductionRowsValidationError([{ ...validRow, poutput: -1 }], nowVN))
       .toBe('Dòng 1: số lượng và nhân sự không được âm.')
   })
 
@@ -351,7 +490,8 @@ describe('production workflow helpers', () => {
       starttime: '08:00',
       endtime: '09:00',
     }
-    const now = new Date(2026, 4, 2, 10, 0)
+    // Neo absolute time về Asia/Ho_Chi_Minh để test không phụ thuộc TZ của runner.
+    const now = new Date('2026-05-02T10:00:00+07:00')
 
     expect(getProductionRowsValidationError([validRow], now)).toBeNull()
     expect(getProductionRowsValidationError([{ ...validRow, endtime: '11:00' }], now))
@@ -362,7 +502,42 @@ describe('production workflow helpers', () => {
       .toBe('Dòng 1: giờ kết thúc phải lớn hơn giờ bắt đầu.')
   })
 
-  it('validates production end time against Vietnam local time on UTC servers', () => {
+  it('hides open orders whose deadline expired more than 36 hours ago', () => {
+    // Deadline 2026-05-07T11:00 +07:00 = 2026-05-07T04:00Z
+    const deadline = { deadlinedate: '2026-05-07', deadlinetime: '11:00' }
+    const exactly36h  = new Date('2026-05-08T23:00:00+07:00') // elapsed = 36h exactly → NOT expired
+    const over36h     = new Date('2026-05-08T23:00:01+07:00') // elapsed > 36h → expired
+    const before      = new Date('2026-05-07T10:59:00+07:00') // deadline not yet passed
+    expect(isProductionOrderDeadlineExpired(deadline.deadlinedate, deadline.deadlinetime, exactly36h)).toBe(false)
+    expect(isProductionOrderDeadlineExpired(deadline.deadlinedate, deadline.deadlinetime, over36h)).toBe(true)
+    expect(isProductionOrderDeadlineExpired(deadline.deadlinedate, deadline.deadlinetime, before)).toBe(false)
+  })
+
+  it('does not hide orders with no deadline set', () => {
+    const now = new Date('2026-05-09T08:00:00+07:00')
+    expect(isProductionOrderDeadlineExpired(null, null, now)).toBe(false)
+    expect(isProductionOrderDeadlineExpired('', '', now)).toBe(false)
+    expect(isProductionOrderDeadlineExpired(undefined, undefined, now)).toBe(false)
+  })
+
+  it('treats deadline with no time as end of day (23:59 +07:00)', () => {
+    // deadline 2026-05-08 no time → treated as 23:59 → expires after 2026-05-08T23:59+36h = 2026-05-10T11:59
+    const nowJustOver  = new Date('2026-05-10T11:59:01+07:00') // 1s after 36h grace → expired
+    const nowJustUnder = new Date('2026-05-10T11:58:00+07:00') // within 36h grace → NOT expired
+    expect(isProductionOrderDeadlineExpired('2026-05-08', '', nowJustOver)).toBe(true)
+    expect(isProductionOrderDeadlineExpired('2026-05-08', '', nowJustUnder)).toBe(false)
+  })
+
+  it('classifies Đã giao as higher rank than Đang SX and Đang kiểm', () => {
+    // rank 4 = Đã giao / Giao hàng (must be > IN_PROGRESS and INSPECTION ranks)
+    expect(getProductionOrderStatusRank('Đã giao')).toBe(4)
+    expect(getProductionOrderStatusRank('Giao hàng')).toBe(4)
+    expect(getProductionOrderStatusRank('Đã giao')).toBeGreaterThan(getProductionOrderStatusRank('Đang SX'))
+    expect(getProductionOrderStatusRank('Đã giao')).toBeGreaterThan(getProductionOrderStatusRank('Đang kiểm'))
+  })
+
+  // Reproducer cho bug TZ trên Vercel UTC: user nhập giờ VN, server validate phải hiểu là +07:00.
+  it('treats production end time as Asia/Ho_Chi_Minh regardless of runtime timezone', () => {
     const validRow = {
       pdate: '2026-05-08',
       pcode: 'LSX-001',
@@ -372,12 +547,17 @@ describe('production workflow helpers', () => {
       routput: 0,
       workforce: 2,
       starttime: '08:00',
-      endtime: '10:04',
+      endtime: '14:00',
     }
-    const now = new Date('2026-05-08T03:12:00.000Z')
+    // Bây giờ là 15:00 VN = 08:00Z. endtime 14:00 VN = 07:00Z → phải PASS.
+    const nowVN15 = new Date('2026-05-08T15:00:00+07:00')
+    expect(getProductionRowsValidationError([validRow], nowVN15)).toBeNull()
 
-    expect(getProductionRowsValidationError([validRow], now)).toBeNull()
-    expect(getProductionRowsValidationError([{ ...validRow, endtime: '10:13' }], now))
+    // Edge: endtime 14:01 VN, now 14:00 VN → 1 phút trong tương lai → phải reject.
+    const nowVN14 = new Date('2026-05-08T14:00:00+07:00')
+    expect(getProductionRowsValidationError([{ ...validRow, endtime: '14:01' }], nowVN14))
       .toBe('Dòng 1: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.')
   })
 })
+
+

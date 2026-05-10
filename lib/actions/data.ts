@@ -6,6 +6,7 @@ import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
 import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
+  getOpenProductionOrdersQueryWindow,
   getProductionRowsValidationError,
   shouldAutoCloseProductionOrder,
   sortProductionOrdersForEntry,
@@ -17,9 +18,13 @@ import {
   upsertProductionOrderStatuses,
   type ProductionSourceRow,
 } from '@/lib/production/status-server'
-import { shouldShowOpenProductionOrder } from '@/lib/production/status'
+import {
+  isProductionOrderInternalStatus,
+  resolveOpenProductionOrderStatus,
+  shouldShowOpenProductionOrder,
+} from '@/lib/production/status'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
-import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode, getTodayLocal } from '@/lib/utils'
+import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
@@ -36,11 +41,12 @@ type DataRow = Database['public']['Tables']['data']['Row']
 type ProductionRow = Database['public']['Tables']['Production']['Row']
 type ProductionOrderStatusRow = Pick<
   Database['public']['Tables']['production_order_status']['Row'],
-  'pcode' | 'status' | 'produced_quantity' | 'quantity' | 'completion_pct'
+  'pcode' | 'status' | 'produced_quantity' | 'quantity' | 'completion_pct' | 'updated_at'
 >
 
 // Columns that exist in the "data" table (uppercase, no deadlinetime, no created_at)
 const DATA_SELECT = 'PCODE,INITIALDATE,CUSTOMER,WORKSHOP,DESCRIPTION,QUANTITY,DEADLINEDATE,STATUS'
+const SUPABASE_PAGE_SIZE = 1000
 
 function mapDataRowToOrder(row: DataRow): Order {
   // DEADLINEDATE is "TIMESTAMP WITHOUT TIME ZONE" → "2026-04-13T11:00:00"
@@ -241,7 +247,7 @@ async function fetchProductionOrderStatusRows(
   for (const chunk of chunkArray([...new Set(pcodes.filter(Boolean))], 200)) {
     const statusRes = await supabase
       .from('production_order_status')
-      .select('pcode,status,produced_quantity,quantity,completion_pct')
+      .select('pcode,status,produced_quantity,quantity,completion_pct,updated_at')
       .in('pcode', chunk)
 
     if (statusRes.error) {
@@ -250,6 +256,52 @@ async function fetchProductionOrderStatusRows(
     }
 
     rows.push(...((statusRes.data ?? []) as ProductionOrderStatusRow[]))
+  }
+
+  return rows
+}
+
+async function fetchProductionRowsByPcodes(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  pcodes: string[],
+): Promise<Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>>> {
+  const rows: Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>> = []
+
+  for (const chunk of chunkArray([...new Set(pcodes.filter(Boolean))], 200)) {
+    const productionRowsRes = await supabase
+      .from('Production')
+      .select('pcode,pdate,endtime,poutput')
+      .in('pcode', chunk)
+
+    if (productionRowsRes.error) throw new Error(productionRowsRes.error.message)
+
+    rows.push(...((productionRowsRes.data ?? []) as Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>>))
+  }
+
+  return rows
+}
+
+async function fetchDataRowsUpToDate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  today: string,
+): Promise<DataRow[]> {
+  const rows: DataRow[] = []
+
+  for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('data')
+      .select(DATA_SELECT)
+      .lte('INITIALDATE', today)
+      .order('INITIALDATE', { ascending: true })
+      .order('PCODE', { ascending: true })
+      .range(from, from + SUPABASE_PAGE_SIZE - 1)
+
+    if (error) throw new Error(error.message)
+
+    const page = (data ?? []) as DataRow[]
+    rows.push(...page)
+
+    if (page.length < SUPABASE_PAGE_SIZE) break
   }
 
   return rows
@@ -278,12 +330,6 @@ function getLockedProductionPcodes(
   quantityByPcode: Map<string, number>
 ): string[] {
   return getClosedPcodesFromProduction(rows, quantityByPcode)
-}
-
-function getLocalPreviousMonthStart(dateString: string): string {
-  const year = Number(dateString.slice(0, 4))
-  const monthIndex = Number(dateString.slice(5, 7)) - 1
-  return new Date(year, monthIndex - 1, 1).toLocaleDateString('en-CA')
 }
 
 function isMissingProductionOrderStatusTableError(error: { code?: string; message?: string } | null): boolean {
@@ -343,22 +389,13 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const { role, workspace: rawWorkspace } = profileData as { role: string; workspace: string }
     const userWorkspaces = getUserWorkspaces(rawWorkspace ?? '')
 
-    const today = getTodayLocal()
-    const fromDate = getLocalPreviousMonthStart(today)
+    const { today } = getOpenProductionOrdersQueryWindow()
 
-    const [norms, materials, dataRes] = await Promise.all([
+    const [norms, materials, dataRows] = await Promise.all([
       getCachedNorms(),
       getCachedMaterials(),
-      supabase
-        .from('data')
-        .select(DATA_SELECT)
-        .gte('INITIALDATE', fromDate)
-        .lte('INITIALDATE', today),
+      fetchDataRowsUpToDate(supabase, today),
     ])
-
-    if (dataRes.error) return { success: false, error: dataRes.error.message }
-
-    const dataRows = (dataRes.data ?? []) as DataRow[]
     const scopedDataRows = dataRows.filter((row) =>
       isWorkspaceAllowed(normalizeWorkshop(row.WORKSHOP ?? ''), role, userWorkspaces)
     )
@@ -370,17 +407,13 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     let productionRows: Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>> = []
 
     if (pcodes.length > 0) {
-      const [fetchedStatusRows, productionRowsRes] = await Promise.all([
+      const [fetchedStatusRows, fetchedProductionRows] = await Promise.all([
         fetchProductionOrderStatusRows(supabase, pcodes),
-        supabase
-          .from('Production')
-          .select('pcode,pdate,endtime,poutput')
-          .in('pcode', pcodes),
+        fetchProductionRowsByPcodes(supabase, pcodes),
       ])
 
       statusRows = fetchedStatusRows
-      if (productionRowsRes.error) return { success: false, error: productionRowsRes.error.message }
-      productionRows = (productionRowsRes.data ?? []) as Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>>
+      productionRows = fetchedProductionRows
     }
 
     const statusMap = buildProductionStatusMapFromRows({
@@ -389,6 +422,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       statusRows,
       quantityByPcode,
     })
+    const statusUpdatedAtByPcode = new Map(statusRows.map((row) => [row.pcode, row.updated_at]))
 
     const productionRowsByPcode = new Map<string, Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>>>()
     for (const row of productionRows) {
@@ -398,6 +432,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       productionRowsByPcode.set(row.pcode, rows)
     }
 
+    const now = new Date()
     const effectiveOrders = scopedOrders.map((order) => {
       const info = statusMap.get(order.pcode)
       const completion = calculateProductionCompletion(Number(order.quantity) || 0, info?.producedQuantity ?? 0)
@@ -405,7 +440,23 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
         Number(order.quantity) || 0,
         productionRowsByPcode.get(order.pcode) ?? [],
       )
-      return applyEffectiveStatusToOrder({ ...order, ...completion, completedAt }, statusMap)
+      const effectiveOrder = applyEffectiveStatusToOrder({ ...order, ...completion, completedAt }, statusMap)
+      const status = resolveOpenProductionOrderStatus({
+        sourceStatus: effectiveOrder.sourceStatus ?? effectiveOrder.status,
+        quantity: Number(order.quantity) || info?.quantity || 0,
+        produced: info?.producedQuantity ?? 0,
+        closed: info?.closed ?? false,
+        internalStatus: effectiveOrder.internalStatus,
+        deadlinedate: order.deadlinedate,
+        deadlinetime: order.deadlinetime,
+        now,
+      })
+
+      return {
+        ...effectiveOrder,
+        status,
+        internalStatus: isProductionOrderInternalStatus(status) ? status : effectiveOrder.internalStatus,
+      }
     })
 
     const submittedPcodes = effectiveOrders
@@ -419,11 +470,22 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       .map((order) => order.pcode)
 
     const closedPcodeSet = new Set(closedPcodes)
-    const orders = sortProductionOrdersForEntry(effectiveOrders.filter((order) => shouldShowOpenProductionOrder({
-      status: order.status,
-      closed: closedPcodeSet.has(order.pcode),
-      completion: order,
-    }))) as OpenProductionOrdersData['orders']
+    const orders = sortProductionOrdersForEntry(
+      effectiveOrders.filter((order) => {
+        if (!shouldShowOpenProductionOrder({
+          status: order.status,
+          closed: closedPcodeSet.has(order.pcode),
+          completion: order,
+          completedAt: order.completedAt,
+          statusUpdatedAt: statusUpdatedAtByPcode.get(order.pcode) ?? null,
+          deadlinedate: order.deadlinedate,
+          deadlinetime: order.deadlinetime,
+          now,
+        })) return false
+
+        return true
+      })
+    ) as OpenProductionOrdersData['orders']
 
     return { success: true, data: { orders, norms, materials, submittedPcodes, closedPcodes } }
   } catch (err) {

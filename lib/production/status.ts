@@ -1,8 +1,9 @@
-import { parseLocalDateTimeString } from '@/lib/utils'
 import type { ProductionCompletion } from '@/lib/production/workflow'
 import type { ProductionOrderInternalStatus, ProductionOrderEffectiveStatus } from '@/types'
 
-const COMPLETED_ORDER_VISIBILITY_WINDOW_MS = 24 * 60 * 60 * 1000
+const COMPLETED_ORDER_DEADLINE_VISIBILITY_WINDOW_MS = 72 * 60 * 60 * 1000
+const COMPLETED_ORDER_RECENT_VISIBILITY_WINDOW_MS = 24 * 60 * 60 * 1000
+const VIETNAM_TIMEZONE_OFFSET = '+07:00'
 
 export const PRODUCTION_ORDER_INTERNAL_STATUSES: ProductionOrderInternalStatus[] = [
   'Chưa SX',
@@ -61,14 +62,16 @@ export function resolveProductionOrderStatus(input: {
   const produced = Math.max(0, input.produced)
   if (input.closed || (quantity > 0 && produced >= quantity)) return 'Đã SX'
   if (produced > 0) return 'Đang SX'
-  // Prefer an explicit internalStatus (e.g. 'Đang kiểm' stored in production_order_status).
+  const fromSource = normalizeProductionOrderInternalStatus(input.sourceStatus)
   const fromInternal = normalizeProductionOrderInternalStatus(input.internalStatus)
-  if (fromInternal !== null && fromInternal !== 'Chưa SX') return fromInternal
   // Inspection status from the data source (Google Sheet) should surface even when the
-  // system has not yet recorded any production. Other source statuses (e.g. 'Đang sản xuất')
-  // are not inherited when produced = 0 — trust actual production data instead.
-  if (normalizeProductionOrderInternalStatus(input.sourceStatus) === 'Đang kiểm') return 'Đang kiểm'
-  return fromInternal ?? 'Chưa SX'
+  // system has not yet recorded any production.
+  if (fromSource === 'Đang kiểm') return 'Đang kiểm'
+  // Persisted internal status must not override explicit raw statuses like 'Chưa sản xuất'
+  // after raw data is re-imported. Only use shared inspection status when the source data
+  // is empty or unrecognized.
+  if (fromInternal === 'Đang kiểm' && fromSource === null) return 'Đang kiểm'
+  return 'Chưa SX'
 }
 
 export function resolveProductionOrderInternalStatus(input: {
@@ -84,6 +87,35 @@ export function resolveProductionOrderInternalStatus(input: {
   }) as ProductionOrderInternalStatus
 }
 
+export function resolveOpenProductionOrderStatus(input: {
+  sourceStatus: string
+  quantity: number
+  produced: number
+  closed: boolean
+  internalStatus?: string | null
+  deadlinedate?: string | null
+  deadlinetime?: string | null
+  now?: Date
+}): ProductionOrderEffectiveStatus {
+  const sourceStatus = input.sourceStatus.trim()
+
+  if (isSourceDeliveredStatus(sourceStatus) && isDeliveredOrderWithinRecentDeadlineWindow(input.deadlinedate, input.deadlinetime, input.now)) {
+    return resolveProductionOrderInternalStatus({
+      quantity: input.quantity,
+      produced: input.produced,
+      closed: input.closed,
+    })
+  }
+
+  return resolveProductionOrderStatus({
+    sourceStatus,
+    quantity: input.quantity,
+    produced: input.produced,
+    closed: input.closed,
+    internalStatus: input.internalStatus,
+  })
+}
+
 export function isEffectiveCompletedProductionStatus(status: string): boolean {
   return isSourceCompletedStatus(status)
 }
@@ -96,14 +128,73 @@ export function isEffectiveClosedProductionStatus(status: string): boolean {
   return isEffectiveCompletedProductionStatus(status) || isEffectiveDeliveredProductionStatus(status)
 }
 
-function isCompletedOrderVisibleWithinWindow(completedAt: string | null | undefined, now: Date): boolean {
-  if (!completedAt) return false
+function isDeliveredOrderWithinRecentDeadlineWindow(
+  deadlinedate: string | null | undefined,
+  deadlinetime: string | null | undefined,
+  nowInput?: Date,
+): boolean {
+  const deadlineMs = getProductionDeadlineEpoch(deadlinedate, deadlinetime)
+  if (deadlineMs === null) return false
 
-  const completedDate = parseLocalDateTimeString(completedAt)
-  if (!completedDate) return false
+  const now = nowInput ?? new Date()
+  const elapsedMs = now.getTime() - deadlineMs
+  return elapsedMs >= 0 && elapsedMs <= COMPLETED_ORDER_DEADLINE_VISIBILITY_WINDOW_MS
+}
 
-  const elapsedMs = now.getTime() - completedDate.getTime()
-  return elapsedMs >= 0 && elapsedMs <= COMPLETED_ORDER_VISIBILITY_WINDOW_MS
+function getProductionDeadlineEpoch(deadlinedate: string | null | undefined, deadlinetime: string | null | undefined): number | null {
+  if (!deadlinedate) return null
+  const dateTrim = deadlinedate.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTrim)) return null
+
+  const rawTime = (deadlinetime ?? '').trim()
+  const timeMatch = (rawTime || '23:59').match(/^(\d{1,2}):(\d{2})/)
+  if (!timeMatch) return null
+
+  const hh = timeMatch[1].padStart(2, '0')
+  const mm = timeMatch[2]
+  const deadlineMs = Date.parse(`${dateTrim}T${hh}:${mm}:00+07:00`)
+  return Number.isFinite(deadlineMs) ? deadlineMs : null
+}
+
+function isCompletedOrderVisibleWithinWindow(
+  deadlinedate: string | null | undefined,
+  deadlinetime: string | null | undefined,
+  now: Date,
+): boolean {
+  const deadlineMs = getProductionDeadlineEpoch(deadlinedate, deadlinetime)
+  if (deadlineMs === null) return false
+
+  const elapsedMs = now.getTime() - deadlineMs
+  return elapsedMs <= COMPLETED_ORDER_DEADLINE_VISIBILITY_WINDOW_MS
+}
+
+function getCompletionEpoch(completedAt: string | null | undefined): number | null {
+  if (!completedAt) return null
+
+  const trimmed = completedAt.trim().replace(' ', 'T')
+  const withoutSeconds = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.exec(trimmed)
+  const withSeconds = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})$/.exec(trimmed)
+
+  let candidate: string | null = null
+  if (withoutSeconds) candidate = `${withoutSeconds[1]}:00${VIETNAM_TIMEZONE_OFFSET}`
+  if (withSeconds) candidate = `${withSeconds[1]}${VIETNAM_TIMEZONE_OFFSET}`
+
+  if (!candidate) return null
+
+  const completedMs = Date.parse(candidate)
+  return Number.isFinite(completedMs) ? completedMs : null
+}
+
+function getStatusUpdatedEpoch(statusUpdatedAt: string | null | undefined): number | null {
+  if (!statusUpdatedAt) return null
+  const updatedMs = Date.parse(statusUpdatedAt)
+  return Number.isFinite(updatedMs) ? updatedMs : null
+}
+
+function isRecentCompletedOrderVisible(timestampMs: number | null, now: Date): boolean {
+  if (timestampMs === null) return false
+  const elapsedMs = now.getTime() - timestampMs
+  return elapsedMs <= COMPLETED_ORDER_RECENT_VISIBILITY_WINDOW_MS
 }
 
 export function shouldShowOpenProductionOrder(input: {
@@ -111,11 +202,17 @@ export function shouldShowOpenProductionOrder(input: {
   closed: boolean
   completion: ProductionCompletion
   completedAt?: string | null
+  statusUpdatedAt?: string | null
+  deadlinedate?: string | null
+  deadlinetime?: string | null
   now?: Date
 }): boolean {
-  if (isEffectiveDeliveredProductionStatus(input.status)) return false
-  if (isEffectiveCompletedProductionStatus(input.status)) {
-    return isCompletedOrderVisibleWithinWindow(input.completedAt, input.now ?? new Date())
+  const now = input.now ?? new Date()
+
+  if (isEffectiveDeliveredProductionStatus(input.status) || isEffectiveCompletedProductionStatus(input.status)) {
+    if (isRecentCompletedOrderVisible(getCompletionEpoch(input.completedAt), now)) return true
+    if (isRecentCompletedOrderVisible(getStatusUpdatedEpoch(input.statusUpdatedAt), now)) return true
+    return isCompletedOrderVisibleWithinWindow(input.deadlinedate, input.deadlinetime, now)
   }
   if (input.closed) return false
   return input.completion.completionPct < 100

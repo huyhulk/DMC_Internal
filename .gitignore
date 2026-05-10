@@ -42,4 +42,14 @@ next-env.d.ts
 # Claude context — session state tạm thời
 .claude/session/
 .claude/*.tmp
+.claude/*.tmp.*
+.claude/tmp-*
 .claude/*.bak
+.claude/worktrees/
+.gitnexus
+.gitnexus-new/
+.gitnexus.broken/
+.gitnexus.blocked-*/
+.worktrees/
+.next.blocked-*/
+.tmp-dev.log

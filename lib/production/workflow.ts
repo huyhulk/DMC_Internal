@@ -2,6 +2,7 @@ import { normalizeProductionStatus } from '@/lib/production/status'
 import type { OpenProductionOrder, Order } from '@/types'
 
 export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
+const PRODUCTION_TIMEZONE_OFFSET = '+07:00'
 
 export type OpenOrdersStatusFilter = 'ALL' | 'NOT_STARTED' | 'IN_PROGRESS' | 'INSPECTION'
 
@@ -28,6 +29,8 @@ export interface ProductionCompletionTimeRow {
   endtime: string | null
   poutput: number | null
 }
+
+const PRODUCTION_APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
 export function getProductionOrderStatusRank(status: string): number {
   const normalized = normalizeProductionStatus(status)
@@ -213,24 +216,155 @@ function parseTimeToMinutes(value: string): number | null {
   return hours * 60 + minutes
 }
 
-function getVietnamLocalDateTimeString(date: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(date).replace(', ', 'T')
-}
-
 export function isProductionTimeRangeValid(starttime: string, endtime: string): boolean {
   const start = parseTimeToMinutes(starttime)
   const end = parseTimeToMinutes(endtime)
   if (start === null || end === null) return false
   return end > start
+}
+
+/**
+ * Trả về epoch (ms) của (pdate, endtime) được neo theo timezone Asia/Ho_Chi_Minh (+07:00),
+ * không phụ thuộc TZ của runtime. Dùng để so sánh với `Date.now()` an toàn trên server UTC.
+ */
+export function getProductionEndEpoch(pdate: string | null, endtime: string | null): number | null {
+  if (!pdate || !endtime) return null
+
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(pdate.trim())
+  if (!dateMatch) return null
+
+  const timeMatch = endtime.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (!timeMatch) return null
+
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const day = Number(dateMatch[3])
+  const hours = Number(timeMatch[1])
+  const minutes = Number(timeMatch[2])
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+
+  const hh = String(hours).padStart(2, '0')
+  const mm = String(minutes).padStart(2, '0')
+  const iso = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T${hh}:${mm}:00${PRODUCTION_TIMEZONE_OFFSET}`
+  const ms = Date.parse(iso)
+  return Number.isFinite(ms) ? ms : null
+}
+
+/**
+ * Trả về true nếu deadline của lệnh đã qua hơn gracePeriodMs (mặc định 24h).
+ * Deadline được neo theo Asia/Ho_Chi_Minh (+07:00) để tránh lỗi TZ trên server UTC.
+ * Nếu không có deadline → không ẩn lệnh.
+ */
+export function isProductionOrderDeadlineExpired(
+  deadlinedate: string | null | undefined,
+  deadlinetime: string | null | undefined,
+  now: Date,
+  gracePeriodMs = 36 * 60 * 60 * 1000,
+): boolean {
+  if (!deadlinedate) return false
+  const dateTrim = deadlinedate.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTrim)) return false
+
+  // Nếu không có giờ deadline → coi là cuối ngày (23:59)
+  const rawTime = (deadlinetime ?? '').trim()
+  const timeMatch = (rawTime || '23:59').match(/^(\d{1,2}):(\d{2})/)
+  if (!timeMatch) return false
+
+  const hh = timeMatch[1].padStart(2, '0')
+  const mm = timeMatch[2]
+  const deadlineMs = Date.parse(`${dateTrim}T${hh}:${mm}:00+07:00`)
+  if (!Number.isFinite(deadlineMs)) return false
+
+  return now.getTime() - deadlineMs > gracePeriodMs
+}
+
+export function isProductionOrderCreatedOnOrAfter(
+  initialdate: string | null | undefined,
+  baselineDate: string,
+): boolean {
+  if (!initialdate) return false
+  const initialDateTrim = initialdate.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(initialDateTrim)) return false
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(baselineDate)) return false
+  return initialDateTrim >= baselineDate
+}
+
+export function shouldKeepNotStartedOrderVisible(input: {
+  initialdate: string | null | undefined
+  baselineDate: string
+}): boolean {
+  return isProductionOrderCreatedOnOrAfter(input.initialdate, input.baselineDate)
+}
+
+function getDatePartsInTimeZone(date: Date, timeZone: string): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const year = Number(parts.find((part) => part.type === 'year')?.value)
+  const month = Number(parts.find((part) => part.type === 'month')?.value)
+  const day = Number(parts.find((part) => part.type === 'day')?.value)
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new Error(`Unable to derive date parts for timezone ${timeZone}`)
+  }
+
+  return { year, month, day }
+}
+
+function formatDateParts(parts: { year: number; month: number; day: number }): string {
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`
+}
+
+function shiftDateString(dateString: string, days: number): string {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString)
+  if (!dateMatch) throw new Error(`Invalid date string: ${dateString}`)
+
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const day = Number(dateMatch[3])
+  const shifted = new Date(Date.UTC(year, month - 1, day + days))
+
+  return formatDateParts({
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  })
+}
+
+function getPreviousMonthStart(dateString: string): string {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString)
+  if (!dateMatch) throw new Error(`Invalid date string: ${dateString}`)
+
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const previousMonthStart = new Date(Date.UTC(year, month - 2, 1))
+
+  return formatDateParts({
+    year: previousMonthStart.getUTCFullYear(),
+    month: previousMonthStart.getUTCMonth() + 1,
+    day: previousMonthStart.getUTCDate(),
+  })
+}
+
+export function getOpenProductionOrdersQueryWindow(now = new Date()): {
+  today: string
+  fromDate: string
+  deadlineFrom: string
+} {
+  const today = formatDateParts(getDatePartsInTimeZone(now, PRODUCTION_APP_TIME_ZONE))
+
+  return {
+    today,
+    fromDate: getPreviousMonthStart(today),
+    deadlineFrom: shiftDateString(today, -2),
+  }
 }
 
 export function getProductionRowsValidationError(rows: ProductionInputRow[], now = new Date()): string | null {
@@ -248,8 +382,9 @@ export function getProductionRowsValidationError(rows: ProductionInputRow[], now
       return `Dòng ${line}: giờ kết thúc phải lớn hơn giờ bắt đầu.`
     }
 
-    const productionEnd = buildProductionTimestamp(row.pdate, row.endtime)
-    if (productionEnd && productionEnd > getVietnamLocalDateTimeString(now)) {
+    // So sánh theo Asia/Ho_Chi_Minh để tránh phụ thuộc TZ của runtime (Vercel chạy UTC).
+    const productionEndMs = getProductionEndEpoch(row.pdate, row.endtime)
+    if (productionEndMs !== null && productionEndMs > now.getTime()) {
       return `Dòng ${line}: giờ kết thúc không được lớn hơn thời gian hiện tại theo ngày sản xuất.`
     }
 
