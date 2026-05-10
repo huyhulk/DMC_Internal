@@ -3,16 +3,23 @@ const mockGetCachedNorms = jest.fn()
 const mockGetCachedMaterials = jest.fn()
 const mockGetOpenProductionOrdersQueryWindow = jest.fn()
 const mockLoggerError = jest.fn()
+const mockRequireTabView = jest.fn()
 
 let mockLte: jest.Mock
 let mockOr: jest.Mock
+let mockDataIn: jest.Mock
 let mockDataOrder: jest.Mock
 let mockDataRange: jest.Mock
 let mockStatusIn: jest.Mock
 let mockProductionIn: jest.Mock
+let mockHistoryGte: jest.Mock
+let mockHistoryLte: jest.Mock
+let mockHistoryOrder: jest.Mock
+let mockHistoryLimit: jest.Mock
 let currentDataRows: Array<Record<string, unknown>>
 let currentStatusRows: Array<Record<string, unknown>>
 let currentProductionRows: Array<Record<string, unknown>>
+let currentHistoryRows: Array<Record<string, unknown>>
 
 jest.mock('react', () => ({
   cache: (fn: unknown) => fn,
@@ -34,7 +41,7 @@ jest.mock('@/lib/db/queries', () => ({
 
 jest.mock('@/lib/permissions/server', () => ({
   requireTabEdit: jest.fn(),
-  requireTabView: jest.fn(),
+  requireTabView: mockRequireTabView,
 }))
 
 jest.mock('@/lib/production/workflow', () => {
@@ -54,7 +61,7 @@ jest.mock('@/lib/logger', () => ({
   },
 }))
 
-import { getOpenProductionOrdersAction } from '@/lib/actions/data'
+import { getOpenProductionOrdersAction, listProductionInputHistoryAction } from '@/lib/actions/data'
 
 describe('data actions', () => {
   beforeEach(() => {
@@ -63,6 +70,7 @@ describe('data actions', () => {
     currentDataRows = []
     currentStatusRows = []
     currentProductionRows = []
+    currentHistoryRows = []
 
     mockGetCachedNorms.mockResolvedValue([])
     mockGetCachedMaterials.mockResolvedValue([])
@@ -71,6 +79,7 @@ describe('data actions', () => {
       fromDate: '2026-04-01',
       deadlineFrom: '2026-05-07',
     })
+    mockRequireTabView.mockResolvedValue({ role: 'admin', workspace: 'ALL' })
 
     const mockSingle = jest.fn().mockResolvedValue({
       data: { role: 'admin', workspace: 'DMC1' },
@@ -79,6 +88,7 @@ describe('data actions', () => {
     const mockProfilesSelect = jest.fn().mockReturnValue({ eq: mockEq })
 
     mockOr = jest.fn().mockImplementation(() => Promise.resolve({ data: currentDataRows, error: null }))
+    mockDataIn = jest.fn().mockImplementation(() => Promise.resolve({ data: currentDataRows, error: null }))
     mockDataRange = jest.fn().mockImplementation((from: number, to: number) =>
       Promise.resolve({ data: currentDataRows.slice(from, to + 1), error: null })
     )
@@ -91,13 +101,37 @@ describe('data actions', () => {
     }
     mockDataOrder = jest.fn().mockReturnValue(dataQueryResult)
     mockLte = jest.fn().mockReturnValue(dataQueryResult)
-    const mockDataSelect = jest.fn().mockReturnValue({ lte: mockLte })
+    const mockDataSelect = jest.fn((columns: string) => {
+      if (columns === 'PCODE,CUSTOMER,WORKSHOP,DESCRIPTION') return { in: mockDataIn }
+      return { lte: mockLte }
+    })
 
     mockStatusIn = jest.fn().mockImplementation(() => Promise.resolve({ data: currentStatusRows, error: null }))
     const mockStatusSelect = jest.fn().mockReturnValue({ in: mockStatusIn })
 
     mockProductionIn = jest.fn().mockImplementation(() => Promise.resolve({ data: currentProductionRows, error: null }))
-    const mockProductionSelect = jest.fn().mockReturnValue({ in: mockProductionIn })
+    const historyQueryResult = {
+      lte: (...args: unknown[]) => {
+        mockHistoryLte(...args)
+        return historyQueryResult
+      },
+      order: (...args: unknown[]) => {
+        mockHistoryOrder(...args)
+        return historyQueryResult
+      },
+      limit: (...args: unknown[]) => {
+        mockHistoryLimit(...args)
+        return Promise.resolve({ data: currentHistoryRows, error: null })
+      },
+    }
+    mockHistoryLimit = jest.fn()
+    mockHistoryOrder = jest.fn().mockReturnValue(historyQueryResult)
+    mockHistoryLte = jest.fn().mockReturnValue(historyQueryResult)
+    mockHistoryGte = jest.fn().mockReturnValue(historyQueryResult)
+    const mockProductionSelect = jest.fn((columns: string) => {
+      if (columns.includes('id,pdate,pcode,products')) return { gte: mockHistoryGte }
+      return { in: mockProductionIn }
+    })
 
     const mockFrom = jest.fn((table: string) => {
       if (table === 'profiles') return { select: mockProfilesSelect }
@@ -325,5 +359,48 @@ describe('data actions', () => {
     expect(mockProductionIn.mock.calls[0][1]).toHaveLength(200)
     expect(mockProductionIn.mock.calls[1][0]).toBe('pcode')
     expect(mockProductionIn.mock.calls[1][1]).toHaveLength(1)
+  })
+
+  it('loads production input history workshops by the history pcodes instead of relying on an unbounded data page', async () => {
+    currentHistoryRows = [
+      {
+        id: 1,
+        pdate: '2026-05-10',
+        pcode: 'LSX-HISTORY-OUTSIDE-FIRST-PAGE',
+        products: 'Product A',
+        poutput: 12,
+        eoutput: 0,
+        routput: 0,
+        workforce: 3,
+        realnorm: 4,
+        starttime: '08:00',
+        endtime: '09:00',
+        log: '',
+        save_status: 'draft',
+        created_at: '2026-05-10T09:05:00+07:00',
+      },
+    ]
+    currentDataRows = [
+      {
+        PCODE: 'LSX-HISTORY-OUTSIDE-FIRST-PAGE',
+        CUSTOMER: 'History Customer',
+        WORKSHOP: 'DMC4',
+        DESCRIPTION: 'History order',
+      },
+    ]
+
+    const result = await listProductionInputHistoryAction({
+      fromDate: '2026-05-10',
+      toDate: '2026-05-10',
+      query: '',
+    })
+
+    expect(result.success).toBe(true)
+    expect(mockDataIn).toHaveBeenCalledWith('PCODE', ['LSX-HISTORY-OUTSIDE-FIRST-PAGE'])
+    expect(result.data?.[0]).toMatchObject({
+      pcode: 'LSX-HISTORY-OUTSIDE-FIRST-PAGE',
+      workshop: 'DMC4',
+      customer: 'History Customer',
+    })
   })
 })
