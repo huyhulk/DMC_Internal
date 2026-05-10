@@ -6,6 +6,8 @@ const mockLoggerError = jest.fn()
 
 let mockLte: jest.Mock
 let mockOr: jest.Mock
+let mockDataOrder: jest.Mock
+let mockDataRange: jest.Mock
 let mockStatusIn: jest.Mock
 let mockProductionIn: jest.Mock
 let currentDataRows: Array<Record<string, unknown>>
@@ -77,11 +79,17 @@ describe('data actions', () => {
     const mockProfilesSelect = jest.fn().mockReturnValue({ eq: mockEq })
 
     mockOr = jest.fn().mockImplementation(() => Promise.resolve({ data: currentDataRows, error: null }))
+    mockDataRange = jest.fn().mockImplementation((from: number, to: number) =>
+      Promise.resolve({ data: currentDataRows.slice(from, to + 1), error: null })
+    )
     const dataQueryResult = {
-      or: (...args: unknown[]) => mockOr(...args),
-      then: (resolve: (value: { data: Array<Record<string, unknown>>; error: null }) => unknown) =>
-        resolve({ data: currentDataRows, error: null }),
+      order: (...args: unknown[]) => {
+        mockDataOrder(...args)
+        return dataQueryResult
+      },
+      range: (...args: unknown[]) => mockDataRange(...args),
     }
+    mockDataOrder = jest.fn().mockReturnValue(dataQueryResult)
     mockLte = jest.fn().mockReturnValue(dataQueryResult)
     const mockDataSelect = jest.fn().mockReturnValue({ lte: mockLte })
 
@@ -123,7 +131,34 @@ describe('data actions', () => {
 
     expect(mockGetOpenProductionOrdersQueryWindow).toHaveBeenCalledWith()
     expect(mockLte).toHaveBeenCalledWith('INITIALDATE', '2026-05-09')
+    expect(mockDataOrder).toHaveBeenCalledWith('INITIALDATE', { ascending: true })
+    expect(mockDataOrder).toHaveBeenCalledWith('PCODE', { ascending: true })
+    expect(mockDataRange).toHaveBeenCalledWith(0, 999)
     expect(mockOr).not.toHaveBeenCalled()
+  })
+
+  it('paginates source data so open orders after the first Supabase page are included', async () => {
+    currentDataRows = Array.from({ length: 1001 }, (_, index) => ({
+      PCODE: index === 1000 ? 'LSX-AFTER-FIRST-PAGE' : `LSX-PAGE-${String(index + 1).padStart(4, '0')}`,
+      INITIALDATE: index === 1000 ? '2026-05-09' : '2026-05-08',
+      CUSTOMER: 'Paged Customer',
+      WORKSHOP: 'DMC1',
+      DESCRIPTION: 'Paged open order',
+      QUANTITY: 100,
+      DEADLINEDATE: '2026-05-09T15:30:00',
+      STATUS: 'Chua san xuat',
+    }))
+
+    currentStatusRows = []
+    currentProductionRows = []
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(mockDataRange).toHaveBeenCalledTimes(2)
+    expect(mockDataRange).toHaveBeenNthCalledWith(1, 0, 999)
+    expect(mockDataRange).toHaveBeenNthCalledWith(2, 1000, 1999)
+    expect(result.data?.orders.map((order) => order.pcode)).toContain('LSX-AFTER-FIRST-PAGE')
   })
 
   it('keeps older not-started orders and orders newly closed today visible in the open orders list', async () => {
@@ -172,5 +207,123 @@ describe('data actions', () => {
     )
 
     jest.useRealTimers()
+  })
+
+  it('treats recently delivered zero-output orders as not started in open orders', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-05-09T09:00:00+07:00'))
+
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DELIVERED-RECENT',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Delivered Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Recently delivered with no output',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-08T10:00:00',
+        STATUS: 'Da giao',
+      },
+    ]
+
+    currentStatusRows = [
+      {
+        pcode: 'LSX-DELIVERED-RECENT',
+        status: 'Dang kiem',
+        produced_quantity: 0,
+        quantity: 100,
+        completion_pct: 0,
+        updated_at: '2026-05-09T08:30:00+07:00',
+      },
+    ]
+
+    currentProductionRows = []
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.orders).toHaveLength(1)
+    expect(result.data?.orders[0]).toMatchObject({
+      pcode: 'LSX-DELIVERED-RECENT',
+      status: 'Chưa SX',
+      producedQuantity: 0,
+      completionPct: 0,
+    })
+
+    jest.useRealTimers()
+  })
+
+  it('treats the same recently delivered order as in progress when produced is below quantity', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-05-09T09:00:00+07:00'))
+
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DELIVERED-RECENT',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Delivered Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Recently delivered with partial output',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-08T10:00:00',
+        STATUS: 'Da giao',
+      },
+    ]
+
+    currentStatusRows = [
+      {
+        pcode: 'LSX-DELIVERED-RECENT',
+        status: 'Dang kiem',
+        produced_quantity: 40,
+        quantity: 100,
+        completion_pct: 40,
+        updated_at: '2026-05-09T08:30:00+07:00',
+      },
+    ]
+
+    currentProductionRows = [
+      {
+        pcode: 'LSX-DELIVERED-RECENT',
+        pdate: '2026-05-09',
+        endtime: '08:00',
+        poutput: 40,
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.orders).toHaveLength(1)
+    expect(result.data?.orders[0]).toMatchObject({
+      pcode: 'LSX-DELIVERED-RECENT',
+      status: 'Đang SX',
+      producedQuantity: 40,
+      completionPct: 40,
+    })
+
+    jest.useRealTimers()
+  })
+
+  it('chunks production history lookups for large open-order lists', async () => {
+    currentDataRows = Array.from({ length: 201 }, (_, index) => ({
+      PCODE: `LSX-BULK-${String(index + 1).padStart(3, '0')}`,
+      INITIALDATE: '2026-05-08',
+      CUSTOMER: 'Bulk Customer',
+      WORKSHOP: 'DMC1',
+      DESCRIPTION: 'Bulk open order',
+      QUANTITY: 100,
+      DEADLINEDATE: '2026-05-12T10:00:00',
+      STATUS: 'Chua san xuat',
+    }))
+
+    currentStatusRows = []
+    currentProductionRows = []
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(mockProductionIn).toHaveBeenCalledTimes(2)
+    expect(mockProductionIn.mock.calls[0][0]).toBe('pcode')
+    expect(mockProductionIn.mock.calls[0][1]).toHaveLength(200)
+    expect(mockProductionIn.mock.calls[1][0]).toBe('pcode')
+    expect(mockProductionIn.mock.calls[1][1]).toHaveLength(1)
   })
 })
