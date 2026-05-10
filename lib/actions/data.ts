@@ -281,6 +281,26 @@ async function fetchProductionRowsByPcodes(
   return rows
 }
 
+async function fetchHistoryDataRowsByPcodes(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  pcodes: string[],
+): Promise<Array<Pick<DataRow, 'PCODE' | 'CUSTOMER' | 'WORKSHOP' | 'DESCRIPTION'>>> {
+  const rows: Array<Pick<DataRow, 'PCODE' | 'CUSTOMER' | 'WORKSHOP' | 'DESCRIPTION'>> = []
+
+  for (const chunk of chunkArray([...new Set(pcodes.filter(Boolean))], 200)) {
+    const dataRowsRes = await supabase
+      .from('data')
+      .select('PCODE,CUSTOMER,WORKSHOP,DESCRIPTION')
+      .in('PCODE', chunk)
+
+    if (dataRowsRes.error) throw new Error(dataRowsRes.error.message)
+
+    rows.push(...((dataRowsRes.data ?? []) as Array<Pick<DataRow, 'PCODE' | 'CUSTOMER' | 'WORKSHOP' | 'DESCRIPTION'>>))
+  }
+
+  return rows
+}
+
 async function fetchDataRowsUpToDate(
   supabase: Awaited<ReturnType<typeof createClient>>,
   today: string,
@@ -673,29 +693,27 @@ export async function listProductionInputHistoryAction(filters: {
 
     const supabase = await createClient()
 
-    const [prodRes, dataRes] = await Promise.all([
-      supabase
-        .from('Production')
-        .select('id,pdate,pcode,products,poutput,eoutput,routput,workforce,realnorm,starttime,endtime,log,save_status,created_at')
-        .gte('pdate', filters.fromDate)
-        .lte('pdate', filters.toDate)
-        .order('created_at', { ascending: false })
-        .limit(1000),
-      supabase.from('data').select('PCODE,CUSTOMER,WORKSHOP,DESCRIPTION'),
-    ])
+    const prodRes = await supabase
+      .from('Production')
+      .select('id,pdate,pcode,products,poutput,eoutput,routput,workforce,realnorm,starttime,endtime,log,save_status,created_at')
+      .gte('pdate', filters.fromDate)
+      .lte('pdate', filters.toDate)
+      .order('created_at', { ascending: false })
+      .limit(1000)
 
     if (prodRes.error) return { success: false, error: prodRes.error.message }
-    if (dataRes.error) return { success: false, error: dataRes.error.message }
 
-    const dataRows = (dataRes.data ?? []) as Pick<DataRow, 'PCODE' | 'CUSTOMER' | 'WORKSHOP' | 'DESCRIPTION'>[]
+    const prodRows = (prodRes.data ?? []) as Pick<
+      ProductionRow,
+      'id' | 'pdate' | 'pcode' | 'products' | 'poutput' | 'eoutput' | 'routput' | 'workforce' | 'realnorm' | 'starttime' | 'endtime' | 'log' | 'save_status' | 'created_at'
+    >[]
+    const historyPcodes = [...new Set(prodRows.map((row) => row.pcode ?? '').filter(Boolean))]
+    const dataRows = await fetchHistoryDataRowsByPcodes(supabase, historyPcodes)
     const orderMap = new Map(dataRows.map((row) => [row.PCODE, row]))
     const userWorkspaces = getUserWorkspaces(viewer.workspace ?? '')
     const needle = (filters.query ?? '').trim().toLowerCase()
 
-    const rows: ProductionInputHistoryRow[] = ((prodRes.data ?? []) as Pick<
-      ProductionRow,
-      'id' | 'pdate' | 'pcode' | 'products' | 'poutput' | 'eoutput' | 'routput' | 'workforce' | 'realnorm' | 'starttime' | 'endtime' | 'log' | 'save_status' | 'created_at'
-    >[])
+    const rows: ProductionInputHistoryRow[] = prodRows
       .map((row) => {
         const order = orderMap.get(row.pcode ?? '')
         const workshop = normalizeWorkshop(order?.WORKSHOP ?? '')
