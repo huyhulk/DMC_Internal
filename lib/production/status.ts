@@ -138,7 +138,7 @@ function isDeliveredOrderWithinRecentDeadlineWindow(
 
   const now = nowInput ?? new Date()
   const elapsedMs = now.getTime() - deadlineMs
-  return elapsedMs >= 0 && elapsedMs <= COMPLETED_ORDER_DEADLINE_VISIBILITY_WINDOW_MS
+  return elapsedMs <= COMPLETED_ORDER_DEADLINE_VISIBILITY_WINDOW_MS
 }
 
 function getProductionDeadlineEpoch(deadlinedate: string | null | undefined, deadlinetime: string | null | undefined): number | null {

@@ -128,7 +128,17 @@ describe('production workflow helpers', () => {
       deadlinedate: '2026-05-10',
       deadlinetime: '08:59',
       now,
-    })).toBe('Đã giao')
+    })).toBe('Chưa SX')
+
+    expect(resolveOpenProductionOrderStatus({
+      sourceStatus: 'Đã giao',
+      produced: 40,
+      quantity: 100,
+      closed: false,
+      deadlinedate: '2026-05-10',
+      deadlinetime: '08:59',
+      now,
+    })).toBe('Đang SX')
   })
 
   it('does not let stale shared inspection status override explicit raw not-started status', () => {
