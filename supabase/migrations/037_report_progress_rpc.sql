@@ -116,7 +116,7 @@ AS $$
         nd.deadlinedate_ts >= p_from::TIMESTAMPTZ
         AND nd.deadlinedate_ts < (p_to + 1)::TIMESTAMPTZ
     END
-  ORDER BY nd.deadlinedate NULLS LAST, nd.pcode;
+  ORDER BY nd.deadlinedate_ts NULLS LAST, nd.pcode;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.rpc_fetch_progress_rows(DATE, DATE, TEXT, TEXT) TO authenticated;
