@@ -438,7 +438,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
 
     const statusMap = buildProductionStatusMapFromRows({
       pcodes,
-      productionRows: [],
+      productionRows,
       statusRows,
       quantityByPcode,
     })

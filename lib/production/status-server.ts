@@ -49,42 +49,54 @@ export function buildProductionStatusMapFromRows(input: {
   quantityByPcode?: Map<string, number>
 }): Map<string, ProductionStatusInfo> {
   const map = new Map<string, ProductionStatusInfo>()
+  const productionByPcode = new Map<string, { producedQuantity: number; closed: boolean }>()
+
+  for (const row of input.productionRows) {
+    if (!row.pcode) continue
+    const current = productionByPcode.get(row.pcode) ?? { producedQuantity: 0, closed: false }
+    current.producedQuantity += row.poutput ?? 0
+    current.closed = current.closed || row.save_status === 'closed'
+    productionByPcode.set(row.pcode, current)
+  }
 
   for (const statusRow of input.statusRows ?? []) {
+    const freshProduction = productionByPcode.get(statusRow.pcode)
+    const quantity = input.quantityByPcode?.get(statusRow.pcode) ?? statusRow.quantity ?? 0
+    const producedQuantity = freshProduction?.producedQuantity ?? statusRow.produced_quantity ?? 0
+    const completion = calculateProductionCompletion(quantity, producedQuantity)
     map.set(statusRow.pcode, {
       internalStatus: isProductionOrderInternalStatus(statusRow.status) ? statusRow.status : undefined,
-      producedQuantity: statusRow.produced_quantity ?? 0,
-      quantity: statusRow.quantity ?? 0,
-      completionPct: statusRow.completion_pct ?? 0,
-      closed: false,
+      producedQuantity: completion.producedQuantity,
+      quantity,
+      completionPct: completion.completionPct,
+      closed: freshProduction?.closed ?? false,
     })
   }
 
   for (const pcode of input.pcodes) {
     if (!map.has(pcode)) {
       const quantity = input.quantityByPcode?.get(pcode) ?? 0
-      const completion = calculateProductionCompletion(quantity, 0)
+      const freshProduction = productionByPcode.get(pcode)
+      const completion = calculateProductionCompletion(quantity, freshProduction?.producedQuantity ?? 0)
       map.set(pcode, {
         producedQuantity: completion.producedQuantity,
         quantity,
         completionPct: completion.completionPct,
-        closed: false,
+        closed: freshProduction?.closed ?? false,
       })
     }
   }
 
-  for (const row of input.productionRows) {
-    if (!row.pcode) continue
-    const current = map.get(row.pcode)
-    const quantity = input.quantityByPcode?.get(row.pcode) ?? current?.quantity ?? 0
-    const producedQuantity = (current?.producedQuantity ?? 0) + (row.poutput ?? 0)
+  for (const [pcode, freshProduction] of productionByPcode) {
+    if (map.has(pcode)) continue
+    const quantity = input.quantityByPcode?.get(pcode) ?? 0
+    const producedQuantity = freshProduction.producedQuantity
     const completion = calculateProductionCompletion(quantity, producedQuantity)
-    map.set(row.pcode, {
-      internalStatus: current?.internalStatus,
+    map.set(pcode, {
       producedQuantity: completion.producedQuantity,
       quantity,
       completionPct: completion.completionPct,
-      closed: (current?.closed ?? false) || row.save_status === 'closed',
+      closed: freshProduction.closed,
     })
   }
 
