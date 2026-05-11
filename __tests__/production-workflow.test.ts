@@ -32,6 +32,10 @@ import {
   resolveProductionOrderStatus,
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
+import {
+  applyEffectiveStatusToOrder,
+  buildProductionStatusMapFromRows,
+} from '@/lib/production/status-server'
 
 const baseOrder: Order = {
   pcode: '',
@@ -139,6 +143,42 @@ describe('production workflow helpers', () => {
       deadlinetime: '08:59',
       now,
     })).toBe('Đang SX')
+  })
+
+  it('uses fresh production output instead of stale persisted produced quantity for effective order status', () => {
+    const statusMap = buildProductionStatusMapFromRows({
+      pcodes: ['LSX-FRESH'],
+      statusRows: [{
+        pcode: 'LSX-FRESH',
+        status: 'Đang SX',
+        produced_quantity: 20,
+        quantity: 100,
+        completion_pct: 20,
+      }],
+      productionRows: [
+        { pcode: 'LSX-FRESH', poutput: 60, save_status: 'draft' },
+        { pcode: 'LSX-FRESH', poutput: 40, save_status: 'draft' },
+      ],
+      quantityByPcode: new Map([['LSX-FRESH', 100]]),
+    })
+
+    const info = statusMap.get('LSX-FRESH')
+    expect(info).toMatchObject({
+      producedQuantity: 100,
+      quantity: 100,
+      completionPct: 100,
+      closed: false,
+    })
+
+    expect(applyEffectiveStatusToOrder({
+      ...baseOrder,
+      pcode: 'LSX-FRESH',
+      status: 'Chua san xuat',
+      quantity: '100',
+    }, statusMap)).toMatchObject({
+      status: 'Đã SX',
+      internalStatus: 'Đã SX',
+    })
   })
 
   it('does not let stale shared inspection status override explicit raw not-started status', () => {

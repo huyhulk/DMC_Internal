@@ -336,6 +336,68 @@ describe('data actions', () => {
     jest.useRealTimers()
   })
 
+  it('uses fresh production output instead of stale internal status rows for open-order UI state', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-05-09T09:00:00+07:00'))
+
+    currentDataRows = [
+      {
+        PCODE: 'LSX-COMPLETE-FRESH',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Completed Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Completed from production output',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-08T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    currentStatusRows = [
+      {
+        pcode: 'LSX-COMPLETE-FRESH',
+        status: 'Chua SX',
+        produced_quantity: 0,
+        quantity: 100,
+        completion_pct: 0,
+        updated_at: '2026-05-09T08:30:00+07:00',
+      },
+    ]
+
+    currentProductionRows = [
+      {
+        pcode: 'LSX-COMPLETE-FRESH',
+        pdate: '2026-05-09',
+        endtime: '08:00',
+        poutput: 60,
+        save_status: 'draft',
+      },
+      {
+        pcode: 'LSX-COMPLETE-FRESH',
+        pdate: '2026-05-09',
+        endtime: '08:30',
+        poutput: 40,
+        save_status: 'draft',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.submittedPcodes).toEqual(['LSX-COMPLETE-FRESH'])
+    expect(result.data?.closedPcodes).toEqual(['LSX-COMPLETE-FRESH'])
+    expect(result.data?.orders).toHaveLength(1)
+    expect(result.data?.orders[0]).toMatchObject({
+      pcode: 'LSX-COMPLETE-FRESH',
+      status: 'Đã SX',
+      internalStatus: 'Đã SX',
+      producedQuantity: 100,
+      remainingQuantity: 0,
+      completionPct: 100,
+    })
+
+    jest.useRealTimers()
+  })
+
   it('chunks production history lookups for large open-order lists', async () => {
     currentDataRows = Array.from({ length: 201 }, (_, index) => ({
       PCODE: `LSX-BULK-${String(index + 1).padStart(3, '0')}`,
