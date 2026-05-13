@@ -458,6 +458,48 @@ export interface Database {
         Args: Record<string, never>
         Returns: void
       }
+      rpc_fetch_prod_rows: {
+        Args: {
+          p_from: string
+          p_to: string
+          p_workshop_code: string | null
+        }
+        Returns: {
+          pcode: string | null
+          pdate: string | null
+          workshop: string | null
+          product: string | null
+          poutput: number | null
+          eoutput: number | null
+          routput: number | null
+          workforce: number | null
+          starttime: string | null
+          endtime: string | null
+          realnorm: number | null
+          norm: number | null
+          pspeed: number | null
+        }[]
+      }
+      rpc_fetch_progress_rows: {
+        Args: {
+          p_from: string
+          p_to: string
+          p_workshop_code: string | null
+          p_filter_by: 'deadline' | 'initialdate' | 'production_date' | 'completed_date'
+        }
+        Returns: {
+          pcode: string | null
+          workshop: string | null
+          description: string | null
+          customer: string | null
+          quantity: number | string | null
+          initialdate: string | null
+          deadlinedate: string | null
+          source_status: string | null
+          production_rows: Json
+          period_production_rows: Json
+        }[]
+      }
     }
     Enums: {
       user_role: 'ADMIN' | 'MANAGER' | 'WORKSHOP_MANAGER' | 'TEAM_LEADER' | 'MAINTENANCE' | 'COORDINATION' | 'SALES' | 'HR'

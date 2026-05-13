@@ -47,6 +47,38 @@ type RpcRow = {
   realnorm: number | null; norm: number | null; pspeed: number | null
 }
 
+type ProgressDataSelect = {
+  PCODE: string; WORKSHOP: string | null; DESCRIPTION: string | null
+  CUSTOMER: string | null; QUANTITY: number | null; INITIALDATE: string | null
+  DEADLINEDATE: string | null; STATUS: string | null
+}
+
+type ProgressProductionRow = {
+  pcode: string | null
+  poutput: number | null
+  pdate: string | null
+  endtime: string | null
+  save_status?: 'draft' | 'closed' | null
+}
+
+type ProgressRpcRow = {
+  pcode: string | null
+  workshop: string | null
+  description: string | null
+  customer: string | null
+  quantity: number | string | null
+  initialdate: string | null
+  deadlinedate: string | null
+  source_status: string | null
+  production_rows: unknown
+  period_production_rows: unknown
+}
+
+type ProgressSourceRow = ProgressDataSelect & {
+  productionRows: ProgressProductionRow[]
+  periodProductionRows: ProgressProductionRow[] | null
+}
+
 function isWorkshopCode(value: string): value is WorkshopCode {
   return WORKSHOP_CODES.includes(value as WorkshopCode)
 }
@@ -188,110 +220,112 @@ export function isProductionCompletionLate(completionAt: string | null, deadline
   return comparison !== null && comparison > 0
 }
 
-export async function queryProgress(
+function toFiniteNumber(value: number | string | null | undefined): number {
+  const num = typeof value === 'number' ? value : Number(value ?? 0)
+  return Number.isFinite(num) ? num : 0
+}
+
+function normalizeProgressProductionRows(value: unknown): ProgressProductionRow[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((row): row is Record<string, unknown> => row !== null && typeof row === 'object')
+    .map((row) => ({
+      pcode: typeof row.pcode === 'string' ? row.pcode : null,
+      poutput: toFiniteNumber(row.poutput as number | string | null | undefined),
+      pdate: typeof row.pdate === 'string' ? row.pdate : null,
+      endtime: typeof row.endtime === 'string' ? row.endtime : null,
+      save_status: row.save_status === 'closed' || row.save_status === 'draft' ? row.save_status : null,
+    }))
+}
+
+function mapProgressRpcRow(row: ProgressRpcRow): ProgressSourceRow | null {
+  if (!row.pcode) return null
+  return {
+    PCODE: row.pcode,
+    WORKSHOP: row.workshop,
+    DESCRIPTION: row.description,
+    CUSTOMER: row.customer,
+    QUANTITY: toFiniteNumber(row.quantity),
+    INITIALDATE: row.initialdate,
+    DEADLINEDATE: row.deadlinedate,
+    STATUS: row.source_status,
+    productionRows: normalizeProgressProductionRows(row.production_rows),
+    periodProductionRows: Array.isArray(row.period_production_rows)
+      ? normalizeProgressProductionRows(row.period_production_rows)
+      : null,
+  }
+}
+
+const emptyProgressSummary = (workshop: WorkshopCode): ProgressSummary => ({
+  workshop,
+  total: 0,
+  completed: 0,
+  completedOnTime: 0,
+  completedLate: 0,
+  overdue: 0,
+  dueSoon: 0,
+  progressPct: 0,
+})
+
+function emptyProgressResult(workshopId: WorkshopCode | null) {
+  return workshopId
+    ? { orders: [], summary: emptyProgressSummary(workshopId) }
+    : { summaries: WORKSHOP_CODES.map(emptyProgressSummary) }
+}
+
+function makeProgressSummary(ws: WorkshopCode, list: OrderStatus[]): ProgressSummary {
+  const total           = list.length
+  const completedOnTime = list.filter((o) => o.status === 'completed').length
+  const completedLate   = list.filter((o) => o.status === 'completed_late').length
+  const completed       = completedOnTime + completedLate
+  const overdue         = list.filter((o) => o.status === 'overdue').length
+  const dueSoon         = list.filter((o) => o.status === 'due_soon').length
+  return { workshop: ws, total, completed, completedOnTime, completedLate, overdue, dueSoon, progressPct: total > 0 ? (completed / total) * 100 : 0 }
+}
+
+function buildProgressResultFromSourceRows(
   workshopId: WorkshopCode | null,
-  from: string,
-  to: string,
-  filterBy: FilterBy = 'deadline',
-): Promise<{ orders?: OrderStatus[]; summary?: ProgressSummary; summaries?: ProgressSummary[] }> {
-  const supabase = await createClient()
+  sourceRows: ProgressSourceRow[],
+): { orders?: OrderStatus[]; summary?: ProgressSummary; summaries?: ProgressSummary[] } {
+  if (sourceRows.length === 0) return emptyProgressResult(workshopId)
+
   const nowDate = new Date()
   const now = toVietnamLocalDateTimeString(nowDate)
   const dueSoonCutoff = toVietnamLocalDateTimeString(new Date(nowDate.getTime() + 86_400_000))
+  const allPcodes = sourceRows.map((r) => r.PCODE).filter(Boolean)
+  const usesPeriodProductionRows = sourceRows.some((row) => row.periodProductionRows !== null)
 
-  type DataSelect = {
-    PCODE: string; WORKSHOP: string | null; DESCRIPTION: string | null
-    CUSTOMER: string | null; QUANTITY: number | null; INITIALDATE: string | null
-    DEADLINEDATE: string | null; STATUS: string | null
-  }
-
-  const emptySummary = (workshop: WorkshopCode): ProgressSummary => ({
-    workshop,
-    total: 0,
-    completed: 0,
-    completedOnTime: 0,
-    completedLate: 0,
-    overdue: 0,
-    dueSoon: 0,
-    progressPct: 0,
-  })
-
-  const emptyResult = () => workshopId
-    ? { orders: [], summary: emptySummary(workshopId) }
-    : { summaries: WORKSHOP_CODES.map(emptySummary) }
-
-  let dataQuery: any = supabase
-    .from('data')
-    .select('PCODE,WORKSHOP,DESCRIPTION,CUSTOMER,QUANTITY,INITIALDATE,DEADLINEDATE,STATUS')
-
-  type ProgressProductionRow = {
-    pcode: string | null
-    poutput: number | null
-    pdate: string | null
-    endtime: string | null
-    save_status?: 'draft' | 'closed' | null
-  }
-
-  let periodProductionRows: ProgressProductionRow[] | null = null
-
-  const progressFilterBy = normalizeProgressFilterBy(filterBy)
-
-  if (isProductionDateProgressFilter(progressFilterBy)) {
-    const { data: prodRows } = await supabase
-      .from('Production').select('pcode,poutput,pdate,endtime,save_status')
-      .gte('pdate', from).lte('pdate', to) as { data: ProgressProductionRow[] | null }
-    periodProductionRows = prodRows ?? []
-    const activePcodes = getActiveProductionPcodes(periodProductionRows)
-    if (activePcodes.length === 0) return emptyResult()
-    dataQuery = dataQuery.in('PCODE', activePcodes)
-  } else if (progressFilterBy === 'initialdate') {
-    dataQuery = dataQuery.gte('INITIALDATE', from).lte('INITIALDATE', to)
-  } else {
-    // default: deadline
-    dataQuery = dataQuery.gte('DEADLINEDATE', `${from}T00:00:00`).lte('DEADLINEDATE', `${to}T23:59:59`)
-  }
-
-  if (workshopId) {
-    const filters = workshopToDataFilters(workshopId)
-    const orStr = filters.map((f) => `WORKSHOP.ilike.${f}`).join(',')
-    dataQuery = dataQuery.or(orStr)
-  }
-
-  const { data: dataRows } = await dataQuery as { data: DataSelect[] | null }
-  if (!dataRows || dataRows.length === 0) return emptyResult()
-
-  const allPcodes = dataRows.map((r) => r.PCODE).filter(Boolean)
-  const { data: prodRows } = await supabase
-    .from('Production')
-    .select('pcode,poutput,pdate,endtime,save_status')
-    .in('pcode', allPcodes) as { data: ProgressProductionRow[] | null }
-
-  const pcodeSumMap = buildPcodeOutputMap(prodRows ?? [])
   const productionRowsByPcode = new Map<string, ProgressProductionRow[]>()
-  for (const row of prodRows ?? []) {
-    if (!row.pcode) continue
-    const list = productionRowsByPcode.get(row.pcode) ?? []
-    list.push(row)
-    productionRowsByPcode.set(row.pcode, list)
+  const periodRowsByPcode = new Map<string, ProgressProductionRow[]>()
+  for (const source of sourceRows) {
+    if (!productionRowsByPcode.has(source.PCODE)) {
+      productionRowsByPcode.set(source.PCODE, source.productionRows)
+    }
+    if (source.periodProductionRows !== null && !periodRowsByPcode.has(source.PCODE)) {
+      periodRowsByPcode.set(source.PCODE, source.periodProductionRows)
+    }
   }
-  const periodOutputMap = periodProductionRows
-    ? buildPcodeOutputMap(periodProductionRows)
-    : pcodeSumMap
 
-  const quantityByPcode = new Map(dataRows.map((r) => [r.PCODE, r.QUANTITY ?? 0]))
+  const allProductionRows = [...productionRowsByPcode.values()].flat()
+  const quantityByPcode = new Map(sourceRows.map((r) => [r.PCODE, r.QUANTITY ?? 0]))
   const statusMap = buildProductionStatusMapFromRows({
     pcodes: allPcodes,
-    productionRows: prodRows ?? [],
+    productionRows: allProductionRows,
     quantityByPcode,
   })
 
   const orders: OrderStatus[] = []
-  for (const r of dataRows) {
+  for (const r of sourceRows) {
     const validWs = resolveReportWorkshop(r.WORKSHOP)
     if (!validWs) continue
-    const totalOutput   = pcodeSumMap.get(r.PCODE) ?? 0
-    const periodOutput  = periodOutputMap.get(r.PCODE) ?? 0
-    const hasProduction = periodProductionRows ? periodOutput > 0 : totalOutput > 0
+
+    const productionRows = productionRowsByPcode.get(r.PCODE) ?? []
+    const periodRows = usesPeriodProductionRows
+      ? periodRowsByPcode.get(r.PCODE) ?? []
+      : productionRows
+    const totalOutput   = buildPcodeOutputMap(productionRows).get(r.PCODE) ?? 0
+    const periodOutput  = buildPcodeOutputMap(periodRows).get(r.PCODE) ?? 0
+    const hasProduction = usesPeriodProductionRows ? periodOutput > 0 : totalOutput > 0
     const qty           = r.QUANTITY ?? 0
     const completion = calculateProductionCompletion(qty, totalOutput)
     const effectiveOrder = applyEffectiveStatusToOrder({
@@ -306,10 +340,8 @@ export async function queryProgress(
     }, statusMap)
     const isCompleted = isProgressReportCompleted(completion.completionPct)
     const completionPct = completion.completionPct
-    const completionAt = calculateProductionCompletionTime(qty, productionRowsByPcode.get(r.PCODE) ?? [])
-    const productionDate = getOrderProductionDate(periodProductionRows
-      ? (periodProductionRows.filter((row) => row.pcode === r.PCODE))
-      : (productionRowsByPcode.get(r.PCODE) ?? []))
+    const completionAt = calculateProductionCompletionTime(qty, productionRows)
+    const productionDate = getOrderProductionDate(periodRows)
     const deadlineLocal = normalizeLocalDateTimeString(r.DEADLINEDATE)
 
     let status: OrderStatus['status'] = 'in_progress'
@@ -341,23 +373,111 @@ export async function queryProgress(
     })
   }
 
-  const makeSummary = (ws: WorkshopCode, list: OrderStatus[]): ProgressSummary => {
-    const total           = list.length
-    const completedOnTime = list.filter((o) => o.status === 'completed').length
-    const completedLate   = list.filter((o) => o.status === 'completed_late').length
-    const completed       = completedOnTime + completedLate
-    const overdue         = list.filter((o) => o.status === 'overdue').length
-    const dueSoon         = list.filter((o) => o.status === 'due_soon').length
-    return { workshop: ws, total, completed, completedOnTime, completedLate, overdue, dueSoon, progressPct: total > 0 ? (completed / total) * 100 : 0 }
-  }
-
   if (workshopId) {
-    return { orders, summary: makeSummary(workshopId, orders) }
+    return { orders, summary: makeProgressSummary(workshopId, orders) }
   }
 
   return {
-    summaries: WORKSHOP_CODES.map((ws) => makeSummary(ws, orders.filter((o) => o.workshop === ws))),
+    summaries: WORKSHOP_CODES.map((ws) => makeProgressSummary(ws, orders.filter((o) => o.workshop === ws))),
   }
+}
+
+async function queryProgressLegacy(
+  supabase: any,
+  workshopId: WorkshopCode | null,
+  from: string,
+  to: string,
+  progressFilterBy: FilterBy,
+): Promise<{ orders?: OrderStatus[]; summary?: ProgressSummary; summaries?: ProgressSummary[] }> {
+  let dataQuery: any = supabase
+    .from('data')
+    .select('PCODE,WORKSHOP,DESCRIPTION,CUSTOMER,QUANTITY,INITIALDATE,DEADLINEDATE,STATUS')
+
+  let periodProductionRows: ProgressProductionRow[] | null = null
+
+  if (isProductionDateProgressFilter(progressFilterBy)) {
+    const { data: prodRows } = await supabase
+      .from('Production').select('pcode,poutput,pdate,endtime,save_status')
+      .gte('pdate', from).lte('pdate', to) as { data: ProgressProductionRow[] | null }
+    periodProductionRows = prodRows ?? []
+    const activePcodes = getActiveProductionPcodes(periodProductionRows)
+    if (activePcodes.length === 0) return emptyProgressResult(workshopId)
+    dataQuery = dataQuery.in('PCODE', activePcodes)
+  } else if (progressFilterBy === 'initialdate') {
+    dataQuery = dataQuery.gte('INITIALDATE', from).lte('INITIALDATE', to)
+  } else {
+    // default: deadline
+    dataQuery = dataQuery.gte('DEADLINEDATE', `${from}T00:00:00`).lte('DEADLINEDATE', `${to}T23:59:59`)
+  }
+
+  if (workshopId) {
+    const filters = workshopToDataFilters(workshopId)
+    const orStr = filters.map((f) => `WORKSHOP.ilike.${f}`).join(',')
+    dataQuery = dataQuery.or(orStr)
+  }
+
+  const { data: dataRows } = await dataQuery as { data: ProgressDataSelect[] | null }
+  if (!dataRows || dataRows.length === 0) return emptyProgressResult(workshopId)
+
+  const allPcodes = dataRows.map((r) => r.PCODE).filter(Boolean)
+  const { data: prodRows } = await supabase
+    .from('Production')
+    .select('pcode,poutput,pdate,endtime,save_status')
+    .in('pcode', allPcodes) as { data: ProgressProductionRow[] | null }
+
+  const productionRowsByPcode = new Map<string, ProgressProductionRow[]>()
+  for (const row of prodRows ?? []) {
+    if (!row.pcode) continue
+    const list = productionRowsByPcode.get(row.pcode) ?? []
+    list.push(row)
+    productionRowsByPcode.set(row.pcode, list)
+  }
+
+  const periodRowsByPcode = new Map<string, ProgressProductionRow[]>()
+  for (const row of periodProductionRows ?? []) {
+    if (!row.pcode) continue
+    const list = periodRowsByPcode.get(row.pcode) ?? []
+    list.push(row)
+    periodRowsByPcode.set(row.pcode, list)
+  }
+
+  const sourceRows: ProgressSourceRow[] = dataRows.map((row) => ({
+    ...row,
+    productionRows: productionRowsByPcode.get(row.PCODE) ?? [],
+    periodProductionRows: periodProductionRows
+      ? periodRowsByPcode.get(row.PCODE) ?? []
+      : null,
+  }))
+
+  return buildProgressResultFromSourceRows(workshopId, sourceRows)
+}
+
+export async function queryProgress(
+  workshopId: WorkshopCode | null,
+  from: string,
+  to: string,
+  filterBy: FilterBy = 'deadline',
+): Promise<{ orders?: OrderStatus[]; summary?: ProgressSummary; summaries?: ProgressSummary[] }> {
+  const supabase = await createClient()
+
+  const progressFilterBy = normalizeProgressFilterBy(filterBy)
+  if (typeof supabase.rpc === 'function') {
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('rpc_fetch_progress_rows', {
+      p_from: from,
+      p_to: to,
+      p_workshop_code: workshopId ?? null,
+      p_filter_by: progressFilterBy,
+    }) as { data: ProgressRpcRow[] | null; error: unknown }
+
+    if (!rpcErr && Array.isArray(rpcData)) {
+      const sourceRows = rpcData
+        .map(mapProgressRpcRow)
+        .filter((row): row is ProgressSourceRow => row !== null)
+      return buildProgressResultFromSourceRows(workshopId, sourceRows)
+    }
+  }
+
+  return queryProgressLegacy(supabase, workshopId, from, to, progressFilterBy)
 }
 
 // ── 2. Kết quả sản xuất ──────────────────────────────────────────────────
