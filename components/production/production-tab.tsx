@@ -31,7 +31,7 @@ import {
   normalizeProductionStatus,
 } from '@/lib/production/status'
 import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
-import { cn, formatDate, formatDateTimeDisplay, formatLocalDateTimeString, getTodayLocal, workshopCode } from '@/lib/utils'
+import { cn, formatDate, formatDateTimeDisplay, formatLocalDateTimeString, getTodayLocal } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
 
 interface Props {
@@ -155,7 +155,7 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
   useEffect(() => { loadOpenOrders() }, [loadOpenOrders, refreshSignal])
 
   const allOrders = useMemo(() => state.initData?.orders as OpenProductionOrder[] ?? [], [state.initData?.orders])
-  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => workshopCode(order.workshop)).filter(Boolean))].sort(), [allOrders])
+  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => order.workshop).filter(Boolean))].sort(), [allOrders])
   const submittedPcodes = state.initData?.submittedPcodes ?? []
   const closedPcodes = useMemo(() => state.initData?.closedPcodes ?? [], [state.initData?.closedPcodes])
   const searchState = useMemo(
@@ -165,7 +165,7 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
   const baseCatalog = useMemo(() => {
     const byWorkshop = workshopFilter === 'ALL'
       ? allOrders
-      : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
+      : allOrders.filter((order) => order.workshop === workshopFilter)
     return sortOpenProductionOrders(filterProductionOrdersByPcode(byWorkshop, searchState.query) as OpenProductionOrder[])
   }, [allOrders, searchState.query, workshopFilter])
   const kpiCounts = useMemo(() => ({
@@ -422,13 +422,13 @@ function DailyEntryTab({ user, canEdit }: Props) {
   useEffect(() => { loadData(today) }, [today, loadData])
 
   const allOrders = useMemo(() => state.initData?.orders ?? [], [state.initData?.orders])
-  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => workshopCode(order.workshop)).filter(Boolean))].sort(), [allOrders])
+  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => order.workshop).filter(Boolean))].sort(), [allOrders])
   const submittedPcodes = state.initData?.submittedPcodes ?? []
   const closedPcodes = state.initData?.closedPcodes ?? []
   const orderCatalog = useMemo(() => {
     const byWorkshop = workshopFilter === 'ALL'
       ? allOrders
-      : allOrders.filter((order) => workshopCode(order.workshop) === workshopFilter)
+      : allOrders.filter((order) => order.workshop === workshopFilter)
     return sortProductionOrdersForEntry(filterProductionOrdersByPcode(byWorkshop, searchQuery))
   }, [allOrders, searchQuery, workshopFilter])
   const hasSubmittedOrders = submittedPcodes.length > 0
@@ -457,7 +457,7 @@ function DailyEntryTab({ user, canEdit }: Props) {
     const order = await searchByPcode(query)
     if (order) {
       setSearchQuery(order.pcode)
-      setWorkshopFilter(workshopCode(order.workshop) || 'ALL')
+      setWorkshopFilter(order.workshop || 'ALL')
       await loadData(order.initialdate)
     }
   }
@@ -1088,7 +1088,7 @@ function ProductionInputHistoryTab({ onBack }: { onBack: () => void }) {
     const sheetRows = rows.map((row) => ({
       'Mã LSX': row.pcode,
       'Thời gian lưu': formatDateTime(row.created_at),
-      'Đơn vị nhập': workshopCode(row.workshop) || row.workshop,
+      'Đơn vị nhập': row.workshop,
       'Trạng thái': formatSaveStatus(row.save_status),
       'Sản phẩm': row.product,
       'SL nhập': row.poutput,
@@ -1188,7 +1188,7 @@ function ProductionInputHistoryTab({ onBack }: { onBack: () => void }) {
                 >
                   <span className="font-semibold text-dmc-primary truncate">{row.pcode}</span>
                   <span className="text-[#1d1d1f]">{formatDateTime(row.created_at)}</span>
-                  <span className="text-[#6e6e73] truncate">{workshopCode(row.workshop) || row.workshop || '—'}</span>
+                  <span className="text-[#6e6e73] truncate">{row.workshop || '—'}</span>
                   <SaveStatusBadge status={row.save_status} />
                   <span className="text-[#1d1d1f] truncate">{row.product || '—'}</span>
                   <span className="text-right font-semibold text-[#1d1d1f]">{row.poutput}</span>

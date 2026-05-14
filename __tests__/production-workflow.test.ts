@@ -13,9 +13,14 @@ import {
   filterProductionOrdersByPcode,
   getOpenOrdersSearchState,
   getOpenProductionOrdersQueryWindow,
+  getOtherProductionEntryBaseWorkshop,
+  getProductionEntryBaseWorkshop,
+  getProductionEntryWorkshop,
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isOpenProductionOrder,
+  isOtherProductionEntryTask,
+  isProductionEntryWorkspaceAllowed,
   isProductionOrderCreatedOnOrAfter,
   isProductionOrderDeadlineExpired,
   isProductionTimeRangeValid,
@@ -53,6 +58,79 @@ function order(pcode: string, status: string): Order {
 }
 
 describe('production workflow helpers', () => {
+  it('splits DMC1 PU production-entry orders by description case-insensitively', () => {
+    expect(getProductionEntryWorkshop('DMC1', 'pu foam')).toBe('DMC1-PU')
+    expect(getProductionEntryWorkshop('DMC1', 'PU foam')).toBe('DMC1-PU')
+    expect(getProductionEntryWorkshop('DMC1', 'Pu foam')).toBe('DMC1-PU')
+  })
+
+  it('splits DMC1 phụ kiện and PK production-entry orders by description case-insensitively', () => {
+    expect(getProductionEntryWorkshop('DMC1', 'Tôn phụ kiện')).toBe('DMC1-PK')
+    expect(getProductionEntryWorkshop('DMC1', 'Tôn PK')).toBe('DMC1-PK')
+    expect(getProductionEntryWorkshop('DMC1', 'Tôn Pk')).toBe('DMC1-PK')
+    expect(getProductionEntryWorkshop('DMC1', 'Tôn pk')).toBe('DMC1-PK')
+  })
+
+  it('classifies normal DMC1 production-entry orders as CT', () => {
+    expect(getProductionEntryWorkshop('DMC1', 'Tôn cán thường')).toBe('DMC1-CT')
+    expect(getProductionEntryWorkshop('Phân xưởng 1 - Tôn', null)).toBe('DMC1-CT')
+  })
+
+  it('keeps non-DMC1 production-entry workshops normalized without splitting', () => {
+    expect(getProductionEntryWorkshop('DMC3', 'pu foam')).toBe('DMC3')
+    expect(getProductionEntryWorkshop('Phân xưởng 4 - Tôn', 'phụ kiện')).toBe('DMC4 - Tôn')
+  })
+
+  it('prioritizes PU over PK when both DMC1 split markers appear', () => {
+    expect(getProductionEntryWorkshop('DMC1', 'PU phụ kiện PK')).toBe('DMC1-PU')
+  })
+
+  it('maps DMC1 production-entry subgroups back to base DMC1', () => {
+    expect(getProductionEntryBaseWorkshop('DMC1-CT')).toBe('DMC1')
+    expect(getProductionEntryBaseWorkshop('DMC1-PK')).toBe('DMC1')
+    expect(getProductionEntryBaseWorkshop('DMC1-PU')).toBe('DMC1')
+    expect(getProductionEntryBaseWorkshop('Phân xưởng 3 - Tôn')).toBe('DMC3')
+  })
+
+  it('allows DMC1 aggregate workspace to access all production-entry subgroups', () => {
+    expect(isProductionEntryWorkspaceAllowed('DMC1', 'USER', ['DMC1'])).toBe(true)
+    expect(isProductionEntryWorkspaceAllowed('DMC1-CT', 'USER', ['DMC1'])).toBe(true)
+    expect(isProductionEntryWorkspaceAllowed('DMC1-PK', 'USER', ['DMC1'])).toBe(true)
+    expect(isProductionEntryWorkspaceAllowed('DMC1-PU', 'USER', ['DMC1'])).toBe(true)
+  })
+
+  it('limits DMC1 subgroup workspaces to exact production-entry subgroup matches', () => {
+    expect(isProductionEntryWorkspaceAllowed('DMC1-PK', 'USER', ['DMC1-PK'])).toBe(true)
+    expect(isProductionEntryWorkspaceAllowed('DMC1-PU', 'USER', ['DMC1-PK'])).toBe(false)
+    expect(isProductionEntryWorkspaceAllowed('DMC1-CT', 'USER', ['DMC1-PK'])).toBe(false)
+  })
+
+  it('allows ADMIN and explicit ALL production-entry workspaces to access all workshops', () => {
+    expect(isProductionEntryWorkspaceAllowed('DMC1-PU', 'ADMIN', ['DMC3'])).toBe(true)
+    expect(isProductionEntryWorkspaceAllowed('DMC1-PU', 'USER', [], 'ALL')).toBe(true)
+    expect(isProductionEntryWorkspaceAllowed('DMC3', 'USER', [], 'ALL')).toBe(true)
+  })
+
+  it('denies blank production-entry workspaces for non-admin users', () => {
+    expect(isProductionEntryWorkspaceAllowed('DMC1-PU', 'USER', [], '')).toBe(false)
+    expect(isProductionEntryWorkspaceAllowed('DMC3', 'USER', [], null)).toBe(false)
+  })
+
+  it('maps other production-entry labels to base workshops', () => {
+    expect(getOtherProductionEntryBaseWorkshop('Việc khác - DMC1')).toBe('DMC1')
+    expect(getOtherProductionEntryBaseWorkshop('Việc khác - DMC1-PU')).toBe('DMC1')
+    expect(getOtherProductionEntryBaseWorkshop('Việc khác - DMC1-PK')).toBe('DMC1')
+    expect(getOtherProductionEntryBaseWorkshop('Việc khác - DMC1-CT')).toBe('DMC1')
+    expect(getOtherProductionEntryBaseWorkshop('Việc khác - DMC3')).toBe('DMC3')
+  })
+
+  it('identifies only whitelisted other production-entry tasks', () => {
+    expect(isOtherProductionEntryTask('5S')).toBe(true)
+    expect(isOtherProductionEntryTask('Đào tạo')).toBe(true)
+    expect(isOtherProductionEntryTask('Hỗ trợ PX khác')).toBe(true)
+    expect(isOtherProductionEntryTask('5S-extra')).toBe(false)
+  })
+
   it('ranks production statuses in data-entry priority order', () => {
     expect(getProductionOrderStatusRank('Chua san xuat')).toBe(0)
     expect(getProductionOrderStatusRank('Dang san xuat')).toBe(1)

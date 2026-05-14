@@ -54,6 +54,8 @@ describe('approval workflow helpers', () => {
 
   it('normalizes factory and department workspace tokens', () => {
     expect(normalizeWorkspaceToken(' dmc3 ')).toBe('DMC3')
+    expect(normalizeWorkspaceToken('dmc1_pk')).toBe('DMC1-PK')
+    expect(normalizeWorkspaceToken('dmc1 pu')).toBe('DMC1-PU')
     expect(normalizeWorkspaceToken('pkt_sx')).toBe('PKT-SX')
     expect(normalizeWorkspaceToken('phòng điều phối')).toBe('DIEU-PHOI')
     expect(normalizeWorkspaceToken('dieu phoi')).toBe('DIEU-PHOI')

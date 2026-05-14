@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { getInitData, getOpenProductionOrdersAction, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
-import { getProductionRowsValidationError } from '@/lib/production/workflow'
+import { getOtherProductionEntryBaseWorkshop, getProductionEntryBaseWorkshop, getProductionRowsValidationError } from '@/lib/production/workflow'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { InitData, Order, NormItem, ProductionSaveStatus, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
@@ -259,7 +259,7 @@ export function useProductionData(user: SessionUser) {
         const orderQty = parseFloat(s.orderInfo?.quantity ?? '0') || 0
 
         if (field === 'product' && value && !String(value).startsWith('--')) {
-          const ws = s.selectedWorkshop
+          const ws = getProductionEntryBaseWorkshop(s.selectedWorkshop)
           const norm = s.initData?.norms.find(
             (n) => n.products === value && workshopCode(n.workshop) === workshopCode(ws)
           )
@@ -293,8 +293,9 @@ export function useProductionData(user: SessionUser) {
 
         if (['poutput', 'starttime', 'endtime', 'workforce', 'lunchOvertime'].includes(field)) {
           const line = lines[idx]
+          const baseWorkshop = getProductionEntryBaseWorkshop(s.selectedWorkshop)
           const norm = s.initData?.norms.find(
-            (n) => n.products === line.product && workshopCode(n.workshop) === workshopCode(s.selectedWorkshop)
+            (n) => n.products === line.product && workshopCode(n.workshop) === workshopCode(baseWorkshop)
           )
           if (norm) {
             lines[idx].realnorm = calcRealNorm({
@@ -314,7 +315,7 @@ export function useProductionData(user: SessionUser) {
                 const usedQty = lines.slice(0, j).reduce((sum, l) => sum + (Number(l.poutput) || 0), 0)
                 lines[j].poutput = Math.max(0, orderQty - usedQty)
                 const jNorm = s.initData?.norms.find(
-                  (n) => n.products === lines[j].product && workshopCode(n.workshop) === workshopCode(s.selectedWorkshop)
+                  (n) => n.products === lines[j].product && workshopCode(n.workshop) === workshopCode(baseWorkshop)
                 )
                 if (jNorm) {
                   lines[j].realnorm = calcRealNorm({
@@ -368,7 +369,7 @@ export function useProductionData(user: SessionUser) {
     const rowsToSave = isOther
       ? [{
           pdate: getTodayLocal(),
-          totalem: '',
+          totalem: getOtherProductionEntryBaseWorkshop(selectedWorkshop),
           pcode: actualPcode,
           products: '',
           material: '',
@@ -443,7 +444,7 @@ export function useProductionData(user: SessionUser) {
   const getProductOptions = useCallback(
     (workshop: string) => {
       if (!state.initData) return []
-      const code = workshopCode(workshop)
+      const code = workshopCode(getProductionEntryBaseWorkshop(workshop))
       const prodSet = new Set(
         state.initData.norms
           .filter((n) => workshopCode(n.workshop) === code)
@@ -461,7 +462,7 @@ export function useProductionData(user: SessionUser) {
   const getNormHint = useCallback(
     (product: string) => {
       if (!state.initData || !product) return null
-      const code = workshopCode(state.selectedWorkshop)
+      const code = workshopCode(getProductionEntryBaseWorkshop(state.selectedWorkshop))
       return (
         state.initData.norms.find(
           (n) => n.products === product && workshopCode(n.workshop) === code
