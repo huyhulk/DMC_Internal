@@ -284,6 +284,47 @@ describe('data actions', () => {
     )
   })
 
+  it('hides orders whose internal production status is Đã SX from open production orders', async () => {
+    currentDataRows = [
+      {
+        PCODE: 'LSX-INTERNAL-COMPLETE',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Complete Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Cuộn tôn lạnh',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+      {
+        PCODE: 'LSX-OPEN',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Open Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Cuộn tôn lạnh',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    currentStatusRows = [
+      {
+        pcode: 'LSX-INTERNAL-COMPLETE',
+        status: 'Đã SX',
+        produced_quantity: 40,
+        quantity: 100,
+        completion_pct: 40,
+        updated_at: '2026-05-09T08:30:00+07:00',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.orders.map((order) => order.pcode)).toEqual(['LSX-OPEN'])
+  })
+
   it('scopes open production orders to the matching DMC1 DESCRIPTION bucket for sub-workspaces', async () => {
     mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1-PK' }
     currentDataRows = [
