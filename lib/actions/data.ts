@@ -505,8 +505,6 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const closedPcodeSet = new Set(closedPcodes)
     const orders = sortProductionOrdersForEntry(
       effectiveOrders.filter((order) => {
-        if (statusMap.get(order.pcode)?.internalStatus === 'Đã SX') return false
-
         if (!shouldShowOpenProductionOrder({
           status: order.status,
           closed: closedPcodeSet.has(order.pcode),

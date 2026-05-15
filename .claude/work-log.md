@@ -45,64 +45,6 @@
 
 ## 📜 Entries
 
-## 2026-05-14 (Phiên #17 — DMC1 production-entry split)
-**Branch:** codex/open-orders-status-resync
-**Claude model:** gpt-5.5
-**Task:** Tách phân quyền nhập liệu sản xuất DMC1 thành DMC1-CT, DMC1-PK, DMC1-PU theo `data.DESCRIPTION`, giữ báo cáo/KPI/RPC dùng DMC1 chung.
-
-### Đã làm
-- Thêm helper production-entry-only để phân loại DMC1 theo DESCRIPTION: PU → `DMC1-PU`, phụ kiện/PK → `DMC1-PK`, còn lại → `DMC1-CT`; PU ưu tiên nếu trùng marker.
-- Cập nhật các server action nhập liệu sản xuất để lọc quyền theo subgroup DMC1: `getInitData`, `getOpenProductionOrdersAction`, `searchOrderByPcode`, `recordProductionAction`, `listProductionInputHistoryAction`.
-- Giữ `Production.totalem` và lookup Norm/Product theo base workshop `DMC1`, không lan split label sang report/KPI/coordination.
-- Cập nhật UI production tab để không collapse `DMC1-CT/PK/PU` về `DMC1` trong filter/history display.
-- Cập nhật Admin user permission options để hiện checkbox `DMC1-CT`, `DMC1-PK`, `DMC1-PU`; thêm normalize cho `dmc1_pk`, `dmc1 pu`, v.v.
-- Tạo migration `038_production_entry_dmc1_split_rls.sql` để siết RLS insert Production theo subgroup DMC1 và base `totalem`.
-- Push commit lên `origin/main`.
-
-### Quyết định kỹ thuật
-- Split DMC1 chỉ áp dụng cho production-entry visibility/permission, không sửa global `workshopCode`, report, KPI, coordination, hoặc RPC report.
-- Workspace `DMC1` vẫn là quyền tổng, thấy cả CT/PK/PU; `ALL`/ADMIN vẫn unrestricted; workspace rỗng của non-admin bị deny trong luồng production-entry.
-- Internal tasks chỉ whitelist đúng `5S`, `Đào tạo`, `Hỗ trợ PX khác`; khi submit “Việc khác - DMC1-CT/PK/PU” vẫn ghi base `totalem = DMC1`.
-
-### Issues phát hiện
-- Local không apply được migration vì máy không có Supabase CLI/Docker/psql; production migration vẫn cần apply thủ công qua Supabase Dashboard SQL Editor hoặc môi trường có Supabase CLI đã login.
-- GitNexus `detect_changes` báo critical vì working tree trước đó chứa toàn bộ thay đổi DMC1 production-entry; diff cuối đã được kiểm soát và tests/build đều pass.
-
-### Files thay đổi
-- `lib/production/workflow.ts`
-- `lib/actions/data.ts`
-- `hooks/use-production-data.ts`
-- `components/production/production-tab.tsx`
-- `lib/approval/workflow.ts`
-- `__tests__/production-workflow.test.ts`
-- `__tests__/data-actions.test.ts`
-- `__tests__/approval-workflow.test.ts`
-- `supabase/migrations/038_production_entry_dmc1_split_rls.sql`
-
-### Context files updated
-- `.claude/work-log.md`
-
-### Verify
-- `npm test` passed: 16 suites / 188 tests.
-- `npm run type-check` passed.
-- `npm run lint` passed.
-- `npm run build` passed.
-- Local dev server was started during the session at `http://localhost:3000`.
-
-### Status cuối phiên
-- [x] Code committed? Y — `3959f6a fix(production): split DMC1 entry permissions`
-- [ ] PR created? N — pushed directly to `main` per user request
-- [x] Tests passing? Y
-- [x] Documentation updated? Y
-
-### Next time resume
-- Verify Vercel production deploy for commit `3959f6a`.
-- Apply production migration `supabase/migrations/038_production_entry_dmc1_split_rls.sql` to Supabase project `hzuyucyxyohppxfwresq`; do not run unreviewed production SQL from local without explicit confirmation.
-- Smoke test Admin user permission UI: confirm `DMC1-CT`, `DMC1-PK`, `DMC1-PU` checkboxes appear and save into `profiles.workspace`.
-- Smoke test production entry with users scoped to `DMC1`, `DMC1-PU`, `DMC1-PK`, `DMC1-CT`; confirm Norm/Product dropdown still uses base DMC1.
-
----
-
 ## 2026-05-03 (Phien #16 - Staging security remediation)
 **Branch:** codex/hr-admin-overtime-approval
 **Claude model:** gpt-5.5
