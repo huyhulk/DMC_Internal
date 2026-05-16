@@ -24,7 +24,6 @@ import {
 } from '@/lib/production/status-server'
 import {
   isProductionOrderInternalStatus,
-  normalizeProductionOrderInternalStatus,
   resolveOpenProductionOrderStatus,
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
@@ -457,7 +456,6 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       quantityByPcode,
     })
     const statusUpdatedAtByPcode = new Map(statusRows.map((row) => [row.pcode, row.updated_at]))
-    const internalStatusByPcode = new Map(statusRows.map((row) => [row.pcode, normalizeProductionOrderInternalStatus(row.status)]))
 
     const productionRowsByPcode = new Map<string, Array<Pick<ProductionRow, 'pcode' | 'pdate' | 'endtime' | 'poutput'>>>()
     for (const row of productionRows) {
@@ -507,8 +505,6 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const closedPcodeSet = new Set(closedPcodes)
     const orders = sortProductionOrdersForEntry(
       effectiveOrders.filter((order) => {
-        if (internalStatusByPcode.get(order.pcode) === 'Đã SX') return false
-
         if (!shouldShowOpenProductionOrder({
           status: order.status,
           closed: closedPcodeSet.has(order.pcode),
