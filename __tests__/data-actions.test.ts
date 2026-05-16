@@ -536,7 +536,7 @@ describe('data actions', () => {
     expect(result.data?.orders.map((order) => order.pcode)).toContain('LSX-AFTER-FIRST-PAGE')
   })
 
-  it('hides completed and closed orders from the open orders list', async () => {
+  it('keeps older not-started orders and orders newly closed today visible in the open orders list', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-05-09T10:00:00+07:00'))
 
     currentDataRows = [
@@ -558,16 +558,6 @@ describe('data actions', () => {
         DESCRIPTION: 'Closed today order',
         QUANTITY: 100,
         DEADLINEDATE: '2026-05-01T16:30:00',
-        STATUS: 'Chua san xuat',
-      },
-      {
-        PCODE: 'LSX-COMPLETE-BY-STATUS',
-        INITIALDATE: '2026-05-01',
-        CUSTOMER: 'Status Complete Customer',
-        WORKSHOP: 'DMC1',
-        DESCRIPTION: 'Status complete order',
-        QUANTITY: 100,
-        DEADLINEDATE: '2026-05-01T16:30:00',
         STATUS: 'Da SX',
       },
     ]
@@ -575,28 +565,21 @@ describe('data actions', () => {
     currentStatusRows = [
       {
         pcode: 'LSX-CLOSED-TODAY',
-        status: 'Đã SX',
-        produced_quantity: 100,
+        status: 'Da SX',
+        produced_quantity: 40,
         quantity: 100,
-        completion_pct: 100,
+        completion_pct: 40,
         updated_at: '2026-05-09T08:30:00+07:00',
       },
     ]
-    currentProductionRows = [
-      {
-        pcode: 'LSX-CLOSED-TODAY',
-        pdate: '2026-05-09',
-        endtime: '08:00',
-        poutput: 100,
-        save_status: 'closed',
-      },
-    ]
+    currentProductionRows = []
 
     const result = await getOpenProductionOrdersAction()
 
     expect(result.success).toBe(true)
-    expect(result.data?.orders.map((order) => order.pcode)).toEqual(['LSX-OLD-OPEN'])
-    expect(result.data?.closedPcodes).toContain('LSX-CLOSED-TODAY')
+    expect(result.data?.orders.map((order) => order.pcode)).toEqual(
+      expect.arrayContaining(['LSX-OLD-OPEN', 'LSX-CLOSED-TODAY'])
+    )
 
     jest.useRealTimers()
   })
@@ -743,6 +726,68 @@ describe('data actions', () => {
     expect(result.success).toBe(true)
     expect(result.data?.submittedPcodes).toEqual(['LSX-COMPLETE-FRESH'])
     expect(result.data?.closedPcodes).toEqual(['LSX-COMPLETE-FRESH'])
+    expect(result.data?.orders).toHaveLength(1)
+    expect(result.data?.orders[0]).toMatchObject({
+      pcode: 'LSX-COMPLETE-FRESH',
+      status: 'Đã SX',
+      internalStatus: 'Đã SX',
+      producedQuantity: 100,
+      remainingQuantity: 0,
+      completionPct: 100,
+    })
+
+    jest.useRealTimers()
+  })
+
+  it('hides production orders completed before today from the open orders list', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-05-09T09:00:00+07:00'))
+
+    currentDataRows = [
+      {
+        PCODE: 'LSX-COMPLETE-YESTERDAY',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Completed Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Completed before today',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-09T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    currentStatusRows = [
+      {
+        pcode: 'LSX-COMPLETE-YESTERDAY',
+        status: 'Chua SX',
+        produced_quantity: 0,
+        quantity: 100,
+        completion_pct: 0,
+        updated_at: '2026-05-09T08:30:00+07:00',
+      },
+    ]
+
+    currentProductionRows = [
+      {
+        pcode: 'LSX-COMPLETE-YESTERDAY',
+        pdate: '2026-05-08',
+        endtime: '08:00',
+        poutput: 60,
+        save_status: 'draft',
+      },
+      {
+        pcode: 'LSX-COMPLETE-YESTERDAY',
+        pdate: '2026-05-08',
+        endtime: '08:30',
+        poutput: 40,
+        save_status: 'draft',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.submittedPcodes).toEqual(['LSX-COMPLETE-YESTERDAY'])
+    expect(result.data?.closedPcodes).toEqual(['LSX-COMPLETE-YESTERDAY'])
     expect(result.data?.orders).toHaveLength(0)
 
     jest.useRealTimers()

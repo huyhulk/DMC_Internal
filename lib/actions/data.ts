@@ -24,8 +24,6 @@ import {
 } from '@/lib/production/status-server'
 import {
   isProductionOrderInternalStatus,
-  isEffectiveCompletedProductionStatus,
-  isEffectiveDeliveredProductionStatus,
   resolveOpenProductionOrderStatus,
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
@@ -505,18 +503,14 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       .map((order) => order.pcode)
 
     const closedPcodeSet = new Set(closedPcodes)
+    const todayDate = now.toLocaleDateString('en-CA')
     const orders = sortProductionOrdersForEntry(
       effectiveOrders.filter((order) => {
-        if (
-          closedPcodeSet.has(order.pcode) ||
-          order.completionPct >= 100 ||
-          isEffectiveCompletedProductionStatus(order.status) ||
-          isEffectiveDeliveredProductionStatus(order.status)
-        ) return false
+        if (closedPcodeSet.has(order.pcode) && order.completedAt?.slice(0, 10) !== todayDate) return false
 
         if (!shouldShowOpenProductionOrder({
           status: order.status,
-          closed: false,
+          closed: closedPcodeSet.has(order.pcode),
           completion: order,
           completedAt: order.completedAt,
           statusUpdatedAt: statusUpdatedAtByPcode.get(order.pcode) ?? null,
