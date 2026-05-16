@@ -24,6 +24,8 @@ import {
 } from '@/lib/production/status-server'
 import {
   isProductionOrderInternalStatus,
+  isEffectiveCompletedProductionStatus,
+  isEffectiveDeliveredProductionStatus,
   resolveOpenProductionOrderStatus,
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
@@ -505,9 +507,16 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const closedPcodeSet = new Set(closedPcodes)
     const orders = sortProductionOrdersForEntry(
       effectiveOrders.filter((order) => {
+        if (
+          closedPcodeSet.has(order.pcode) ||
+          order.completionPct >= 100 ||
+          isEffectiveCompletedProductionStatus(order.status) ||
+          isEffectiveDeliveredProductionStatus(order.status)
+        ) return false
+
         if (!shouldShowOpenProductionOrder({
           status: order.status,
-          closed: closedPcodeSet.has(order.pcode),
+          closed: false,
           completion: order,
           completedAt: order.completedAt,
           statusUpdatedAt: statusUpdatedAtByPcode.get(order.pcode) ?? null,
