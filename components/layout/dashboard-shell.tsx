@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { ModuleNavConfig } from '@/modules/config/module-config'
 import { logoutAction, changePasswordAction } from '@/modules/auth/actions'
 import { ROLE_LABELS, type SessionUser, type TabId } from '@/types'
 import type { PermissionKey } from '@/modules/permissions/tabs'
@@ -111,10 +112,28 @@ interface Props {
   user: SessionUser
   visibleTabs: TabId[]
   visiblePermissionKeys: PermissionKey[]
+  moduleNavConfigs: ModuleNavConfig[]
   children: React.ReactNode
 }
 
-export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, children }: Props) {
+export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, moduleNavConfigs, children }: Props) {
+  function getTabLabel(key: string): string {
+    return moduleNavConfigs.find((c) => c.module_key === key)?.label
+      ?? TAB_CONFIG[key as keyof typeof TAB_CONFIG]?.label
+      ?? key
+  }
+
+  function getEnabledSubtabSet(moduleKey: string): Set<string> | null {
+    const mod = moduleNavConfigs.find((c) => c.module_key === moduleKey)
+    if (!mod || mod.subtabs.length === 0) return null  // null = all enabled
+    return new Set(mod.subtabs.filter((s) => s.is_enabled).map((s) => s.subtab_key))
+  }
+
+  function resolveSubtabLabel(moduleKey: string, subtabKey: string, staticLabel: string): string {
+    const mod = moduleNavConfigs.find((c) => c.module_key === moduleKey)
+    return mod?.subtabs.find((s) => s.subtab_key === subtabKey)?.label ?? staticLabel
+  }
+
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -137,9 +156,23 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, child
   const activeMaintenanceSub = resolveMaintenanceSub(requestedSub)
   const activeAdministrationSub = resolveAdministrationSub(requestedSub)
   const visiblePermissionSet = new Set(visiblePermissionKeys)
-  const maintenanceItems = MAINTENANCE_ITEMS.filter((item) => visiblePermissionSet.has(`maintenance.${item.code}` as PermissionKey))
-  const coordinationItems = COORDINATION_ITEMS.filter((item) => visiblePermissionSet.has(`coordination.${item.code}` as PermissionKey))
-  const administrationItems = ADMINISTRATION_ITEMS.filter((item) => visiblePermissionSet.has(`administration.${item.code}` as PermissionKey))
+  const maintEnabledSubs = getEnabledSubtabSet('maintenance')
+  const maintenanceItems = MAINTENANCE_ITEMS
+    .filter((item) => visiblePermissionSet.has(`maintenance.${item.code}` as PermissionKey))
+    .filter((item) => maintEnabledSubs === null || maintEnabledSubs.has(item.code))
+    .map((item) => ({ ...item, label: resolveSubtabLabel('maintenance', item.code, item.label) as string }))
+
+  const coordEnabledSubs = getEnabledSubtabSet('coordination')
+  const coordinationItems = COORDINATION_ITEMS
+    .filter((item) => visiblePermissionSet.has(`coordination.${item.code}` as PermissionKey))
+    .filter((item) => coordEnabledSubs === null || coordEnabledSubs.has(item.code))
+    .map((item) => ({ ...item, label: resolveSubtabLabel('coordination', item.code, item.label) as string }))
+
+  const adminEnabledSubs = getEnabledSubtabSet('administration')
+  const administrationItems = ADMINISTRATION_ITEMS
+    .filter((item) => visiblePermissionSet.has(`administration.${item.code}` as PermissionKey))
+    .filter((item) => adminEnabledSubs === null || adminEnabledSubs.has(item.code))
+    .map((item) => ({ ...item, label: resolveSubtabLabel('administration', item.code, item.label) as string }))
   const adminItems = ADMIN_ITEMS.filter((item) => item.permissionKey ? visiblePermissionSet.has(item.permissionKey) : user.role === 'ADMIN' && visiblePermissionSet.has('admin'))
 
   function openDropdown() {
@@ -282,7 +315,7 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, child
                       )}
                     >
                       <Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
-                      <span>Bảo Trì</span>
+                      <span>{getTabLabel('maintenance')}</span>
                       <ChevronDown
                         size={10}
                         strokeWidth={2.5}
@@ -429,7 +462,7 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, child
                       )}
                     >
                       <Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
-                      <span>Hệ Thống</span>
+                      <span>{getTabLabel('admin')}</span>
                       <ChevronDown
                         size={10}
                         strokeWidth={2.5}
@@ -478,7 +511,7 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, child
                       )}
                     >
                       <Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
-                      <span>Báo Cáo</span>
+                      <span>{getTabLabel('report')}</span>
                       <ChevronDown
                         size={10}
                         strokeWidth={2.5}
@@ -521,7 +554,7 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, child
                   )}
                 >
                   <Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
-                  <span>{cfg.label}</span>
+                  <span>{getTabLabel(tabKey)}</span>
                 </Link>
               )
             })}
