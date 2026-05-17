@@ -9,7 +9,7 @@ import {
   Factory, Wrench, Users2, BarChart3,
   KeyRound, LogOut, ChevronDown,
   TrendingUp, ShieldCheck,
-  Settings, Target, Clock, UserCog, SlidersHorizontal,
+  Settings, Target, Clock, UserCog, SlidersHorizontal, Layers,
   Truck, ListChecks, FileText, BookCheck,
   AlertTriangle, CalendarClock, FileImage, Ruler, ClipboardList,
   type LucideIcon,
@@ -94,7 +94,8 @@ const ADMINISTRATION_ITEMS = getAdministrationTabs().map((item) => ({
 const ADMIN_ITEMS = [
   { code: 'users',        label: 'Quản lý người dùng', icon: UserCog,           href: '/dashboard/admin', permissionKey: 'admin.users' as PermissionKey },
   { code: 'permissions',  label: 'Phân quyền tab',     icon: ShieldCheck,       href: '/dashboard/admin?sub=permissions', permissionKey: undefined },
-  { code: 'kpi-settings', label: 'Cài đặt KPI',         icon: SlidersHorizontal, href: '/dashboard/admin/kpi-settings', permissionKey: 'admin.kpi-settings' as PermissionKey },
+  { code: 'kpi-settings', label: 'Cài đặt KPI',    icon: SlidersHorizontal, href: '/dashboard/admin/kpi-settings', permissionKey: 'admin.kpi-settings' as PermissionKey },
+  { code: 'modules',      label: 'Cài đặt Module', icon: Layers,            href: '/dashboard/admin/modules',      permissionKey: 'admin.modules'      as PermissionKey },
 ] as const
 
 const ROLE_COLOR: Record<string, string> = {

@@ -11,9 +11,10 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = { title: 'Hệ Thống | DMC Production' }
 
 const ADMIN_TABS = [
-  { key: 'users', label: 'Người dùng', href: '/dashboard/admin' },
-  { key: 'permissions', label: 'Phân quyền tab', href: '/dashboard/admin?sub=permissions' },
-  { key: 'kpi-settings', label: 'Cài đặt KPI', href: '/dashboard/admin/kpi-settings' },
+  { key: 'users',        label: 'Người dùng',     href: '/dashboard/admin' },
+  { key: 'permissions',  label: 'Phân quyền tab',  href: '/dashboard/admin?sub=permissions' },
+  { key: 'kpi-settings', label: 'Cài đặt KPI',     href: '/dashboard/admin/kpi-settings' },
+  { key: 'modules',      label: 'Cài đặt Module',  href: '/dashboard/admin/modules' },
 ] as const
 
 export default async function AdminPage({
@@ -59,7 +60,7 @@ export default async function AdminPage({
   )
 }
 
-function AdminTabs({ active }: { active: 'users' | 'permissions' | 'kpi-settings' }) {
+function AdminTabs({ active }: { active: 'users' | 'permissions' | 'kpi-settings' | 'modules' }) {
   return (
     <div className="flex h-[57px] shrink-0 items-center gap-2 border-b border-dmc-border bg-white px-5">
       {ADMIN_TABS.map((tab) => (
