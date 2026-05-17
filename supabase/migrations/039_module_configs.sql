@@ -1,3 +1,5 @@
+BEGIN;
+
 -- supabase/migrations/039_module_configs.sql
 
 -- ═══════════════════════════════════════════════
@@ -23,6 +25,8 @@ CREATE POLICY "module_configs_all_admin"
   TO authenticated
   USING   (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN'))
   WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN'));
+
+DROP TRIGGER IF EXISTS handle_module_configs_updated_at ON public.module_configs;
 
 CREATE TRIGGER handle_module_configs_updated_at
   BEFORE UPDATE ON public.module_configs
@@ -79,3 +83,5 @@ INSERT INTO public.module_subtab_configs (module_key, subtab_key, label, display
   ('administration', 'findings5s',     '5S',             4),
   ('administration', 'iso',            'Quy trình ISO',  5)
 ON CONFLICT (module_key, subtab_key) DO NOTHING;
+
+COMMIT;
