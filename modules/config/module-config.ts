@@ -77,3 +77,29 @@ export const STATIC_MODULE_NAV_CONFIGS: ModuleNavConfig[] = [
     subtabs: [],
   },
 ]
+
+// Merges DB-sourced configs onto static defaults.
+// DB can override: label, is_enabled, display_order, individual subtab fields.
+// Unknown module_keys in DB are ignored (we only extend known modules).
+export function mergeWithStatic(dbConfigs: ModuleNavConfig[]): ModuleNavConfig[] {
+  return STATIC_MODULE_NAV_CONFIGS
+    .map((staticModule) => {
+      const dbModule = dbConfigs.find((d) => d.module_key === staticModule.module_key)
+      if (!dbModule) return staticModule
+
+      // Merge subtabs: override known subtab keys, keep the rest from static
+      const mergedSubtabs = staticModule.subtabs.map((staticSub) => {
+        const dbSub = dbModule.subtabs.find((s) => s.subtab_key === staticSub.subtab_key)
+        return dbSub ? { ...staticSub, ...dbSub } : staticSub
+      })
+
+      return {
+        ...staticModule,
+        label: dbModule.label,
+        is_enabled: dbModule.is_enabled,
+        display_order: dbModule.display_order,
+        subtabs: mergedSubtabs.sort((a, b) => a.display_order - b.display_order),
+      }
+    })
+    .sort((a, b) => a.display_order - b.display_order)
+}
