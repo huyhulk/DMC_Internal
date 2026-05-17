@@ -365,7 +365,7 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, modul
                       )}
                     >
                       <Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
-                      <span>{cfg.label}</span>
+                      <span>{getTabLabel('coordination')}</span>
                       <ChevronDown
                         size={10}
                         strokeWidth={2.5}
@@ -414,7 +414,7 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, modul
                       )}
                     >
                       <Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
-                      <span>{cfg.label}</span>
+                      <span>{getTabLabel('administration')}</span>
                       <ChevronDown
                         size={10}
                         strokeWidth={2.5}
