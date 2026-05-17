@@ -1,4 +1,6 @@
 // modules/config/module-config.ts
+import { cache } from 'react'
+import { createClient } from '@/lib/supabase/server'
 
 export interface SubtabNavConfig {
   subtab_key: string
@@ -103,3 +105,50 @@ export function mergeWithStatic(dbConfigs: ModuleNavConfig[]): ModuleNavConfig[]
     })
     .sort((a, b) => a.display_order - b.display_order)
 }
+
+interface DbModuleRow {
+  module_key: string
+  label: string
+  is_enabled: boolean
+  display_order: number
+  module_subtab_configs: Array<{
+    subtab_key: string
+    label: string
+    is_enabled: boolean
+    display_order: number
+  }>
+}
+
+// Server-only: cached per-request via React cache().
+// Falls back to STATIC_MODULE_NAV_CONFIGS on DB error or empty result.
+export const getModuleNavConfigs = cache(async (): Promise<ModuleNavConfig[]> => {
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from('module_configs')
+      .select(`
+        module_key, label, is_enabled, display_order,
+        module_subtab_configs ( subtab_key, label, is_enabled, display_order )
+      `)
+      .order('display_order')
+
+    if (error || !data || data.length === 0) return STATIC_MODULE_NAV_CONFIGS
+
+    const dbConfigs: ModuleNavConfig[] = (data as DbModuleRow[]).map((row) => ({
+      module_key: row.module_key,
+      label: row.label,
+      is_enabled: row.is_enabled,
+      display_order: row.display_order,
+      subtabs: (row.module_subtab_configs ?? []).map((s) => ({
+        subtab_key: s.subtab_key,
+        label: s.label,
+        is_enabled: s.is_enabled,
+        display_order: s.display_order,
+      })),
+    }))
+
+    return mergeWithStatic(dbConfigs)
+  } catch {
+    return STATIC_MODULE_NAV_CONFIGS
+  }
+})
