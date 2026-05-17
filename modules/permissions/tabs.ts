@@ -20,6 +20,7 @@ export type PermissionKey =
   | 'administration.iso'
   | 'admin.users'
   | 'admin.kpi-settings'
+  | 'admin.modules'
 
 export type RolePermissionMatrix = Record<PermissionKey, PermissionLevel>
 export type PermissionMatrixByRole = Record<UserRole, RolePermissionMatrix>
@@ -53,6 +54,7 @@ export const PERMISSION_KEYS: PermissionKey[] = [
   'administration.iso',
   'admin.users',
   'admin.kpi-settings',
+  'admin.modules',
 ]
 
 export const PERMISSION_LABELS: Record<PermissionKey, { label: string; group: string }> = {
@@ -78,6 +80,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, { label: string; group: st
   'administration.iso': { label: 'Quy trình ISO', group: 'HC-NS' },
   'admin.users': { label: 'Quản lý người dùng', group: 'Hệ Thống' },
   'admin.kpi-settings': { label: 'Cài đặt KPI', group: 'Hệ Thống' },
+  'admin.modules': { label: 'Cài đặt Module', group: 'Hệ Thống' },
 }
 
 const invisibleMatrix = Object.fromEntries(PERMISSION_KEYS.map((key) => [key, 'invisible'])) as RolePermissionMatrix
