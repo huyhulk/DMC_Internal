@@ -123,7 +123,7 @@ Bạn muốn làm gì hôm nay?
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **DMC_Internal** (2889 symbols, 6015 relationships, 244 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **DMC_Internal_optimize_app** (3203 symbols, 6685 relationships, 270 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -146,10 +146,10 @@ This project is indexed by GitNexus as **DMC_Internal** (2889 symbols, 6015 rela
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/DMC_Internal/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/DMC_Internal/clusters` | All functional areas |
-| `gitnexus://repo/DMC_Internal/processes` | All execution flows |
-| `gitnexus://repo/DMC_Internal/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/DMC_Internal_optimize_app/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/DMC_Internal_optimize_app/clusters` | All functional areas |
+| `gitnexus://repo/DMC_Internal_optimize_app/processes` | All execution flows |
+| `gitnexus://repo/DMC_Internal_optimize_app/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

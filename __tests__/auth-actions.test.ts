@@ -34,7 +34,7 @@ jest.mock('@/lib/logger', () => ({
   },
 }))
 
-import { logoutAction } from '@/lib/actions/auth'
+import { logoutAction } from '@/modules/auth/actions'
 
 describe('auth actions', () => {
   beforeEach(() => {

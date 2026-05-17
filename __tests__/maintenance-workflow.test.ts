@@ -4,7 +4,7 @@ import {
   getDrawingListFilter,
   getMaintenanceWorkshopOptions,
   isBreakdownEndAfterStart,
-} from '@/lib/maintenance/workflow'
+} from '@/modules/maintenance/workflow'
 
 describe('maintenance workflow helpers', () => {
   it('formats datetime-local values using local clock fields instead of UTC ISO fields', () => {

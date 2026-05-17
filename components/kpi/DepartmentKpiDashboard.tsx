@@ -7,9 +7,9 @@ import { WorkshopSelect } from '@/components/forms/WorkshopSelect'
 import { KpiDetailTable } from '@/components/kpi/KpiDetailTable'
 import { KpiMetricCard } from '@/components/kpi/KpiMetricCard'
 import { KpiSummaryStrip } from '@/components/kpi/KpiSummaryStrip'
-import { DEPARTMENT_LABELS } from '@/lib/kpi/constants'
+import { DEPARTMENT_LABELS } from '@/modules/kpi/constants'
 import { getTodayLocal } from '@/lib/utils'
-import type { KpiDepartment, KpiResultRow, KpiSummary, KpiWorkshop } from '@/lib/kpi/types'
+import type { KpiDepartment, KpiResultRow, KpiSummary, KpiWorkshop } from '@/modules/kpi/types'
 
 interface Props {
   department: KpiDepartment

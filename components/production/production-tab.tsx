@@ -16,7 +16,7 @@ import {
   Unlock,
   X,
 } from 'lucide-react'
-import { listProductionInputHistoryAction } from '@/lib/actions/data'
+import { listProductionInputHistoryAction } from '@/modules/production/actions'
 import { useProductionData } from '@/hooks/use-production-data'
 import { OrderInfoCard } from './order-info-card'
 import { ProductLineCard } from './product-line-card'
@@ -26,10 +26,10 @@ import {
   getOpenOrdersSearchState,
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
-} from '@/lib/production/workflow'
+} from '@/modules/production/workflow'
 import {
   normalizeProductionStatus,
-} from '@/lib/production/status'
+} from '@/modules/production/status'
 import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
 import { cn, formatDate, formatDateTimeDisplay, formatLocalDateTimeString, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'

@@ -1,4 +1,4 @@
-import { buildApprovalNotificationFeed } from '@/lib/approval/notifications'
+import { buildApprovalNotificationFeed } from '@/modules/approval/notifications'
 
 describe('approval notification feed', () => {
   it('builds grouped notifications for pending overtime and maintenance approvals', () => {

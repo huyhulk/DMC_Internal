@@ -1,5 +1,5 @@
-import { getSessionUser } from '@/lib/actions/auth'
-import { canEdit, requireTabView } from '@/lib/permissions/server'
+import { getSessionUser } from '@/modules/auth/actions'
+import { canEdit, requireTabView } from '@/modules/permissions/server'
 import { ProductionTab } from '@/components/production/production-tab'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'

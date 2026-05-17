@@ -10,12 +10,12 @@ import {
   isoCreateSchema, isoCompleteSchema,
   ISO_CATEGORIES, ISO_CATEGORY_LABELS, ISO_STATUSES, ISO_STATUS_LABELS,
   type IsoCreateInput, type IsoCompleteInput,
-} from '@/lib/validations/coordination'
+} from '@/modules/coordination/validation'
 import {
   createIsoAction, updateIsoProgressAction, completeIsoAction,
   deleteIsoAction, listIsoAction,
   type IsoProcedureRow,
-} from '@/lib/actions/coordination'
+} from '@/modules/coordination/actions'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'

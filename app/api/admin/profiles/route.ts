@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { getSessionUser } from '@/lib/actions/auth'
+import { getSessionUser } from '@/modules/auth/actions'
 
 function adminDb() {
   return createSupabaseClient(

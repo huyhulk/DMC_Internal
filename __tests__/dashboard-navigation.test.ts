@@ -1,7 +1,7 @@
 import {
   DEFAULT_ROLE_PERMISSIONS,
   type PermissionKey,
-} from '@/lib/permissions/tabs'
+} from '@/modules/permissions/tabs'
 import {
   getAdministrationTabs,
   getCoordinationTabs,
@@ -9,7 +9,7 @@ import {
   resolveAdministrationSub,
   resolveCoordinationSub,
   resolveMaintenanceSub,
-} from '@/lib/navigation/dashboard'
+} from '@/modules/navigation/dashboard'
 
 describe('dashboard navigation tabs', () => {
   it('keeps Coordination limited to live data-entry tabs', () => {

@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { getInitData, getOpenProductionOrdersAction, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
-import { getProductionRowsValidationError } from '@/lib/production/workflow'
+import { getInitData, getOpenProductionOrdersAction, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/modules/production/actions'
+import { getProductionRowsValidationError } from '@/modules/production/workflow'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { InitData, Order, NormItem, ProductionSaveStatus, SessionUser, ProductLine, PcodeStatus } from '@/types'
 

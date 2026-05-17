@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { getSessionUser } from '@/lib/actions/auth'
-import { canEdit, canView, requireTabView } from '@/lib/permissions/server'
+import { getSessionUser } from '@/modules/auth/actions'
+import { canEdit, canView, requireTabView } from '@/modules/permissions/server'
 import { MaintenanceShell } from '@/components/maintenance/maintenance-shell'
-import { resolveMaintenanceSub } from '@/lib/navigation/dashboard'
-import type { PermissionKey } from '@/lib/permissions/tabs'
+import { resolveMaintenanceSub } from '@/modules/navigation/dashboard'
+import type { PermissionKey } from '@/modules/permissions/tabs'
 
 export const metadata: Metadata = { title: 'Bảo Trì | DMC Production' }
 

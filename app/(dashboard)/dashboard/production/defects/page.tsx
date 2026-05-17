@@ -1,5 +1,5 @@
-import { getSessionUser } from '@/lib/actions/auth'
-import { canEdit, requireTabView } from '@/lib/permissions/server'
+import { getSessionUser } from '@/modules/auth/actions'
+import { canEdit, requireTabView } from '@/modules/permissions/server'
 import { createClient } from '@/lib/supabase/server'
 import { DefectsTab } from '@/components/production/defects-tab'
 import { getUserWorkspaces } from '@/lib/utils'

@@ -5,8 +5,8 @@ import {
   ResponsiveContainer, CartesianGrid, ReferenceLine,
 } from 'recharts'
 import { QualityHeatmap } from '../charts/oee-chart'
-import type { ReportMode, WorkshopCode, HeatmapCell } from '@/lib/reports/report-types'
-import { WORKSHOP_CODES, WORKSHOP_COLORS } from '@/lib/reports/report-types'
+import type { ReportMode, WorkshopCode, HeatmapCell } from '@/modules/reports/report-types'
+import { WORKSHOP_CODES, WORKSHOP_COLORS } from '@/modules/reports/report-types'
 
 const LINE_COLORS = [
   '#3b82f6', '#f97316', '#8b5cf6', '#ef4444',

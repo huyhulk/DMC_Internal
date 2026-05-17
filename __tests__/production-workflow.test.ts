@@ -5,7 +5,7 @@ import {
   isProductionDateProgressFilter,
   isProgressReportCompleted,
   normalizeProgressFilterBy,
-} from '@/lib/reports/report-queries'
+} from '@/modules/reports/report-queries'
 import {
   buildProductionDeadlineCutoff,
   calculateProductionCompletion,
@@ -22,7 +22,7 @@ import {
   shouldAutoCloseProductionOrder,
   shouldKeepNotStartedOrderVisible,
   sortProductionOrdersForEntry,
-} from '@/lib/production/workflow'
+} from '@/modules/production/workflow'
 
 import {
   isEffectiveClosedProductionStatus,
@@ -31,11 +31,11 @@ import {
   resolveOpenProductionOrderStatus,
   resolveProductionOrderStatus,
   shouldShowOpenProductionOrder,
-} from '@/lib/production/status'
+} from '@/modules/production/status'
 import {
   applyEffectiveStatusToOrder,
   buildProductionStatusMapFromRows,
-} from '@/lib/production/status-server'
+} from '@/modules/production/status-server'
 
 const baseOrder: Order = {
   pcode: '',

@@ -1,7 +1,7 @@
 'use client'
 
-import { PERIOD_LABELS } from '@/lib/kpi/constants'
-import type { PeriodType } from '@/lib/kpi/types'
+import { PERIOD_LABELS } from '@/modules/kpi/constants'
+import type { PeriodType } from '@/modules/kpi/types'
 
 interface Props {
   period: PeriodType

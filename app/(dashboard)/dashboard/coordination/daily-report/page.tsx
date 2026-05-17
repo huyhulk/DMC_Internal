@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { getSessionUser } from '@/lib/actions/auth'
-import { getDailyProductionReportData, isValidReportDate, type DailyPlanReportRow, type DailyResultReportRow, type DailyReportType } from '@/lib/coordination/daily-report'
-import { requireTabView } from '@/lib/permissions/server'
+import { getSessionUser } from '@/modules/auth/actions'
+import { getDailyProductionReportData, isValidReportDate, type DailyPlanReportRow, type DailyResultReportRow, type DailyReportType } from '@/modules/coordination/daily-report'
+import { requireTabView } from '@/modules/permissions/server'
 import { getTodayLocal } from '@/lib/utils'
 import { PrintButton } from './print-button'
 

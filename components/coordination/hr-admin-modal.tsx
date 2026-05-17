@@ -8,7 +8,7 @@ import {
   createHumanResource,
   updateHumanResource,
   deleteHumanResource,
-} from '@/lib/actions/hr'
+} from '@/modules/hr/actions'
 import { getTodayLocal } from '@/lib/utils'
 import { HUMAN_RESOURCE_FACTORIES, type HumanResource } from '@/types'
 

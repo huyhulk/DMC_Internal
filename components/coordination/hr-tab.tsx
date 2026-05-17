@@ -6,7 +6,7 @@ import { Settings2 } from 'lucide-react'
 import { format, parse, isValid } from 'date-fns'
 import { HRColumn } from './hr-column'
 import { HRAdminModal } from './hr-admin-modal'
-import { saveHRDaily } from '@/lib/actions/hr'
+import { saveHRDaily } from '@/modules/hr/actions'
 import { getTodayLocal, getUserWorkspaces } from '@/lib/utils'
 import { HR_DAILY_GROUPS, type SessionUser, type HumanResource, type HRDayData, type HRDailyGroupKey, type HRTransferRecord } from '@/types'
 

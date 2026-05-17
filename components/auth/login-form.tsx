@@ -5,8 +5,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { User, Lock, ArrowRight } from 'lucide-react'
-import { loginSchema, type LoginInput } from '@/lib/validations/auth'
-import { loginAction } from '@/lib/actions/auth'
+import { loginSchema, type LoginInput } from '@/modules/auth/validation'
+import { loginAction } from '@/modules/auth/actions'
 
 export function LoginForm() {
   const [loading, setLoading] = useState(false)

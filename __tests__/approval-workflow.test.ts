@@ -7,7 +7,7 @@ import {
   getWorkspaceScopedFilter,
   normalizeWorkspaceToken,
   summarizeOvertimeParticipants,
-} from '@/lib/approval/workflow'
+} from '@/modules/approval/workflow'
 
 describe('approval workflow helpers', () => {
   it('allows only admin and manager to approve requests', () => {

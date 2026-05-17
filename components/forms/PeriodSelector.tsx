@@ -2,8 +2,8 @@
 
 import { CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { PERIOD_LABELS, PERIOD_TYPES } from '@/lib/kpi/constants'
-import type { PeriodType } from '@/lib/kpi/types'
+import { PERIOD_LABELS, PERIOD_TYPES } from '@/modules/kpi/constants'
+import type { PeriodType } from '@/modules/kpi/types'
 
 export interface PeriodSelectorValue {
   periodType: PeriodType

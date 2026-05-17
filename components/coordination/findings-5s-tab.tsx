@@ -11,11 +11,11 @@ import {
   FIVE_S_CATEGORIES, SEVERITIES, SEVERITY_LABELS,
   KPI_WORKSHOPS, FIVE_S_DEPARTMENTS,
   type Finding5sCreateInput, type Finding5sResolveInput,
-} from '@/lib/validations/coordination'
+} from '@/modules/coordination/validation'
 import {
   createFinding5sAction, resolveFinding5sAction, deleteFinding5sAction, listFindings5sAction,
   type Finding5sRow,
-} from '@/lib/actions/coordination'
+} from '@/modules/coordination/actions'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'

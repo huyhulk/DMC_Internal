@@ -1,9 +1,9 @@
 'use client'
 
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { KPI_WORKSHOP_COLORS } from '@/lib/kpi/constants'
-import { clamp } from '@/lib/kpi/format'
-import type { KpiMatrixRow } from '@/lib/kpi/types'
+import { KPI_WORKSHOP_COLORS } from '@/modules/kpi/constants'
+import { clamp } from '@/modules/kpi/format'
+import type { KpiMatrixRow } from '@/modules/kpi/types'
 
 interface Props { rows: KpiMatrixRow[] }
 

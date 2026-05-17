@@ -15,9 +15,9 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { logoutAction, changePasswordAction } from '@/lib/actions/auth'
+import { logoutAction, changePasswordAction } from '@/modules/auth/actions'
 import { ROLE_LABELS, type SessionUser, type TabId } from '@/types'
-import type { PermissionKey } from '@/lib/permissions/tabs'
+import type { PermissionKey } from '@/modules/permissions/tabs'
 import { ChangePasswordDialog } from '@/components/shared/change-password-dialog'
 import { ApprovalNotificationBell } from '@/components/layout/approval-notification-bell'
 import {
@@ -30,7 +30,7 @@ import {
   type AdministrationTabKey,
   type CoordinationTabKey,
   type MaintenanceTabKey,
-} from '@/lib/navigation/dashboard'
+} from '@/modules/navigation/dashboard'
 
 const TAB_CONFIG = {
   production:   { label: 'Sản Xuất',  icon: Factory,   href: '/dashboard/production' },

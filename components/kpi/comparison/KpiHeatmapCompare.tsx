@@ -1,6 +1,6 @@
-import { KPI_WORKSHOP_COLORS } from '@/lib/kpi/constants'
+import { KPI_WORKSHOP_COLORS } from '@/modules/kpi/constants'
 import { cn } from '@/lib/utils'
-import type { KpiMatrixRow } from '@/lib/kpi/types'
+import type { KpiMatrixRow } from '@/modules/kpi/types'
 
 interface Props { rows: KpiMatrixRow[] }
 

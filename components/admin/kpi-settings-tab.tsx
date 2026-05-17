@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { Save, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { updateKpiTargetsAction, type KpiTargetRow } from '@/lib/actions/kpi-settings'
+import { updateKpiTargetsAction, type KpiTargetRow } from '@/modules/admin/kpi-settings'
 
 interface Props {
   initialRows: KpiTargetRow[]

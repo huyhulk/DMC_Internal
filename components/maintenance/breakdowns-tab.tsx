@@ -6,16 +6,16 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, CheckCircle, Pencil, Trash2 } from 'lucide-react'
 import { cn, formatDate, getLocalDateTimeInputValue } from '@/lib/utils'
-import { getMaintenanceWorkshopOptions } from '@/lib/maintenance/workflow'
+import { getMaintenanceWorkshopOptions } from '@/modules/maintenance/workflow'
 import {
   breakdownCreateSchema, breakdownResolveSchema,
   FAILURE_TYPES, FAILURE_TYPE_LABELS, BREAKDOWN_STATUSES, BREAKDOWN_STATUS_LABELS,
   KPI_WORKSHOPS, type BreakdownCreateInput, type BreakdownResolveInput,
-} from '@/lib/validations/maintenance'
+} from '@/modules/maintenance/validation'
 import {
   createBreakdownAction, resolveBreakdownAction, deleteBreakdownAction, listBreakdownsAction,
   listStaffByWorkshopAction, type BreakdownRow,
-} from '@/lib/actions/maintenance'
+} from '@/modules/maintenance/actions'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'

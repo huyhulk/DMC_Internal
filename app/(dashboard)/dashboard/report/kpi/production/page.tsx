@@ -1,6 +1,6 @@
 import { ProductionKpiDashboard } from '@/components/kpi/production/ProductionKpiDashboard'
-import { requireTabView } from '@/lib/permissions/server'
-import { getSessionUser } from '@/lib/actions/auth'
+import { requireTabView } from '@/modules/permissions/server'
+import { getSessionUser } from '@/modules/auth/actions'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 

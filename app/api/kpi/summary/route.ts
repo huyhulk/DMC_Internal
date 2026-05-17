@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { KPI_DEPARTMENTS } from '@/lib/kpi/constants'
-import { queryKpiDepartmentSummary } from '@/lib/kpi/queries'
+import { KPI_DEPARTMENTS } from '@/modules/kpi/constants'
+import { queryKpiDepartmentSummary } from '@/modules/kpi/queries'
 import { parseKpiParams, requireAuth, errResponse, okResponse, resolveKpiComparisonAccess } from '../_shared'
 
 export async function GET(req: NextRequest) {

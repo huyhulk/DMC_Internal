@@ -4,8 +4,8 @@ import {
   CartesianGrid, Line, LineChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { formatKpiValue } from '@/lib/kpi/format'
-import type { KpiResultRow, KpiTrendPoint } from '@/lib/kpi/types'
+import { formatKpiValue } from '@/modules/kpi/format'
+import type { KpiResultRow, KpiTrendPoint } from '@/modules/kpi/types'
 
 interface Props {
   row: KpiResultRow

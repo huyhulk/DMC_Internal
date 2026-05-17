@@ -5,15 +5,15 @@ import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { CheckCircle, Clock, Plus, RefreshCw, Send, Trash2, XCircle } from 'lucide-react'
 import { cn, formatDate, getTodayLocal } from '@/lib/utils'
-import { getMaintenanceWorkshopOptions } from '@/lib/maintenance/workflow'
-import { canApproveRequests } from '@/lib/approval/workflow'
+import { getMaintenanceWorkshopOptions } from '@/modules/maintenance/workflow'
+import { canApproveRequests } from '@/modules/approval/workflow'
 import {
   OVERTIME_CATEGORIES,
   OVERTIME_CATEGORY_LABELS,
   OVERTIME_REASONS,
   OVERTIME_REASON_LABELS,
   type OvertimeRequestCreateInput,
-} from '@/lib/validations/overtime'
+} from '@/modules/overtime/validation'
 import {
   createOvertimeRequestAction,
   listIncompleteOvertimeOrdersAction,
@@ -22,12 +22,12 @@ import {
   reviewOvertimeRequestAction,
   type OvertimeProductionOrderOption,
   type OvertimeRequestRow,
-} from '@/lib/actions/overtime'
+} from '@/modules/overtime/actions'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
 import type { SessionUser } from '@/types'
-import type { OvertimeEmployeeOption } from '@/lib/overtime/workflow'
+import type { OvertimeEmployeeOption } from '@/modules/overtime/workflow'
 
 type ParticipantDraft = { human_resource_id: string; employee_name: string; hours: string }
 type OvertimeView = 'request' | 'approvals' | 'history'

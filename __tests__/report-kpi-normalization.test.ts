@@ -1,5 +1,5 @@
-import { wsNormalize, productionCompletionTimestamp } from '@/lib/kpi/queries'
-import { getOrderProductionDate, isProductionCompletionLate, resolveReportWorkshop } from '@/lib/reports/report-queries'
+import { wsNormalize, productionCompletionTimestamp } from '@/modules/kpi/queries'
+import { getOrderProductionDate, isProductionCompletionLate, resolveReportWorkshop } from '@/modules/reports/report-queries'
 
 describe('report workshop normalization', () => {
   it('does not count empty or unknown workshops as DMC1', () => {

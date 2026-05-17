@@ -1,0 +1,39 @@
+{
+  "id": "production.order-view.open.global",
+  "kind": "production.order.view",
+  "schemaVersion": 1,
+  "version": 1,
+  "status": "active",
+  "scope": {},
+  "updatedAt": "2026-05-17T00:00:00+07:00",
+  "updatedBy": "system",
+  "changelog": "Reference config for the open production orders list.",
+  "payload": {
+    "entity": "production.order",
+    "key": "open-orders",
+    "title": "Danh sách lệnh sản xuất mở",
+    "columns": [
+      "PCODE",
+      "INITIALDATE",
+      "CUSTOMER",
+      "WORKSHOP",
+      "DESCRIPTION",
+      "QUANTITY",
+      "DEADLINEDATE",
+      "STATUS"
+    ],
+    "filters": [
+      { "field": "WORKSHOP", "op": "inUserWorkspaces" },
+      { "field": "STATUS", "op": "notIn", "value": ["cancelled"] }
+    ],
+    "sort": [
+      { "field": "INITIALDATE", "dir": "asc" },
+      { "field": "PCODE", "dir": "asc" }
+    ],
+    "ui": {
+      "showQuickSearch": true,
+      "showWorkshopFilter": true
+    }
+  }
+}
+

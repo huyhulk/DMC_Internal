@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
-import { getSessionUser } from '@/lib/actions/auth'
-import { getVisiblePermissionKeys, getVisibleTopLevelTabs } from '@/lib/permissions/server'
+import { getSessionUser } from '@/modules/auth/actions'
+import { getVisiblePermissionKeys, getVisibleTopLevelTabs } from '@/modules/permissions/server'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
 
 // No force-dynamic needed: cookies() inside getSessionUser makes this dynamic automatically

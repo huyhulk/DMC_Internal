@@ -1,5 +1,5 @@
 import { CheckCircle2, CircleAlert, Database, Gauge } from 'lucide-react'
-import type { KpiSummary } from '@/lib/kpi/types'
+import type { KpiSummary } from '@/modules/kpi/types'
 
 interface Props { summary: KpiSummary }
 

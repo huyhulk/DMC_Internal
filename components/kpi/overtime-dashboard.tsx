@@ -7,7 +7,7 @@ import { getTodayLocal } from '@/lib/utils'
 import {
   WORKSHOPS, WORKSHOP_COLORS, OT_CATEGORY_LABELS, OT_REASON_LABELS,
   type WorkshopCode, type PeriodType, type OvertimeSummary, type TopOvertimeEmployee,
-} from '@/lib/kpi/types'
+} from '@/modules/kpi/types'
 
 const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false })
 

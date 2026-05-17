@@ -4,7 +4,7 @@ import { DeliveryTab } from './delivery-tab'
 import { Findings5sTab } from './findings-5s-tab'
 import { ReportsTab } from './reports-tab'
 import type { SessionUser } from '@/types'
-import { resolveCoordinationSub } from '@/lib/navigation/dashboard'
+import { resolveCoordinationSub } from '@/modules/navigation/dashboard'
 
 interface Props {
   activeSub: string

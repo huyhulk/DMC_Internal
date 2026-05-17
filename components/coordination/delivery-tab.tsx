@@ -10,15 +10,15 @@ import {
   deliveryCreateSchema, deliveryCompleteSchema, deliveryBaselineSchema,
   DELIVERY_STATUSES, DELIVERY_STATUS_LABELS,
   type DeliveryCreateInput, type DeliveryCompleteInput, type DeliveryBaselineInput,
-} from '@/lib/validations/coordination'
+} from '@/modules/coordination/validation'
 import {
   createDeliveryAction, updateDeliveryAction, completeDeliveryAction,
   startDeliveryAction, cancelDeliveryAction, deleteDeliveryAction,
   listDeliveriesAction, upsertCostBaselineAction, listCostBaselinesAction,
   listCustomersAction, listVehicleCodesAction,
   type DeliveryRow,
-} from '@/lib/actions/coordination'
-import { listStaffByWorkshopAction } from '@/lib/actions/maintenance'
+} from '@/modules/coordination/actions'
+import { listStaffByWorkshopAction } from '@/modules/maintenance/actions'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'

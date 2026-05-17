@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getSessionUser } from '@/lib/actions/auth'
-import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
-import type { WorkshopCode, ReportMode, GroupBy, FilterBy } from '@/lib/reports/report-types'
-import { WORKSHOP_CODES } from '@/lib/reports/report-types'
+import { getSessionUser } from '@/modules/auth/actions'
+import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/modules/approval/workflow'
+import type { WorkshopCode, ReportMode, GroupBy, FilterBy } from '@/modules/reports/report-types'
+import { WORKSHOP_CODES } from '@/modules/reports/report-types'
 import type { SessionUser } from '@/types'
 
 const VALID_GROUP_BY: GroupBy[] = ['day', 'week', 'month', 'year', 'hour']

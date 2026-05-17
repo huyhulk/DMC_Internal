@@ -1,0 +1,17 @@
+{
+  "id": "production.order-visibility.global",
+  "kind": "production.order.visibility",
+  "schemaVersion": 1,
+  "version": 1,
+  "status": "active",
+  "scope": {},
+  "updatedAt": "2026-05-17T00:00:00+07:00",
+  "updatedBy": "system",
+  "changelog": "Default production order visibility policy extracted from legacy code.",
+  "payload": {
+    "requireNormMatchWhenNormsExist": true,
+    "showAllWhenNormsMissing": true,
+    "excludedWorkshopCodes": []
+  }
+}
+

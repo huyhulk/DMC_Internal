@@ -9,11 +9,11 @@ import { cn } from '@/lib/utils'
 import {
   machineCreateSchema, type MachineCreateInput,
   KPI_WORKSHOPS, MACHINE_STATUSES, MACHINE_STATUS_LABELS,
-} from '@/lib/validations/maintenance'
+} from '@/modules/maintenance/validation'
 import {
   listMachinesAction, createMachineAction, updateMachineAction, deleteMachineAction,
   type MachineRow,
-} from '@/lib/actions/maintenance'
+} from '@/modules/maintenance/actions'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'

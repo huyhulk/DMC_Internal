@@ -15,7 +15,7 @@ import { KpiMatrixTable } from '@/components/kpi/comparison/KpiMatrixTable'
 import { KpiRadarCompare } from '@/components/kpi/comparison/KpiRadarCompare'
 import { KpiViewModeToggle, type ProductionKpiViewMode } from '@/components/kpi/comparison/KpiViewModeToggle'
 import { getTodayLocal } from '@/lib/utils'
-import type { KpiComparisonResponse, KpiResultRow, KpiSummary, KpiTrendPoint, KpiWorkshop } from '@/lib/kpi/types'
+import type { KpiComparisonResponse, KpiResultRow, KpiSummary, KpiTrendPoint, KpiWorkshop } from '@/modules/kpi/types'
 
 interface KpiRowsPayload { rows: KpiResultRow[]; summary: KpiSummary; trends?: Record<string, KpiTrendPoint[]> }
 interface ApiResponse<T> { success: boolean; data?: T; error?: string }

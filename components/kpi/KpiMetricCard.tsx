@@ -1,7 +1,7 @@
 import { Gauge } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { clamp, formatKpiValue, formatTarget } from '@/lib/kpi/format'
-import type { KpiResultRow } from '@/lib/kpi/types'
+import { clamp, formatKpiValue, formatTarget } from '@/modules/kpi/format'
+import type { KpiResultRow } from '@/modules/kpi/types'
 import { KpiTargetBadge } from './KpiTargetBadge'
 
 interface Props {

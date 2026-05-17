@@ -4,7 +4,7 @@ jest.mock('@/lib/supabase/server', () => ({
   createClient: mockCreateClient,
 }))
 
-import { queryProgress } from '@/lib/reports/report-queries'
+import { queryProgress } from '@/modules/reports/report-queries'
 
 describe('queryProgress RPC path', () => {
   beforeEach(() => {

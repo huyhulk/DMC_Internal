@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { getProductionReportData } from '@/lib/actions/data'
+import { getProductionReportData } from '@/modules/production/actions'
 import type { ProductionReportRow } from '@/types'
 
 export type ReportType = 'hour' | 'day' | 'month' | 'year'

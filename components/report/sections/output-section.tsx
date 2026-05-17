@@ -4,8 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
-import type { ReportMode, WorkshopCode } from '@/lib/reports/report-types'
-import { WORKSHOP_COLORS } from '@/lib/reports/report-types'
+import type { ReportMode, WorkshopCode } from '@/modules/reports/report-types'
+import { WORKSHOP_COLORS } from '@/modules/reports/report-types'
 
 const LINE_COLORS = [
   '#3b82f6', '#f97316', '#8b5cf6', '#ef4444',

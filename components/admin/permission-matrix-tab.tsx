@@ -11,12 +11,12 @@ import {
   normalizePermissionLevel,
   type PermissionKey,
   type PermissionLevel,
-} from '@/lib/permissions/tabs'
+} from '@/modules/permissions/tabs'
 import {
   resetRoleTabPermissionsAction,
   updateRoleTabPermissionsAction,
   type RoleTabPermissionRow,
-} from '@/lib/actions/permissions'
+} from '@/modules/permissions/actions'
 import { ROLE_LABELS, USER_ROLES, type UserRole } from '@/types'
 
 interface Props {

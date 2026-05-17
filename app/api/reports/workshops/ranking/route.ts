@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireAuth, errResponse, okResponse } from '../../_shared'
-import { getWorkspaceScopedFilter } from '@/lib/approval/workflow'
-import { queryRanking } from '@/lib/reports/report-queries'
+import { getWorkspaceScopedFilter } from '@/modules/approval/workflow'
+import { queryRanking } from '@/modules/reports/report-queries'
 
 const VALID_METRICS = ['oee', 'quality', 'output', 'progress'] as const
 

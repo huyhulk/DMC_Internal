@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { parseKpiParams, requireAuth, errResponse, okResponse, resolveKpiComparisonAccess } from '../_shared'
-import { queryKpiComparison, queryProductionKpiComparison } from '@/lib/kpi/queries'
+import { queryKpiComparison, queryProductionKpiComparison } from '@/modules/kpi/queries'
 
 export async function GET(req: NextRequest) {
   const user = await requireAuth()

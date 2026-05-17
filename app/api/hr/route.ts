@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ensureDefaultHRDailyRows, getHRData } from '@/lib/actions/hr'
-import { getSessionUser } from '@/lib/actions/auth'
+import { ensureDefaultHRDailyRows, getHRData } from '@/modules/hr/actions'
+import { getSessionUser } from '@/modules/auth/actions'
 
 export const dynamic = 'force-dynamic'
 

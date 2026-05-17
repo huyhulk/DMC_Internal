@@ -9,7 +9,7 @@ import {
   type DailyPlanReportRow,
   type DailyReportWorkshop,
   type DailyResultReportRow,
-} from '@/lib/coordination/daily-report'
+} from '@/modules/coordination/daily-report'
 
 describe('coordination daily report helpers', () => {
   it('maps production workshops using current DMC grouping', () => {

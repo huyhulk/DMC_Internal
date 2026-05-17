@@ -6,16 +6,16 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, Send, Trash2 } from 'lucide-react'
 import { cn, formatDate, getLocalCompactDate, getLocalDateAfterDays, getTodayLocal } from '@/lib/utils'
-import { getDrawingListFilter } from '@/lib/maintenance/workflow'
+import { getDrawingListFilter } from '@/modules/maintenance/workflow'
 import {
   drawingCreateSchema, drawingCompleteSchema,
   DRAWING_STATUSES, DRAWING_STATUS_LABELS,
   type DrawingCreateInput, type DrawingCompleteInput,
-} from '@/lib/validations/maintenance'
+} from '@/modules/maintenance/validation'
 import {
   createDrawingAction, completeDrawingAction, deleteDrawingAction, listDrawingsAction,
   type DrawingRow,
-} from '@/lib/actions/maintenance'
+} from '@/modules/maintenance/actions'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'

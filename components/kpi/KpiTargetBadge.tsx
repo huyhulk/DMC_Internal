@@ -1,8 +1,8 @@
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatTarget } from '@/lib/kpi/format'
-import { PERIOD_LABELS } from '@/lib/kpi/constants'
-import type { KpiResultRow } from '@/lib/kpi/types'
+import { formatTarget } from '@/modules/kpi/format'
+import { PERIOD_LABELS } from '@/modules/kpi/constants'
+import type { KpiResultRow } from '@/modules/kpi/types'
 
 interface Props {
   row: KpiResultRow

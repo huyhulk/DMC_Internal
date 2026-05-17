@@ -7,7 +7,7 @@ import { PeriodSelector, type PeriodSelectorValue } from '@/components/forms/Per
 import { KpiDetailTable } from '@/components/kpi/KpiDetailTable'
 import { KpiSummaryStrip } from '@/components/kpi/KpiSummaryStrip'
 import { getTodayLocal } from '@/lib/utils'
-import type { KpiDepartmentSummary } from '@/lib/kpi/types'
+import type { KpiDepartmentSummary } from '@/modules/kpi/types'
 
 interface ApiResponse<T> { success: boolean; data?: T; error?: string }
 interface Payload { departments: KpiDepartmentSummary[] }

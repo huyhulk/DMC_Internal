@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { ChevronDown, Save, Lock, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { calculateActualHeadcount } from '@/lib/hr/workflow'
+import { calculateActualHeadcount } from '@/modules/hr/workflow'
 import type { HumanResource, HRDailyGroupKey, HRTransferRecord } from '@/types'
 import { HR_DAILY_GROUP_LABELS, HR_DAILY_GROUPS } from '@/types'
 

@@ -1,4 +1,4 @@
-import type { ShiftSlot, GroupBy } from '@/lib/reports/report-types'
+import type { ShiftSlot, GroupBy } from '@/modules/reports/report-types'
 
 /**
  * Phân loại ca theo starttime "HH:mm" hoặc "HH:mm:ss".

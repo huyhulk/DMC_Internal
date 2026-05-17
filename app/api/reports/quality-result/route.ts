@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { requireAuth, parseReportParams, errResponse, okResponse, daysBetween, resolveReportWorkshopAccess } from '../_shared'
-import { queryQuality } from '@/lib/reports/report-queries'
+import { queryQuality } from '@/modules/reports/report-queries'
 
 export async function GET(req: NextRequest) {
   const user = await requireAuth()

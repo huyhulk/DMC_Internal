@@ -4,7 +4,7 @@ import {
   calculateHRLaborHoursByFactory,
   elapsedWorkHours,
   isProductionHRGroup,
-} from '@/lib/hr/workflow'
+} from '@/modules/hr/workflow'
 
 describe('HR workflow helpers', () => {
   it('subtracts absent and transferred ids once from total headcount', () => {

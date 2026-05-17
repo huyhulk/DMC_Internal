@@ -8,11 +8,11 @@ import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react'
 import { cn, formatDate, getLocalCompactDate, getTodayLocal } from '@/lib/utils'
 import {
   surveyCreateSchema, type SurveyCreateInput,
-} from '@/lib/validations/maintenance'
+} from '@/modules/maintenance/validation'
 import {
   createSurveyAction, updateSurveyAction, deleteSurveyAction, listSurveysAction,
   type SurveyRow,
-} from '@/lib/actions/maintenance'
+} from '@/modules/maintenance/actions'
 import { Dialog } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeleton } from '@/components/ui/table-skeleton'

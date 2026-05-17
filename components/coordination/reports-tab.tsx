@@ -10,12 +10,12 @@ import {
   statReportCreateSchema, statReportBulkSchema, statReportSubmitSchema,
   REPORT_TYPES, REPORT_TYPE_LABELS,
   type StatReportCreateInput, type StatReportBulkInput, type StatReportSubmitInput,
-} from '@/lib/validations/coordination'
+} from '@/modules/coordination/validation'
 import {
   createStatReportAction, bulkCreateStatReportAction, submitStatReportAction,
   updateStatReportAction, deleteStatReportAction, listStatReportsAction,
   type StatReportRow,
-} from '@/lib/actions/coordination'
+} from '@/modules/coordination/actions'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'

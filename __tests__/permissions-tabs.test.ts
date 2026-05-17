@@ -9,7 +9,7 @@ import {
   canViewLevel,
   isPermissionKey,
   normalizePermissionLevel,
-} from '@/lib/permissions/tabs'
+} from '@/modules/permissions/tabs'
 
 describe('role tab permissions', () => {
   it('defines a default level for every role and permission key', () => {

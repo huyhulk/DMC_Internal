@@ -6,7 +6,7 @@ import { HRPerformanceTab } from './hr-performance-tab'
 import { Findings5sTab } from '@/components/coordination/findings-5s-tab'
 import { IsoTab } from '@/components/coordination/iso-tab'
 import type { SessionUser } from '@/types'
-import { resolveAdministrationSub } from '@/lib/navigation/dashboard'
+import { resolveAdministrationSub } from '@/modules/navigation/dashboard'
 
 interface Props {
   user: SessionUser

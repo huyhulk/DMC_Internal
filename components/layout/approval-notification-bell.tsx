@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Bell, CalendarClock, Clock, Inbox, RefreshCw } from 'lucide-react'
-import { canApproveRequests } from '@/lib/approval/workflow'
-import { listApprovalNotificationsAction } from '@/lib/actions/approval-notifications'
+import { canApproveRequests } from '@/modules/approval/workflow'
+import { listApprovalNotificationsAction } from '@/modules/approval/actions'
 import { cn, formatDate } from '@/lib/utils'
 import type {
   ApprovalNotificationFeed,
   ApprovalNotificationItem,
-} from '@/lib/approval/notifications'
+} from '@/modules/approval/notifications'
 import type { SessionUser } from '@/types'
 
 const EMPTY_FEED: ApprovalNotificationFeed = {

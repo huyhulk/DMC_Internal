@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { getSessionUser } from '@/lib/actions/auth'
+import { getSessionUser } from '@/modules/auth/actions'
 import { CoordinationTab } from '@/components/coordination/coordination-tab'
-import { resolveCoordinationSub } from '@/lib/navigation/dashboard'
-import { canEdit, canView, requireTabView } from '@/lib/permissions/server'
-import type { PermissionKey } from '@/lib/permissions/tabs'
+import { resolveCoordinationSub } from '@/modules/navigation/dashboard'
+import { canEdit, canView, requireTabView } from '@/modules/permissions/server'
+import type { PermissionKey } from '@/modules/permissions/tabs'
 
 export const metadata: Metadata = { title: 'Điều Phối | DMC Production' }
 

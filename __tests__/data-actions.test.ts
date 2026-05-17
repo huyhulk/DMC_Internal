@@ -39,13 +39,13 @@ jest.mock('@/lib/db/queries', () => ({
   getCachedMaterials: mockGetCachedMaterials,
 }))
 
-jest.mock('@/lib/permissions/server', () => ({
+jest.mock('@/modules/permissions/server', () => ({
   requireTabEdit: jest.fn(),
   requireTabView: mockRequireTabView,
 }))
 
-jest.mock('@/lib/production/workflow', () => {
-  const actual = jest.requireActual('@/lib/production/workflow')
+jest.mock('@/modules/production/workflow', () => {
+  const actual = jest.requireActual('@/modules/production/workflow')
   return {
     ...actual,
     getOpenProductionOrdersQueryWindow: mockGetOpenProductionOrdersQueryWindow,
@@ -61,7 +61,7 @@ jest.mock('@/lib/logger', () => ({
   },
 }))
 
-import { getOpenProductionOrdersAction, listProductionInputHistoryAction } from '@/lib/actions/data'
+import { getOpenProductionOrdersAction, listProductionInputHistoryAction } from '@/modules/production/actions'
 
 describe('data actions', () => {
   beforeEach(() => {

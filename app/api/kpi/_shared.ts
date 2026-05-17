@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getSessionUser } from '@/lib/actions/auth'
-import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
-import { isKpiDepartment, isKpiWorkshop, isPeriodType } from '@/lib/kpi/constants'
-import type { KpiDepartment, KpiWorkshop, PeriodType } from '@/lib/kpi/types'
+import { getSessionUser } from '@/modules/auth/actions'
+import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/modules/approval/workflow'
+import { isKpiDepartment, isKpiWorkshop, isPeriodType } from '@/modules/kpi/constants'
+import type { KpiDepartment, KpiWorkshop, PeriodType } from '@/modules/kpi/types'
 import type { SessionUser } from '@/types'
 
 export async function requireAuth() {

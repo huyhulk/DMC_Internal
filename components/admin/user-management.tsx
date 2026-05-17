@@ -11,8 +11,8 @@ import {
   deleteUserAction,
   adminResetPasswordAction,
   type UserRow,
-} from '@/lib/actions/admin'
-import { WORKSPACE_OPTIONS, normalizeWorkspaceList } from '@/lib/approval/workflow'
+} from '@/modules/admin/actions'
+import { WORKSPACE_OPTIONS, normalizeWorkspaceList } from '@/modules/approval/workflow'
 import { ROLE_LABELS, USER_ROLES, type UserRole } from '@/types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────

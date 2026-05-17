@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSessionUser } from '@/lib/actions/auth'
+import { getSessionUser } from '@/modules/auth/actions'
 import { createClient } from '@/lib/supabase/server'
-import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
-import { WORKSHOP_CODES } from '@/lib/reports/report-types'
+import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/modules/approval/workflow'
+import { WORKSHOP_CODES } from '@/modules/reports/report-types'
 
 export const dynamic = 'force-dynamic'
 

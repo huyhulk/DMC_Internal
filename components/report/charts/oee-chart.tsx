@@ -1,8 +1,8 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import type { OEEWorkshop, WorkshopCode } from '@/lib/reports/report-types'
-import { WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/lib/reports/report-types'
+import type { OEEWorkshop, WorkshopCode } from '@/modules/reports/report-types'
+import { WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/modules/reports/report-types'
 
 const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false })
 

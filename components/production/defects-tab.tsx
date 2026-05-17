@@ -13,8 +13,8 @@ import {
   SHIFT_KEYS,
   SHIFT_LABELS,
   type DefectsBulkInput,
-} from '@/lib/validations/defects'
-import { submitDefectsAction, getDefectsListAction } from '@/lib/actions/defects'
+} from '@/modules/defects/validation'
+import { submitDefectsAction, getDefectsListAction } from '@/modules/defects/actions'
 import type { SessionUser } from '@/types'
 import type { Database } from '@/types/database'
 

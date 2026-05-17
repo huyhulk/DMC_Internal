@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { errResponse, okResponse } from '@/app/api/reports/_shared'
-import { getSessionUser } from '@/lib/actions/auth'
-import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
-import type { Department, PeriodType } from '@/lib/kpi/types'
+import { getSessionUser } from '@/modules/auth/actions'
+import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/modules/approval/workflow'
+import type { Department, PeriodType } from '@/modules/kpi/types'
 
 const VALID_DEPARTMENTS: Department[] = ['PRODUCTION', 'MAINTENANCE', 'COORDINATION']
 const VALID_PERIODS: PeriodType[] = ['weekly', 'monthly', 'quarterly', 'yearly']

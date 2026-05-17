@@ -1,8 +1,8 @@
 'use client'
 
 import { Info } from 'lucide-react'
-import { KPI_WORKSHOP_LABELS, KPI_WORKSHOP_OPTIONS } from '@/lib/kpi/constants'
-import type { KpiWorkshop } from '@/lib/kpi/types'
+import { KPI_WORKSHOP_LABELS, KPI_WORKSHOP_OPTIONS } from '@/modules/kpi/constants'
+import type { KpiWorkshop } from '@/modules/kpi/types'
 
 interface Props {
   value: KpiWorkshop | 'ALL'

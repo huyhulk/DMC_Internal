@@ -3,9 +3,9 @@
 import { useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { KPI_WORKSHOP_COLORS, KPI_WORKSHOP_LABELS } from '@/lib/kpi/constants'
-import { formatKpiValue, formatTarget } from '@/lib/kpi/format'
-import type { KpiMatrixRow } from '@/lib/kpi/types'
+import { KPI_WORKSHOP_COLORS, KPI_WORKSHOP_LABELS } from '@/modules/kpi/constants'
+import { formatKpiValue, formatTarget } from '@/modules/kpi/format'
+import type { KpiMatrixRow } from '@/modules/kpi/types'
 import { KpiTargetBadge } from '../KpiTargetBadge'
 
 interface Props { rows: KpiMatrixRow[] }

@@ -6,7 +6,7 @@ import { DrawingsTab } from './drawings-tab'
 import { SurveysTab } from './surveys-tab'
 import { MachinesTab } from './machines-tab'
 import type { SessionUser } from '@/types'
-import { resolveMaintenanceSub } from '@/lib/navigation/dashboard'
+import { resolveMaintenanceSub } from '@/modules/navigation/dashboard'
 
 interface Props {
   user: SessionUser

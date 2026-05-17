@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { format, isValid, parse } from 'date-fns'
 import { toast } from 'sonner'
 import { AlertCircle, Calculator, Clock, TrendingUp, Users } from 'lucide-react'
-import { getHREfficiencyData, type HREfficiencyRow } from '@/lib/actions/hr'
+import { getHREfficiencyData, type HREfficiencyRow } from '@/modules/hr/actions'
 import { getTodayLocal } from '@/lib/utils'
 import { HR_DAILY_GROUP_LABELS } from '@/types'
 

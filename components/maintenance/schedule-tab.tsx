@@ -6,18 +6,18 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Plus, RefreshCw, CheckCircle, Trash2, Repeat, XCircle } from 'lucide-react'
 import { cn, formatDate, getTodayLocal } from '@/lib/utils'
-import { getMaintenanceWorkshopOptions, generateMaintenanceScheduleDates } from '@/lib/maintenance/workflow'
-import { canApproveRequests, getMaintenanceScheduleFilter, type ApprovalStatus } from '@/lib/approval/workflow'
+import { getMaintenanceWorkshopOptions, generateMaintenanceScheduleDates } from '@/modules/maintenance/workflow'
+import { canApproveRequests, getMaintenanceScheduleFilter, type ApprovalStatus } from '@/modules/approval/workflow'
 import {
   scheduleBulkCreateSchema, scheduleCompleteSchema,
   MAINTENANCE_TYPES, MAINTENANCE_TYPE_LABELS, KPI_WORKSHOPS,
   type ScheduleBulkCreateInput, type ScheduleCompleteInput,
-} from '@/lib/validations/maintenance'
+} from '@/modules/maintenance/validation'
 import {
   createScheduleAction, bulkCreateScheduleAction, completeScheduleAction,
   deleteScheduleAction, listScheduleAction, reviewScheduleAction, listStaffByWorkshopAction,
   type ScheduleRow,
-} from '@/lib/actions/maintenance'
+} from '@/modules/maintenance/actions'
 import { Dialog } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'

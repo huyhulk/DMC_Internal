@@ -6,8 +6,8 @@ import {
   LineChart, Line, ReferenceLine,
 } from 'recharts'
 import { OEEGaugeChart, OEERadarChart } from '../charts/oee-chart'
-import type { OEEWorkshop, WorkshopCode } from '@/lib/reports/report-types'
-import { WORKSHOP_CODES, WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/lib/reports/report-types'
+import type { OEEWorkshop, WorkshopCode } from '@/modules/reports/report-types'
+import { WORKSHOP_CODES, WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/modules/reports/report-types'
 
 type OEETrendDetail = Array<{ period: string; A: number; P: number; Q: number; OEE: number; poutput: number }>
 type OEETrendComparison = Array<{ period: string; [key: string]: number | string }>

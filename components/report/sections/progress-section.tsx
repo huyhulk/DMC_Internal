@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
-import type { OrderStatus, OrderStatusCode, ProgressSummary, ReportMode, WorkshopCode } from '@/lib/reports/report-types'
-import { WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/lib/reports/report-types'
+import type { OrderStatus, OrderStatusCode, ProgressSummary, ReportMode, WorkshopCode } from '@/modules/reports/report-types'
+import { WORKSHOP_COLORS, WORKSHOP_LABEL } from '@/modules/reports/report-types'
 import { cn, apiDateToDisplay, formatDateTimeDisplay } from '@/lib/utils'
 
 const STATUS_COLOR: Record<OrderStatus['status'], string> = {
