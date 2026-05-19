@@ -1,5 +1,5 @@
 import { normalizeProductionStatus } from '@/lib/production/status'
-import { normalizeWorkshop, workshopCode } from '@/lib/utils'
+import { normalizeWorkshop, parseDecimalInput, workshopCode } from '@/lib/utils'
 import type { OpenProductionOrder, Order } from '@/types'
 
 export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
@@ -122,6 +122,15 @@ export function calculateProductionCompletion(quantity: number, produced: number
   }
 }
 
+export function calculateRemainingProductionOutput(
+  orderQuantity: string | number | null | undefined,
+  previousLines: Array<Pick<ProductionInputRow, 'poutput'>>,
+): number {
+  const quantity = parseDecimalInput(orderQuantity)
+  const usedQuantity = previousLines.reduce((sum, line) => sum + parseDecimalInput(line.poutput), 0)
+  return Math.max(0, Math.round((quantity - usedQuantity) * 1000) / 1000)
+}
+
 function buildProductionTimestamp(pdate: string | null, endtime: string | null): string | null {
   const endDate = buildProductionEndDate(pdate, endtime)
   if (!endDate) return null
@@ -216,7 +225,7 @@ export function isOpenProductionOrder(
   closed: boolean,
 ): boolean {
   if (closed) return false
-  const quantity = Number(order.quantity) || 0
+  const quantity = parseDecimalInput(order.quantity)
   return calculateProductionCompletion(quantity, produced).completionPct < 100
 }
 

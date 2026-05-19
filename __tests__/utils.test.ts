@@ -1,5 +1,25 @@
-import { calcRealNorm, getLocalCompactDate, getLocalDateAfterDays, getTodayLocal } from '@/lib/utils'
+import { calcRealNorm, getLocalCompactDate, getLocalDateAfterDays, getTodayLocal, parseDecimalInput } from '@/lib/utils'
 
+describe('parseDecimalInput', () => {
+  it('parses dot and comma decimal separators', () => {
+    expect(parseDecimalInput('43.88')).toBe(43.88)
+    expect(parseDecimalInput('43,88')).toBe(43.88)
+  })
+
+  it('parses grouped decimal values', () => {
+    expect(parseDecimalInput('1.234,56')).toBe(1234.56)
+    expect(parseDecimalInput('1,234.56')).toBe(1234.56)
+    expect(parseDecimalInput('1 234,56')).toBe(1234.56)
+  })
+
+  it('returns zero for empty or invalid input', () => {
+    expect(parseDecimalInput('')).toBe(0)
+    expect(parseDecimalInput(null)).toBe(0)
+    expect(parseDecimalInput(undefined)).toBe(0)
+    expect(parseDecimalInput('abc')).toBe(0)
+    expect(parseDecimalInput(Number.NaN)).toBe(0)
+  })
+})
 describe('date helpers', () => {
   it('formats today using the local calendar date', () => {
     jest.useFakeTimers().setSystemTime(new Date(2026, 4, 3, 9, 15, 0))

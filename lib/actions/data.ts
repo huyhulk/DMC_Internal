@@ -28,7 +28,7 @@ import {
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
-import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
+import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, parseDecimalInput, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
@@ -651,6 +651,11 @@ export async function recordProductionAction(rows: Array<{
       return {
         ...row,
         totalem: getProductionEntryBaseWorkshop(entryWorkshop),
+        poutput: parseDecimalInput(row.poutput),
+        eoutput: parseDecimalInput(row.eoutput),
+        routput: parseDecimalInput(row.routput),
+        workforce: parseDecimalInput(row.workforce),
+        realnorm: parseDecimalInput(row.realnorm),
       }
     })
 

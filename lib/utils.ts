@@ -6,6 +6,30 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function parseDecimalInput(value: string | number | null | undefined): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (value == null) return 0
+
+  const normalized = value.trim().replace(/\s+/g, '')
+  if (!normalized) return 0
+
+  const lastDot = normalized.lastIndexOf('.')
+  const lastComma = normalized.lastIndexOf(',')
+  const decimalSeparator = lastDot > -1 && lastComma > -1
+    ? lastDot > lastComma ? '.' : ','
+    : lastDot > -1 ? '.' : lastComma > -1 ? ',' : ''
+
+  let numeric = normalized
+  if (decimalSeparator) {
+    numeric = normalized
+      .replace(decimalSeparator === '.' ? /,/g : /\./g, '')
+      .replace(decimalSeparator, '.')
+  }
+
+  const parsed = Number(numeric)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 /**
  * Returns today's date as "YYYY-MM-DD" using the browser/server's LOCAL clock.
  * Use this instead of new Date().toISOString().split('T')[0] which always

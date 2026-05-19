@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { getInitData, getOpenProductionOrdersAction, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
-import { getOtherProductionEntryBaseWorkshop, getProductionEntryBaseWorkshop, getProductionRowsValidationError } from '@/lib/production/workflow'
+import { calculateRemainingProductionOutput, getOtherProductionEntryBaseWorkshop, getProductionEntryBaseWorkshop, getProductionRowsValidationError } from '@/lib/production/workflow'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { InitData, Order, NormItem, ProductionSaveStatus, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
@@ -256,7 +256,7 @@ export function useProductionData(user: SessionUser) {
         const lines = [...s.lines]
         lines[idx] = { ...lines[idx], [field]: value }
 
-        const orderQty = parseFloat(s.orderInfo?.quantity ?? '0') || 0
+        const orderQuantity = s.orderInfo?.quantity ?? 0
 
         if (field === 'product' && value && !String(value).startsWith('--')) {
           const ws = getProductionEntryBaseWorkshop(s.selectedWorkshop)
@@ -268,9 +268,8 @@ export function useProductionData(user: SessionUser) {
           }
 
           // Auto-fill poutput: remaining = orderQty - sum of previous lines
-          if (orderQty > 0) {
-            const usedQty = lines.slice(0, idx).reduce((sum, l) => sum + (Number(l.poutput) || 0), 0)
-            lines[idx].poutput = Math.max(0, orderQty - usedQty)
+          if (calculateRemainingProductionOutput(orderQuantity, []) > 0) {
+            lines[idx].poutput = calculateRemainingProductionOutput(orderQuantity, lines.slice(0, idx))
           }
 
           if (norm) {
@@ -309,11 +308,10 @@ export function useProductionData(user: SessionUser) {
           }
 
           // When poutput changes, cascade default poutput to subsequent visible lines that have a product
-          if (field === 'poutput' && orderQty > 0) {
+          if (field === 'poutput' && calculateRemainingProductionOutput(orderQuantity, []) > 0) {
             for (let j = idx + 1; j < visibleRows; j++) {
               if (lines[j].product && !lines[j].product.startsWith('--')) {
-                const usedQty = lines.slice(0, j).reduce((sum, l) => sum + (Number(l.poutput) || 0), 0)
-                lines[j].poutput = Math.max(0, orderQty - usedQty)
+                lines[j].poutput = calculateRemainingProductionOutput(orderQuantity, lines.slice(0, j))
                 const jNorm = s.initData?.norms.find(
                   (n) => n.products === lines[j].product && workshopCode(n.workshop) === workshopCode(baseWorkshop)
                 )

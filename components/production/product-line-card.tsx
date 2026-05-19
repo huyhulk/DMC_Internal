@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
-import { cn, getTodayLocal } from '@/lib/utils'
+import { cn, getTodayLocal, parseDecimalInput } from '@/lib/utils'
 import type { NormItem, ProductLine } from '@/types'
 
 interface Props {
@@ -120,20 +120,20 @@ export function ProductLineCard({ index, line, products, normHint, disabled, onC
         </FieldGroup>
 
         <FieldGroup label="Sản lượng">
-          <input type="number" value={line.poutput || ''} min={0} placeholder="0"
-            onChange={(e) => onChange('poutput', Number(e.target.value))}
+          <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={line.poutput || ''} placeholder="0"
+            onChange={(e) => onChange('poutput', parseDecimalInput(e.target.value))}
             className={cn(inputCls, 'text-[#2f9e44] font-semibold')} />
         </FieldGroup>
 
         <FieldGroup label="Lỗi">
-          <input type="number" value={line.eoutput || ''} min={0} placeholder="0"
-            onChange={(e) => onChange('eoutput', Number(e.target.value))}
+          <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={line.eoutput || ''} placeholder="0"
+            onChange={(e) => onChange('eoutput', parseDecimalInput(e.target.value))}
             className={cn(inputCls, 'text-[#ff3b30] font-semibold')} />
         </FieldGroup>
 
         <FieldGroup label="Tái chế">
-          <input type="number" value={line.routput || ''} min={0} placeholder="0"
-            onChange={(e) => onChange('routput', Number(e.target.value))}
+          <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={line.routput || ''} placeholder="0"
+            onChange={(e) => onChange('routput', parseDecimalInput(e.target.value))}
             className={cn(inputCls, 'text-[#b37700] font-semibold')} />
         </FieldGroup>
       </div>

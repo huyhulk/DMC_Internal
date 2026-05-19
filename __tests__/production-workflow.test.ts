@@ -10,6 +10,7 @@ import {
   buildProductionDeadlineCutoff,
   calculateProductionCompletion,
   calculateProductionCompletionTime,
+  calculateRemainingProductionOutput,
   filterProductionOrdersByPcode,
   getOpenOrdersSearchState,
   getOpenProductionOrdersQueryWindow,
@@ -554,11 +555,18 @@ describe('production workflow helpers', () => {
     ])).toBeNull()
   })
 
+  it('preserves decimal production quantities when calculating remaining output', () => {
+    expect(calculateRemainingProductionOutput('43.88', [])).toBe(43.88)
+    expect(calculateRemainingProductionOutput('43,88', [])).toBe(43.88)
+    expect(calculateRemainingProductionOutput('43.88', [{ poutput: 10.5 }])).toBe(33.38)
+  })
+
   it('detects open production orders for the default list', () => {
     expect(isOpenProductionOrder({ quantity: '100', status: 'Dang san xuat' }, 40, false)).toBe(true)
     expect(isOpenProductionOrder({ quantity: '100', status: 'Chua san xuat' }, 0, false)).toBe(true)
     expect(isOpenProductionOrder({ quantity: '100', status: '' }, 99, false)).toBe(true)
     expect(isOpenProductionOrder({ quantity: '100', status: 'Dang san xuat' }, 100, false)).toBe(false)
+    expect(isOpenProductionOrder({ quantity: '43,88', status: 'Dang san xuat' }, 43.88, false)).toBe(false)
     expect(isOpenProductionOrder({ quantity: '100', status: 'Dang san xuat' }, 40, true)).toBe(false)
     expect(isOpenProductionOrder({ quantity: '100', status: 'Da giao' }, 40, false)).toBe(true)
   })
