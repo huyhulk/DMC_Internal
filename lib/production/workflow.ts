@@ -1,5 +1,5 @@
 import { normalizeProductionStatus } from '@/lib/production/status'
-import type { OpenProductionOrder, Order } from '@/types'
+import type { NormItem, OpenProductionOrder, Order } from '@/types'
 
 export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
 const PRODUCTION_TIMEZONE_OFFSET = '+07:00'
@@ -28,6 +28,21 @@ export interface ProductionCompletionTimeRow {
   pdate: string | null
   endtime: string | null
   poutput: number | null
+}
+
+export interface DeadlineProductionPlanRow {
+  order: OpenProductionOrder
+  norm: NormItem | null
+  estimatedHours: number | null
+  missingNorm: boolean
+}
+
+export interface DeadlineProductionPlanSummary {
+  totalOrders: number
+  notStartedOrders: number
+  inProgressOrders: number
+  missingNormOrders: number
+  totalEstimatedHours: number
 }
 
 const PRODUCTION_APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
@@ -63,6 +78,110 @@ export function calculateProductionCompletion(quantity: number, produced: number
     completionPct: safeQuantity > 0
       ? Math.min(100, Math.round((producedQuantity / safeQuantity) * 1000) / 10)
       : producedQuantity > 0 ? 100 : 0,
+  }
+}
+
+function normalizeDeadlinePlanText(value: string): string {
+  return normalizeProductionStatus(value).replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function getDeadlinePlanBaseWorkshop(workshop: string): string {
+  const normalized = workshop.trim().toUpperCase()
+  const match = /DMC\s*([1345])/.exec(normalized)
+  return match ? `DMC${match[1]}` : normalized.split(/\s*[-—]\s*/)[0]
+}
+
+function isDeadlinePlanWorkshopMatch(orderWorkshop: string, normWorkshop: string): boolean {
+  const orderCode = getDeadlinePlanBaseWorkshop(orderWorkshop)
+  const normCode = getDeadlinePlanBaseWorkshop(normWorkshop)
+  if (!orderCode || !normCode) return false
+  return orderCode === normCode
+}
+
+function getDeadlinePlanNormMatchScore(order: OpenProductionOrder, norm: NormItem): number {
+  if (!isDeadlinePlanWorkshopMatch(order.workshop, norm.workshop)) return 0
+
+  const description = normalizeDeadlinePlanText(order.description)
+  const product = normalizeDeadlinePlanText(norm.products)
+  if (!description || !product) return 0
+  if (description === product) return 4
+  if (description.includes(product)) return 3
+  if (product.includes(description)) return 2
+
+  const descriptionWords = new Set(description.split(' ').filter((word) => word.length > 1))
+  const sharedWords = product.split(' ').filter((word) => word.length > 1 && descriptionWords.has(word))
+  return sharedWords.length >= 2 ? 1 : 0
+}
+
+function findDeadlineProductionNorm(order: OpenProductionOrder, norms: NormItem[]): NormItem | null {
+  const matches = norms
+    .map((norm) => ({ norm, score: getDeadlinePlanNormMatchScore(order, norm) }))
+    .filter((match) => match.score > 0 && Number.isFinite(match.norm.norm) && match.norm.norm > 0)
+    .sort((a, b) => {
+      const scoreDiff = b.score - a.score
+      if (scoreDiff !== 0) return scoreDiff
+      return b.norm.products.length - a.norm.products.length
+    })
+
+  return matches[0]?.norm ?? null
+}
+
+function sortDeadlineProductionPlanRows(rows: DeadlineProductionPlanRow[]): DeadlineProductionPlanRow[] {
+  return [...rows].sort((a, b) => {
+    const deadlineA = `${a.order.deadlinedate || '9999-99-99'}T${a.order.deadlinetime || '99:99'}`
+    const deadlineB = `${b.order.deadlinedate || '9999-99-99'}T${b.order.deadlinetime || '99:99'}`
+    const deadlineDiff = deadlineA.localeCompare(deadlineB)
+    if (deadlineDiff !== 0) return deadlineDiff
+    return a.order.pcode.localeCompare(b.order.pcode, 'vi', { numeric: true, sensitivity: 'base' })
+  })
+}
+
+export function buildDeadlineProductionPlan(
+  orders: OpenProductionOrder[],
+  norms: NormItem[],
+): { rows: DeadlineProductionPlanRow[]; summary: DeadlineProductionPlanSummary } {
+  const eligibleOrders = orders.filter((order) => {
+    const rank = getProductionOrderStatusRank(order.status)
+    return (rank === 0 || rank === 1) && order.remainingQuantity > 0
+  })
+
+  const rows = sortDeadlineProductionPlanRows(eligibleOrders.map((order) => {
+    const norm = findDeadlineProductionNorm(order, norms)
+    const estimatedHours = norm
+      ? Math.round((order.remainingQuantity / norm.norm) * 100) / 100
+      : null
+
+    return {
+      order,
+      norm,
+      estimatedHours,
+      missingNorm: norm === null,
+    }
+  }))
+
+  const summary = rows.reduce<DeadlineProductionPlanSummary>((acc, row) => {
+    const rank = getProductionOrderStatusRank(row.order.status)
+    return {
+      totalOrders: acc.totalOrders + 1,
+      notStartedOrders: acc.notStartedOrders + (rank === 0 ? 1 : 0),
+      inProgressOrders: acc.inProgressOrders + (rank === 1 ? 1 : 0),
+      missingNormOrders: acc.missingNormOrders + (row.missingNorm ? 1 : 0),
+      totalEstimatedHours: acc.totalEstimatedHours + (row.estimatedHours ?? 0),
+    }
+  }, {
+    totalOrders: 0,
+    notStartedOrders: 0,
+    inProgressOrders: 0,
+    missingNormOrders: 0,
+    totalEstimatedHours: 0,
+  })
+
+  return {
+    rows,
+    summary: {
+      ...summary,
+      totalEstimatedHours: Math.round(summary.totalEstimatedHours * 100) / 100,
+    },
   }
 }
 
