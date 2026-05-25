@@ -22,11 +22,13 @@ import { OrderInfoCard } from './order-info-card'
 import { ProductLineCard } from './product-line-card'
 import { UnlockDialog } from './unlock-dialog'
 import {
+  buildDeadlineProductionPlan,
   filterProductionOrdersByPcode,
   getOpenOrdersSearchState,
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
+import type { DeadlineProductionPlanRow } from '@/lib/production/workflow'
 import {
   normalizeProductionStatus,
 } from '@/lib/production/status'
@@ -63,7 +65,7 @@ const inputCls =
   'shadow-[0_1px_2px_rgba(0,0,0,0.05)]'
 
 export function ProductionTab({ user, canEdit }: Props) {
-  const [activeSubTab, setActiveSubTab] = useState<'open-orders' | 'daily-entry'>('open-orders')
+  const [activeSubTab, setActiveSubTab] = useState<'open-orders' | 'deadline-orders' | 'daily-entry'>('open-orders')
   const [showHistory, setShowHistory] = useState(false)
   const [refreshSignal, setRefreshSignal] = useState(0)
 
@@ -80,9 +82,12 @@ export function ProductionTab({ user, canEdit }: Props) {
           </div>
         )}
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 pb-3">
-          <div className="inline-flex p-1 rounded-2xl bg-[#f2f2f7] border border-[#d2d2d7]/60 w-full sm:w-auto">
+          <div className="inline-flex p-1 rounded-2xl bg-[#f2f2f7] border border-[#d2d2d7]/60 w-full sm:w-auto overflow-x-auto">
             <SubTabButton active={activeSubTab === 'open-orders'} onClick={() => setActiveSubTab('open-orders')}>
               Danh sách lệnh sản xuất
+            </SubTabButton>
+            <SubTabButton active={activeSubTab === 'deadline-orders'} onClick={() => setActiveSubTab('deadline-orders')}>
+              Danh sách LSX theo Hạn giao hàng
             </SubTabButton>
             <SubTabButton active={activeSubTab === 'daily-entry'} onClick={() => setActiveSubTab('daily-entry')}>
               Theo dõi lệnh theo ngày tạo
@@ -92,7 +97,7 @@ export function ProductionTab({ user, canEdit }: Props) {
             <button
               type="button"
               onClick={() => setRefreshSignal((value) => value + 1)}
-              disabled={activeSubTab !== 'open-orders'}
+              disabled={activeSubTab === 'daily-entry'}
               className="h-9 px-3 rounded-xl border border-[#d2d2d7]/70 text-[12px] font-medium text-[#6e6e73] bg-white hover:bg-[#f2f2f7] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-all duration-150"
             >
               <RefreshCw size={12} />
@@ -112,7 +117,9 @@ export function ProductionTab({ user, canEdit }: Props) {
 
       {activeSubTab === 'open-orders'
         ? <OpenOrdersTab user={user} canEdit={canEdit} refreshSignal={refreshSignal} />
-        : <DailyEntryTab user={user} canEdit={canEdit} />}
+        : activeSubTab === 'deadline-orders'
+          ? <DeadlineOrdersTab user={user} canEdit={canEdit} refreshSignal={refreshSignal} />
+          : <DailyEntryTab user={user} canEdit={canEdit} />}
     </div>
   )
 }
@@ -363,6 +370,201 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
           onConfirm={handleSubmit}
         />
       )}
+    </div>
+  )
+}
+
+function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
+  const { state, loadOpenOrders } = useProductionData(user)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [workshopFilter, setWorkshopFilter] = useState('ALL')
+  const [missingNormOnly, setMissingNormOnly] = useState(false)
+
+  useEffect(() => { loadOpenOrders() }, [loadOpenOrders, refreshSignal])
+
+  const allOrders = useMemo(() => state.initData?.orders as OpenProductionOrder[] ?? [], [state.initData?.orders])
+  const norms = useMemo(() => state.initData?.norms ?? [], [state.initData?.norms])
+  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => order.workshop).filter(Boolean))].sort(), [allOrders])
+  const plan = useMemo(() => buildDeadlineProductionPlan(allOrders, norms), [allOrders, norms])
+  const filteredRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return plan.rows.filter((row) => {
+      const matchesWorkshop = workshopFilter === 'ALL' || row.order.workshop === workshopFilter
+      const matchesMissingNorm = !missingNormOnly || row.missingNorm
+      const matchesQuery = !query || row.order.pcode.toLowerCase().includes(query)
+      return matchesWorkshop && matchesMissingNorm && matchesQuery
+    })
+  }, [missingNormOnly, plan.rows, searchQuery, workshopFilter])
+
+  useEffect(() => {
+    if (workshopOptions.length === 1 && workshopFilter !== workshopOptions[0]) {
+      setWorkshopFilter(workshopOptions[0])
+    } else if (workshopOptions.length !== 1 && workshopFilter !== 'ALL' && !workshopOptions.includes(workshopFilter)) {
+      setWorkshopFilter('ALL')
+    }
+  }, [workshopFilter, workshopOptions])
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
+      <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3 bg-white/85 backdrop-blur-sm">
+        <SectionLabel>
+          Danh sách LSX theo Hạn giao hàng
+        </SectionLabel>
+
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+          <DeadlineKpiCard label="Tổng LSX" value={plan.summary.totalOrders.toLocaleString('vi-VN')} tone="text-[#1d1d1f]" />
+          <DeadlineKpiCard label="Tổng giờ còn lại" value={plan.summary.totalEstimatedHours.toLocaleString('vi-VN')} tone="text-dmc-primary" />
+          <DeadlineKpiCard label="Chưa SX" value={plan.summary.notStartedOrders.toLocaleString('vi-VN')} tone="text-[#007aff]" />
+          <DeadlineKpiCard label="Đang SX" value={plan.summary.inProgressOrders.toLocaleString('vi-VN')} tone="text-[#b37700]" />
+          <DeadlineKpiCard label="Thiếu định mức" value={plan.summary.missingNormOrders.toLocaleString('vi-VN')} tone="text-red-600" />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(150px,190px)_minmax(220px,1fr)_auto] gap-3 sm:items-end">
+          <FieldGroup label="Xưởng">
+            <select
+              value={workshopFilter}
+              onChange={(e) => setWorkshopFilter(e.target.value)}
+              className={inputCls}
+              disabled={workshopOptions.length <= 1}
+            >
+              {workshopOptions.length > 1 && <option value="ALL">Tất cả xưởng</option>}
+              {workshopOptions.map((ws) => (
+                <option key={ws} value={ws}>{ws}</option>
+              ))}
+            </select>
+          </FieldGroup>
+
+          <FieldGroup label="Tìm mã LSX">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6e6e73]" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Nhập mã LSX..."
+                className={cn(inputCls, 'pl-9')}
+              />
+            </div>
+          </FieldGroup>
+
+          <button
+            type="button"
+            onClick={() => setMissingNormOnly((current) => !current)}
+            className={cn(
+              'h-10 px-3 rounded-xl border text-[12px] font-semibold active:scale-95 transition-all duration-150',
+              missingNormOnly
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-[#d2d2d7]/70 bg-white text-[#6e6e73] hover:bg-[#f2f2f7]'
+            )}
+          >
+            Chỉ thiếu định mức
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3">
+        <DeadlineOrdersTable rows={filteredRows} loading={state.loading} />
+      </div>
+    </div>
+  )
+}
+
+function DeadlineKpiCard({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <div className="rounded-2xl border border-[#d2d2d7]/60 bg-white px-3 py-2 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <p className={cn('text-[20px] font-bold leading-none', tone)}>{value}</p>
+      <p className="mt-1 text-[11px] text-[#6e6e73] leading-none">{label}</p>
+    </div>
+  )
+}
+
+function DeadlineOrdersTable({ rows, loading }: { rows: DeadlineProductionPlanRow[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <div className="w-7 h-7 border-2 border-dmc-primary/30 border-t-dmc-primary rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (rows.length === 0) return <EmptyState />
+
+  return (
+    <div className="space-y-2">
+      <div className="hidden lg:grid grid-cols-[130px_minmax(150px,0.9fr)_110px_minmax(150px,0.9fr)_minmax(220px,1.4fr)_100px_120px_120px] gap-3 px-3 text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73]">
+        <span>Deadline</span>
+        <span>Mã LSX</span>
+        <span>Xưởng</span>
+        <span>Khách hàng</span>
+        <span>Diễn giải</span>
+        <span>Sản lượng còn</span>
+        <span>Định mức</span>
+        <span>Tổng giờ SX</span>
+      </div>
+
+      {rows.map((row) => (
+        <DeadlineOrderRow key={`${row.order.initialdate}-${row.order.pcode}`} row={row} />
+      ))}
+    </div>
+  )
+}
+
+function DeadlineOrderRow({ row }: { row: DeadlineProductionPlanRow }) {
+  return (
+    <div className="rounded-2xl border border-[#d2d2d7]/60 bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+      <div className="grid grid-cols-1 lg:grid-cols-[130px_minmax(150px,0.9fr)_110px_minmax(150px,0.9fr)_minmax(220px,1.4fr)_100px_120px_120px] gap-2 lg:gap-3 lg:items-center">
+        <div>
+          <MobileLabel>Deadline</MobileLabel>
+          <DeadlineBadge order={row.order} />
+        </div>
+
+        <div className="min-w-0">
+          <MobileLabel>Mã LSX</MobileLabel>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-[14px] text-dmc-primary truncate">{row.order.pcode}</span>
+            <StatusBadge status={row.order.status} />
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <MobileLabel>Xưởng</MobileLabel>
+          <p className="text-[13px] font-semibold text-[#1d1d1f] truncate">{row.order.workshop || '—'}</p>
+        </div>
+
+        <div className="min-w-0">
+          <MobileLabel>Khách hàng</MobileLabel>
+          <p className="text-[13px] font-medium text-[#1d1d1f] truncate">{row.order.customer || '—'}</p>
+        </div>
+
+        <div className="min-w-0">
+          <MobileLabel>Diễn giải</MobileLabel>
+          <p className="text-[12px] text-[#6e6e73] lg:truncate leading-relaxed">{row.order.description || '—'}</p>
+        </div>
+
+        <div>
+          <MobileLabel>Sản lượng còn</MobileLabel>
+          <p className="text-[13px] font-semibold text-[#1d1d1f]">{row.order.remainingQuantity.toLocaleString('vi-VN')}</p>
+        </div>
+
+        <div className="min-w-0">
+          <MobileLabel>Định mức</MobileLabel>
+          {row.norm ? (
+            <p className="text-[12px] font-semibold text-[#1d1d1f] truncate" title={row.norm.products}>
+              {row.norm.norm.toLocaleString('vi-VN')}
+            </p>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">
+              <AlertTriangle size={11} /> Thiếu định mức
+            </span>
+          )}
+        </div>
+
+        <div>
+          <MobileLabel>Tổng giờ SX</MobileLabel>
+          <p className={cn('text-[14px] font-bold', row.estimatedHours == null ? 'text-[#6e6e73]' : 'text-dmc-primary')}>
+            {row.estimatedHours == null ? '—' : row.estimatedHours.toLocaleString('vi-VN')}
+          </p>
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import type { Order } from '@/types'
+import type { NormItem, OpenProductionOrder, Order } from '@/types'
 import { compareLocalDateTimeStrings, normalizeLocalDateTimeString } from '@/lib/utils'
 import {
   getActiveProductionPcodes,
@@ -8,6 +8,7 @@ import {
 } from '@/lib/reports/report-queries'
 import {
   buildProductionDeadlineCutoff,
+  buildDeadlineProductionPlan,
   calculateProductionCompletion,
   calculateProductionCompletionTime,
   calculateRemainingProductionOutput,
@@ -56,6 +57,32 @@ const baseOrder: Order = {
 
 function order(pcode: string, status: string): Order {
   return { ...baseOrder, pcode, status }
+}
+
+function openOrder(overrides: Partial<OpenProductionOrder>): OpenProductionOrder {
+  return {
+    ...baseOrder,
+    pcode: 'LSX-001',
+    status: 'Chưa SX',
+    description: 'Tôn sóng vuông 0.45mm',
+    deadlinedate: '2026-05-10',
+    deadlinetime: '08:00',
+    producedQuantity: 0,
+    remainingQuantity: 100,
+    completionPct: 0,
+    ...overrides,
+  }
+}
+
+function norm(overrides: Partial<NormItem>): NormItem {
+  return {
+    products: 'Tôn sóng vuông 0.45mm',
+    norm: 25,
+    nwforce: 2,
+    workshop: 'DMC1',
+    pspeed: 0,
+    ...overrides,
+  }
 }
 
 describe('production workflow helpers', () => {
@@ -504,6 +531,94 @@ describe('production workflow helpers', () => {
     expect(buildProductionDeadlineCutoff(null)).toBeNull()
     expect(buildProductionDeadlineCutoff('invalid')).toBeNull()
     expect(buildProductionDeadlineCutoff('2026-02-31T14:00:00')).toBeNull()
+  })
+
+  it('builds deadline production plan from not-started and in-progress orders only', () => {
+    const orders: OpenProductionOrder[] = [
+      openOrder({ pcode: 'LSX-003', status: 'Đang SX', remainingQuantity: 50, deadlinedate: '2026-05-12' }),
+      openOrder({ pcode: 'LSX-001', status: 'Chưa SX', remainingQuantity: 100, deadlinedate: '2026-05-10' }),
+      openOrder({ pcode: 'LSX-INSPECTION', status: 'Đang kiểm', remainingQuantity: 100 }),
+      openOrder({ pcode: 'LSX-COMPLETED', status: 'Đã SX', remainingQuantity: 100 }),
+      openOrder({ pcode: 'LSX-DELIVERED', status: 'Đã giao', remainingQuantity: 100 }),
+      openOrder({ pcode: 'LSX-ZERO', status: 'Đang SX', remainingQuantity: 0 }),
+    ]
+
+    const plan = buildDeadlineProductionPlan(orders, [norm({})])
+
+    expect(plan.rows.map((row) => row.order.pcode)).toEqual(['LSX-001', 'LSX-003'])
+    expect(plan.summary).toEqual({
+      totalOrders: 2,
+      notStartedOrders: 1,
+      inProgressOrders: 1,
+      missingNormOrders: 0,
+      totalEstimatedHours: 6,
+    })
+  })
+
+  it('matches deadline production norms by description and base workshop', () => {
+    const orders: OpenProductionOrder[] = [
+      openOrder({
+        pcode: 'LSX-DMC1-PK',
+        workshop: 'DMC1-PK',
+        description: 'Tôn sóng vuông 0.45mm màu xanh',
+        remainingQuantity: 43.88,
+      }),
+    ]
+    const norms: NormItem[] = [
+      norm({ products: 'Tôn sóng vuông 0.45mm', norm: 10, workshop: 'DMC3' }),
+      norm({ products: 'Tôn sóng vuông 0.45mm', norm: 12.5, workshop: 'DMC1' }),
+    ]
+
+    const plan = buildDeadlineProductionPlan(orders, norms)
+
+    expect(plan.rows).toHaveLength(1)
+    expect(plan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ workshop: 'DMC1', norm: 12.5 }),
+      estimatedHours: 3.51,
+      missingNorm: false,
+    })
+    expect(plan.summary.totalEstimatedHours).toBe(3.51)
+  })
+
+  it('keeps deadline production rows visible when norm is missing', () => {
+    const orders: OpenProductionOrder[] = [
+      openOrder({
+        pcode: 'LSX-MISSING-NORM',
+        description: 'Sản phẩm chưa có định mức',
+        remainingQuantity: 80,
+      }),
+    ]
+
+    const plan = buildDeadlineProductionPlan(orders, [norm({ products: 'Tôn sóng vuông 0.45mm' })])
+
+    expect(plan.rows).toEqual([
+      expect.objectContaining({
+        order: expect.objectContaining({ pcode: 'LSX-MISSING-NORM' }),
+        norm: null,
+        estimatedHours: null,
+        missingNorm: true,
+      }),
+    ])
+    expect(plan.summary).toEqual({
+      totalOrders: 1,
+      notStartedOrders: 1,
+      inProgressOrders: 0,
+      missingNormOrders: 1,
+      totalEstimatedHours: 0,
+    })
+  })
+
+  it('sorts deadline production plan rows by deadline and pcode with missing deadlines last', () => {
+    const orders: OpenProductionOrder[] = [
+      openOrder({ pcode: 'LSX-010', deadlinedate: '', deadlinetime: '', remainingQuantity: 10 }),
+      openOrder({ pcode: 'LSX-002', deadlinedate: '2026-05-09', deadlinetime: '13:00', remainingQuantity: 10 }),
+      openOrder({ pcode: 'LSX-001', deadlinedate: '2026-05-09', deadlinetime: '13:00', remainingQuantity: 10 }),
+      openOrder({ pcode: 'LSX-003', deadlinedate: '2026-05-08', deadlinetime: '16:00', remainingQuantity: 10 }),
+    ]
+
+    const plan = buildDeadlineProductionPlan(orders, [norm({ norm: 10 })])
+
+    expect(plan.rows.map((row) => row.order.pcode)).toEqual(['LSX-003', 'LSX-001', 'LSX-002', 'LSX-010'])
   })
 
   it('calculates cumulative production completion', () => {

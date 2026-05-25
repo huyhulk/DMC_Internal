@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "test:staging": "node --env-file=.env.staging.local ./node_modules/jest/bin/jest.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
