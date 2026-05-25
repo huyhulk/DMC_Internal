@@ -580,6 +580,37 @@ describe('production workflow helpers', () => {
     expect(plan.summary.totalEstimatedHours).toBe(3.51)
   })
 
+  it.each([
+    ['PU 11s', 'Tôn pu'],
+    ['PN vách trong', 'Panel xốp vách trong-1000'],
+    ['PN vách trong 1150', 'Panel xốp vách trong-1150'],
+    ['Panel vách ngoài', 'Panel xốp vách ngoài'],
+    ['PKK - pk kẽm', 'Phụ kiện inox - kẽm'],
+    ['PK tôn', 'Phụ kiện tôn trung bình'],
+    ['TCS 11s', 'Tôn cán 5-13 sóng'],
+    ['Tôn sàn deck', 'Tôn sàn deck'],
+    ['Tôn vòm', 'Tôn nhấn vòm'],
+  ])('matches deadline production norm family for %s', (description, expectedProduct) => {
+    const plan = buildDeadlineProductionPlan([
+      openOrder({
+        pcode: `LSX-${expectedProduct}`,
+        description,
+        remainingQuantity: 20,
+      }),
+    ], [
+      norm({ products: 'Tôn sóng vuông 0.45mm', norm: 1, workshop: 'DMC1' }),
+      norm({ products: expectedProduct, norm: 10, workshop: 'DMC1' }),
+      norm({ products: expectedProduct, norm: 5, workshop: 'DMC3' }),
+    ])
+
+    expect(plan.rows).toHaveLength(1)
+    expect(plan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ products: expectedProduct, workshop: 'DMC1', norm: 10 }),
+      estimatedHours: 2,
+      missingNorm: false,
+    })
+  })
+
   it('keeps deadline production rows visible when norm is missing', () => {
     const orders: OpenProductionOrder[] = [
       openOrder({

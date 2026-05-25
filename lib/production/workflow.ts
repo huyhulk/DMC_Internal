@@ -150,6 +150,10 @@ function normalizeDeadlinePlanText(value: string): string {
   return normalizeProductionStatus(value).replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
+function getDeadlinePlanWords(value: string): Set<string> {
+  return new Set(normalizeDeadlinePlanText(value).split(' ').filter(Boolean))
+}
+
 function getDeadlinePlanBaseWorkshop(workshop: string): string {
   const normalized = workshop.trim().toUpperCase()
   const match = /DMC\s*([1345])/.exec(normalized)
@@ -163,12 +167,65 @@ function isDeadlinePlanWorkshopMatch(orderWorkshop: string, normWorkshop: string
   return orderCode === normCode
 }
 
+function deadlinePlanHasAnyWord(words: Set<string>, candidates: string[]): boolean {
+  return candidates.some((candidate) => words.has(candidate))
+}
+
+function deadlinePlanHasAnyText(value: string, candidates: string[]): boolean {
+  return candidates.some((candidate) => value.includes(candidate))
+}
+
+function getDeadlinePlanNormFamily(description: string): string | null {
+  const value = normalizeDeadlinePlanText(description)
+  const words = getDeadlinePlanWords(description)
+
+  if (!value) return null
+  if (deadlinePlanHasAnyWord(words, ['louver'])) return 'louver'
+  if (deadlinePlanHasAnyText(value, ['kliplock', 'seamlock'])) return 'ton kliplock seamlock'
+  if (deadlinePlanHasAnyWord(words, ['deck'])) return 'ton san deck'
+  if (deadlinePlanHasAnyWord(words, ['vom'])) return 'ton nhan vom'
+  if (deadlinePlanHasAnyText(value, ['roc', 'chiet', 'ton cuon'])) return 'roc chiet ton cuon'
+  if (deadlinePlanHasAnyWord(words, ['pu'])) return 'ton pu'
+  if (deadlinePlanHasAnyText(value, ['panel bong']) || deadlinePlanHasAnyWord(words, ['bong'])) return 'panel bong'
+  if (deadlinePlanHasAnyText(value, ['vach ngoai', 'tuong ngoai'])) return 'panel xop vach ngoai'
+  if (deadlinePlanHasAnyText(value, ['vach trong', 'pnv']) || deadlinePlanHasAnyWord(words, ['pn'])) {
+    return deadlinePlanHasAnyWord(words, ['1150']) ? 'panel xop vach trong 1150' : 'panel xop vach trong 1000'
+  }
+  if (deadlinePlanHasAnyWord(words, ['xg']) || deadlinePlanHasAnyText(value, ['xa go'])) return 'xa go'
+  if (deadlinePlanHasAnyWord(words, ['tcs']) || /\b\d{1,2}s\b/.test(value)) return 'ton can 5 13 song'
+  if (deadlinePlanHasAnyText(value, ['pk inox', 'pk kem', 'pkk']) || deadlinePlanHasAnyWord(words, ['inox', 'kem'])) return 'phu kien inox kem'
+  if (deadlinePlanHasAnyWord(words, ['pk']) || deadlinePlanHasAnyText(value, ['phu kien'])) return 'phu kien ton trung binh'
+
+  return null
+}
+
+function getDeadlinePlanNormFamilyScore(descriptionFamily: string | null, normProduct: string): number {
+  if (!descriptionFamily) return 0
+
+  const product = normalizeDeadlinePlanText(normProduct)
+  if (!product) return 0
+  if (product === descriptionFamily) return 9
+  if (product.includes(descriptionFamily)) return 8
+  if (descriptionFamily.includes(product)) return 7
+
+  if (descriptionFamily === 'xa go' && product.includes('xa go')) return 7
+  if (descriptionFamily === 'ton can 5 13 song' && product.includes('ton can') && product.includes('song')) return 7
+  if (descriptionFamily === 'phu kien ton trung binh' && product.includes('phu kien ton trung binh')) return 9
+  if (descriptionFamily === 'phu kien inox kem' && product.includes('phu kien inox kem')) return 9
+
+  return 0
+}
+
 function getDeadlinePlanNormMatchScore(order: OpenProductionOrder, norm: NormItem): number {
   if (!isDeadlinePlanWorkshopMatch(order.workshop, norm.workshop)) return 0
 
   const description = normalizeDeadlinePlanText(order.description)
   const product = normalizeDeadlinePlanText(norm.products)
   if (!description || !product) return 0
+
+  const familyScore = getDeadlinePlanNormFamilyScore(getDeadlinePlanNormFamily(order.description), norm.products)
+  if (familyScore > 0) return familyScore
+
   if (description === product) return 4
   if (description.includes(product)) return 3
   if (product.includes(description)) return 2
