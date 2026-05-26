@@ -25,6 +25,7 @@ import {
   buildDeadlineProductionPlan,
   filterProductionOrdersByPcode,
   getOpenOrdersSearchState,
+  getProductionEntryWorkshop,
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
@@ -33,7 +34,7 @@ import {
   normalizeProductionStatus,
 } from '@/lib/production/status'
 import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
-import { cn, formatDate, formatDateTimeDisplay, formatLocalDateTimeString, getTodayLocal, workshopCode } from '@/lib/utils'
+import { cn, formatDate, formatDateTimeDisplay, formatLocalDateTimeString, getTodayLocal } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
 
 interface Props {
@@ -385,12 +386,13 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
 
   const allOrders = useMemo(() => state.initData?.orders as OpenProductionOrder[] ?? [], [state.initData?.orders])
   const norms = useMemo(() => state.initData?.norms ?? [], [state.initData?.norms])
-  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => workshopCode(order.workshop)).filter(Boolean))].sort(), [allOrders])
+  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => getProductionEntryWorkshop(order.workshop, order.description)).filter(Boolean))].sort(), [allOrders])
   const plan = useMemo(() => buildDeadlineProductionPlan(allOrders, norms), [allOrders, norms])
   const filteredRows = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     return plan.rows.filter((row) => {
-      const matchesWorkshop = workshopFilter === 'ALL' || workshopCode(row.order.workshop) === workshopFilter
+      const rowWorkshop = getProductionEntryWorkshop(row.order.workshop, row.order.description)
+      const matchesWorkshop = workshopFilter === 'ALL' || rowWorkshop === workshopFilter
       const matchesDeadlineDate = !deadlineDateFilter || row.order.deadlinedate?.slice(0, 10) === deadlineDateFilter
       const matchesMissingNorm = !missingNormOnly || row.missingNorm
       const matchesQuery = !query || row.order.pcode.toLowerCase().includes(query)
