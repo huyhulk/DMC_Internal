@@ -155,7 +155,7 @@ function getDeadlinePlanWords(value: string): Set<string> {
 }
 
 function getDeadlinePlanBaseWorkshop(workshop: string): string {
-  const normalized = workshop.trim().toUpperCase()
+  const normalized = normalizeWorkshop(workshop).trim().toUpperCase()
   const match = /DMC\s*([1345])/.exec(normalized)
   return match ? `DMC${match[1]}` : normalized.split(/\s*[-—]\s*/)[0]
 }
@@ -245,7 +245,16 @@ function findDeadlineProductionNorm(order: OpenProductionOrder, norms: NormItem[
       return b.norm.products.length - a.norm.products.length
     })
 
-  return matches[0]?.norm ?? null
+  const topScore = matches[0]?.score ?? 0
+  const topMatches = matches.filter((match) => match.score === topScore)
+  if (topMatches.length === 0) return null
+  if (topMatches.length === 1) return topMatches[0].norm
+
+  const averageNorm = topMatches.reduce((sum, match) => sum + match.norm.norm, 0) / topMatches.length
+  return {
+    ...topMatches[0].norm,
+    norm: Math.round(averageNorm * 100) / 100,
+  }
 }
 
 function sortDeadlineProductionPlanRows(rows: DeadlineProductionPlanRow[]): DeadlineProductionPlanRow[] {
