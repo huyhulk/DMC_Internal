@@ -397,6 +397,29 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
       return matchesWorkshop && matchesDeadlineDate && matchesMissingNorm && matchesQuery
     })
   }, [deadlineDateFilter, missingNormOnly, plan.rows, searchQuery, workshopFilter])
+  const filteredSummary = useMemo(() => {
+    const summary = filteredRows.reduce((acc, row) => {
+      const rank = getProductionOrderStatusRank(row.order.status)
+      return {
+        totalOrders: acc.totalOrders + 1,
+        notStartedOrders: acc.notStartedOrders + (rank === 0 ? 1 : 0),
+        inProgressOrders: acc.inProgressOrders + (rank === 1 ? 1 : 0),
+        missingNormOrders: acc.missingNormOrders + (row.missingNorm ? 1 : 0),
+        totalEstimatedHours: acc.totalEstimatedHours + (row.estimatedHours ?? 0),
+      }
+    }, {
+      totalOrders: 0,
+      notStartedOrders: 0,
+      inProgressOrders: 0,
+      missingNormOrders: 0,
+      totalEstimatedHours: 0,
+    })
+
+    return {
+      ...summary,
+      totalEstimatedHours: Math.round(summary.totalEstimatedHours * 100) / 100,
+    }
+  }, [filteredRows])
 
   useEffect(() => {
     if (workshopOptions.length === 1 && workshopFilter !== workshopOptions[0]) {
@@ -414,11 +437,11 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
         </SectionLabel>
 
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
-          <DeadlineKpiCard label="Tổng LSX" value={plan.summary.totalOrders.toLocaleString('vi-VN')} tone="text-[#1d1d1f]" />
-          <DeadlineKpiCard label="Tổng giờ còn lại" value={plan.summary.totalEstimatedHours.toLocaleString('vi-VN')} tone="text-dmc-primary" />
-          <DeadlineKpiCard label="Chưa SX" value={plan.summary.notStartedOrders.toLocaleString('vi-VN')} tone="text-[#007aff]" />
-          <DeadlineKpiCard label="Đang SX" value={plan.summary.inProgressOrders.toLocaleString('vi-VN')} tone="text-[#b37700]" />
-          <DeadlineKpiCard label="Thiếu định mức" value={plan.summary.missingNormOrders.toLocaleString('vi-VN')} tone="text-red-600" />
+          <DeadlineKpiCard label="Tổng LSX" value={filteredSummary.totalOrders.toLocaleString('vi-VN')} tone="text-[#1d1d1f]" />
+          <DeadlineKpiCard label="Tổng giờ còn lại" value={filteredSummary.totalEstimatedHours.toLocaleString('vi-VN')} tone="text-dmc-primary" />
+          <DeadlineKpiCard label="Chưa SX" value={filteredSummary.notStartedOrders.toLocaleString('vi-VN')} tone="text-[#007aff]" />
+          <DeadlineKpiCard label="Đang SX" value={filteredSummary.inProgressOrders.toLocaleString('vi-VN')} tone="text-[#b37700]" />
+          <DeadlineKpiCard label="Thiếu định mức" value={filteredSummary.missingNormOrders.toLocaleString('vi-VN')} tone="text-red-600" />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-[minmax(140px,170px)_minmax(170px,220px)_minmax(220px,1fr)_auto] gap-3 sm:items-end">
