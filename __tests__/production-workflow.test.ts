@@ -501,6 +501,80 @@ describe('production workflow helpers', () => {
     expect(plan.summary.totalEstimatedHours).toBe(3.51)
   })
 
+  it('matches deadline production norms from production workshop names', () => {
+    const cases: Array<{ workshop: string; description: string; expectedProduct: string; expectedWorkshop: string }> = [
+      {
+        workshop: 'Phân xưởng 5- Tôn, PU & Phụ kiện',
+        description: 'Pu - Tự Thu pn',
+        expectedProduct: 'Tôn pu',
+        expectedWorkshop: 'DMC5',
+      },
+      {
+        workshop: 'Phân xưởng 1- Tôn & Phụ kiện',
+        description: 'TCS 13s - Hồ Sơn',
+        expectedProduct: 'Tôn cán 5-13 sóng',
+        expectedWorkshop: 'DMC1',
+      },
+      {
+        workshop: 'Phân xưởng 4- Xà gồ, phụ kiện',
+        description: 'Pk kẽm - vk văn',
+        expectedProduct: 'Phụ kiện inox - kẽm',
+        expectedWorkshop: 'DMC4',
+      },
+    ]
+
+    const plan = buildDeadlineProductionPlan(
+      cases.map(({ workshop, description, expectedProduct }) => openOrder({
+        pcode: `LSX-${expectedProduct}`,
+        workshop,
+        description,
+        remainingQuantity: 20,
+      })),
+      [
+        norm({ products: 'Tôn pu', norm: 10, workshop: 'DMC5' }),
+        norm({ products: 'Tôn cán 5-13 sóng', norm: 10, workshop: 'DMC1' }),
+        norm({ products: 'Phụ kiện inox - kẽm', norm: 10, workshop: 'DMC4' }),
+      ]
+    )
+
+    expect(plan.rows).toHaveLength(cases.length)
+    for (const testCase of cases) {
+      expect(plan.rows.find((row) => row.order.description === testCase.description)).toMatchObject({
+        norm: expect.objectContaining({
+          products: testCase.expectedProduct,
+          workshop: testCase.expectedWorkshop,
+        }),
+        estimatedHours: 2,
+        missingNorm: false,
+      })
+    }
+  })
+
+  it('uses average norm when one deadline order matches multiple norm variants', () => {
+    const plan = buildDeadlineProductionPlan([
+      openOrder({
+        pcode: 'LSX-LOUVER',
+        workshop: 'Phân xưởng 1- Tôn & Phụ kiện',
+        description: 'Louver - Nguyễn Văn A',
+        remainingQuantity: 60,
+      }),
+    ], [
+      norm({ products: 'Louver 1', norm: 10, workshop: 'DMC1' }),
+      norm({ products: 'Louver 2', norm: 20, workshop: 'DMC1' }),
+      norm({ products: 'Louver 3', norm: 30, workshop: 'DMC1' }),
+      norm({ products: 'Louver 4', norm: 40, workshop: 'DMC3' }),
+      norm({ products: 'Tôn sóng vuông 0.45mm', norm: 5, workshop: 'DMC1' }),
+    ])
+
+    expect(plan.rows).toHaveLength(1)
+    expect(plan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ norm: 20, workshop: 'DMC1' }),
+      estimatedHours: 3,
+      missingNorm: false,
+    })
+    expect(plan.summary.totalEstimatedHours).toBe(3)
+  })
+
   it.each([
     ['PU 11s', 'Tôn pu'],
     ['PN vách trong', 'Panel xốp vách trong-1000'],
