@@ -34,7 +34,7 @@ import {
   normalizeProductionStatus,
 } from '@/lib/production/status'
 import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
-import { cn, formatDate, formatDateTimeDisplay, formatLocalDateTimeString, getTodayLocal } from '@/lib/utils'
+import { cn, formatDate, formatDateTimeDisplay, formatLocalDateTimeString, getTodayLocal, workshopCode } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order, ProductLine, ProductionInputHistoryRow, SessionUser } from '@/types'
 
 interface Props {

@@ -1,4 +1,5 @@
 import { normalizeProductionStatus } from '@/lib/production/status'
+import { normalizeWorkshop, workshopCode } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order } from '@/types'
 
 export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
@@ -79,6 +80,17 @@ export function calculateProductionCompletion(quantity: number, produced: number
       ? Math.min(100, Math.round((producedQuantity / safeQuantity) * 1000) / 10)
       : producedQuantity > 0 ? 100 : 0,
   }
+}
+
+export function getProductionEntryWorkshop(workshop: string, description: string | null | undefined): string {
+  const normalizedWorkshop = normalizeWorkshop(workshop)
+  const baseCode = workshopCode(normalizedWorkshop)
+  if (baseCode !== 'DMC1') return normalizedWorkshop
+
+  const normalizedDescription = (description ?? '').toLocaleLowerCase('vi')
+  if (normalizedDescription.includes('pu')) return 'DMC1-PU'
+  if (normalizedDescription.includes('phụ kiện') || normalizedDescription.includes('pk')) return 'DMC1-PK'
+  return 'DMC1-CT'
 }
 
 function normalizeDeadlinePlanText(value: string): string {
