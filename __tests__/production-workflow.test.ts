@@ -655,6 +655,77 @@ describe('production workflow helpers', () => {
   })
 
   it.each([
+    {
+      description: 'PK tôn - công trình A',
+      variants: [
+        norm({ products: 'Phụ kiện tôn diềm', norm: 10, workshop: 'DMC1' }),
+        norm({ products: 'Phụ kiện tôn úp nóc', norm: 20, workshop: 'DMC1' }),
+        norm({ products: 'Phụ kiện inox - kẽm', norm: 90, workshop: 'DMC1' }),
+      ],
+      expectedNorm: 15,
+      expectedHours: 4,
+    },
+    {
+      description: 'PKK - phụ kiện kẽm',
+      variants: [
+        norm({ products: 'Phụ kiện kẽm máng xối', norm: 12, workshop: 'DMC1' }),
+        norm({ products: 'Phụ kiện inox chấn', norm: 24, workshop: 'DMC1' }),
+        norm({ products: 'Phụ kiện tôn diềm', norm: 90, workshop: 'DMC1' }),
+      ],
+      expectedNorm: 18,
+      expectedHours: 3.33,
+    },
+    {
+      description: 'Xà gồ C công trình',
+      variants: [
+        norm({ products: 'Xà gồ C nhỏ', norm: 15, workshop: 'DMC1' }),
+        norm({ products: 'Xà gồ Z lớn', norm: 30, workshop: 'DMC1' }),
+      ],
+      expectedNorm: 22.5,
+      expectedHours: 2.67,
+    },
+    {
+      description: 'Tôn sàn deck',
+      variants: [
+        norm({ products: 'Tôn sàn deck 50', norm: 20, workshop: 'DMC1' }),
+        norm({ products: 'Tôn deck 75', norm: 40, workshop: 'DMC1' }),
+      ],
+      expectedNorm: 30,
+      expectedHours: 2,
+    },
+    {
+      description: 'Tôn kliplock seamlock',
+      variants: [
+        norm({ products: 'Tôn Kliplock 406', norm: 18, workshop: 'DMC1' }),
+        norm({ products: 'Tôn Seamlock 500', norm: 36, workshop: 'DMC1' }),
+      ],
+      expectedNorm: 27,
+      expectedHours: 2.22,
+    },
+  ])('uses average deadline norm for $description variants', ({ description, variants, expectedNorm, expectedHours }) => {
+    const plan = buildDeadlineProductionPlan([
+      openOrder({
+        pcode: `LSX-${description}`,
+        workshop: 'Phân xưởng 1- Tôn & Phụ kiện',
+        description,
+        remainingQuantity: 60,
+      }),
+    ], [
+      ...variants,
+      norm({ products: 'Tôn sóng vuông 0.45mm', norm: 5, workshop: 'DMC1' }),
+      norm({ products: variants[0].products, norm: 100, workshop: 'DMC3' }),
+    ])
+
+    expect(plan.rows).toHaveLength(1)
+    expect(plan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ norm: expectedNorm, workshop: 'DMC1' }),
+      estimatedHours: expectedHours,
+      missingNorm: false,
+    })
+    expect(plan.summary.totalEstimatedHours).toBe(expectedHours)
+  })
+
+  it.each([
     ['PU 11s', 'Tôn pu'],
     ['PN vách trong', 'Panel xốp vách trong-1000'],
     ['PN vách trong 1150', 'Panel xốp vách trong-1150'],
