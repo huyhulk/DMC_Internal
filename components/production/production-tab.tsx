@@ -378,23 +378,25 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
   const { state, loadOpenOrders } = useProductionData(user)
   const [searchQuery, setSearchQuery] = useState('')
   const [workshopFilter, setWorkshopFilter] = useState('ALL')
+  const [deadlineDateFilter, setDeadlineDateFilter] = useState('')
   const [missingNormOnly, setMissingNormOnly] = useState(false)
 
   useEffect(() => { loadOpenOrders() }, [loadOpenOrders, refreshSignal])
 
   const allOrders = useMemo(() => state.initData?.orders as OpenProductionOrder[] ?? [], [state.initData?.orders])
   const norms = useMemo(() => state.initData?.norms ?? [], [state.initData?.norms])
-  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => order.workshop).filter(Boolean))].sort(), [allOrders])
+  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => workshopCode(order.workshop)).filter(Boolean))].sort(), [allOrders])
   const plan = useMemo(() => buildDeadlineProductionPlan(allOrders, norms), [allOrders, norms])
   const filteredRows = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     return plan.rows.filter((row) => {
-      const matchesWorkshop = workshopFilter === 'ALL' || row.order.workshop === workshopFilter
+      const matchesWorkshop = workshopFilter === 'ALL' || workshopCode(row.order.workshop) === workshopFilter
+      const matchesDeadlineDate = !deadlineDateFilter || row.order.deadlinedate?.slice(0, 10) === deadlineDateFilter
       const matchesMissingNorm = !missingNormOnly || row.missingNorm
       const matchesQuery = !query || row.order.pcode.toLowerCase().includes(query)
-      return matchesWorkshop && matchesMissingNorm && matchesQuery
+      return matchesWorkshop && matchesDeadlineDate && matchesMissingNorm && matchesQuery
     })
-  }, [missingNormOnly, plan.rows, searchQuery, workshopFilter])
+  }, [deadlineDateFilter, missingNormOnly, plan.rows, searchQuery, workshopFilter])
 
   useEffect(() => {
     if (workshopOptions.length === 1 && workshopFilter !== workshopOptions[0]) {
@@ -419,7 +421,7 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
           <DeadlineKpiCard label="Thiếu định mức" value={plan.summary.missingNormOrders.toLocaleString('vi-VN')} tone="text-red-600" />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-[minmax(150px,190px)_minmax(220px,1fr)_auto] gap-3 sm:items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(140px,170px)_minmax(170px,220px)_minmax(220px,1fr)_auto] gap-3 sm:items-end">
           <FieldGroup label="Xưởng">
             <select
               value={workshopFilter}
@@ -432,6 +434,25 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
                 <option key={ws} value={ws}>{ws}</option>
               ))}
             </select>
+          </FieldGroup>
+
+          <FieldGroup label="Hạn giao hàng">
+            <div className="flex gap-2">
+              <VietnameseDatePicker
+                value={deadlineDateFilter}
+                onChange={setDeadlineDateFilter}
+                className={cn(inputCls, 'flex-1 min-w-0')}
+              />
+              {deadlineDateFilter && (
+                <button
+                  type="button"
+                  onClick={() => setDeadlineDateFilter('')}
+                  className="h-10 px-3 rounded-xl border border-[#d2d2d7]/70 bg-white text-[12px] font-semibold text-[#6e6e73] hover:bg-[#f2f2f7] active:scale-95 transition-all duration-150"
+                >
+                  Tất cả
+                </button>
+              )}
+            </div>
           </FieldGroup>
 
           <FieldGroup label="Tìm mã LSX">
