@@ -407,6 +407,7 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
         notStartedOrders: acc.notStartedOrders + (rank === 0 ? 1 : 0),
         inProgressOrders: acc.inProgressOrders + (rank === 1 ? 1 : 0),
         missingNormOrders: acc.missingNormOrders + (row.missingNorm ? 1 : 0),
+        totalRemainingQuantity: acc.totalRemainingQuantity + row.order.remainingQuantity,
         totalEstimatedHours: acc.totalEstimatedHours + (row.estimatedHours ?? 0),
       }
     }, {
@@ -414,12 +415,14 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
       notStartedOrders: 0,
       inProgressOrders: 0,
       missingNormOrders: 0,
+      totalRemainingQuantity: 0,
       totalEstimatedHours: 0,
     })
 
     return {
       ...summary,
       totalEstimatedHours: Math.round(summary.totalEstimatedHours * 100) / 100,
+      totalRemainingQuantity: Math.round(summary.totalRemainingQuantity * 1000) / 1000,
     }
   }, [filteredRows])
 
@@ -438,8 +441,9 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
           Danh sách LSX theo Hạn giao hàng
         </SectionLabel>
 
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
           <DeadlineKpiCard label="Tổng LSX" value={filteredSummary.totalOrders.toLocaleString('vi-VN')} tone="text-[#1d1d1f]" />
+          <DeadlineKpiCard label="Sản lượng còn lại" value={filteredSummary.totalRemainingQuantity.toLocaleString('vi-VN')} tone="text-[#34c759]" />
           <DeadlineKpiCard label="Tổng giờ còn lại" value={filteredSummary.totalEstimatedHours.toLocaleString('vi-VN')} tone="text-dmc-primary" />
           <DeadlineKpiCard label="Chưa SX" value={filteredSummary.notStartedOrders.toLocaleString('vi-VN')} tone="text-[#007aff]" />
           <DeadlineKpiCard label="Đang SX" value={filteredSummary.inProgressOrders.toLocaleString('vi-VN')} tone="text-[#b37700]" />
