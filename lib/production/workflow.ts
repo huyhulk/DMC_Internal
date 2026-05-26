@@ -151,14 +151,22 @@ function getDeadlinePlanNormFamilyScore(descriptionFamily: string | null, normPr
 
   const product = normalizeDeadlinePlanText(normProduct)
   if (!product) return 0
+  if (descriptionFamily === 'ton kliplock seamlock') {
+    return deadlinePlanHasAnyText(product, ['kliplock', 'seamlock']) ? 7 : 0
+  }
+  if (descriptionFamily === 'ton san deck') return product.includes('deck') ? 7 : 0
+  if (descriptionFamily === 'xa go' && product.includes('xa go')) return 7
+  if (descriptionFamily === 'ton can 5 13 song' && product.includes('ton can') && product.includes('song')) return 7
+  if (descriptionFamily === 'phu kien ton trung binh') {
+    return product.includes('phu kien') && !deadlinePlanHasAnyText(product, ['inox', 'kem']) ? 7 : 0
+  }
+  if (descriptionFamily === 'phu kien inox kem') {
+    return product.includes('phu kien') && deadlinePlanHasAnyText(product, ['inox', 'kem']) ? 7 : 0
+  }
+
   if (product === descriptionFamily) return 9
   if (product.includes(descriptionFamily)) return 8
   if (descriptionFamily.includes(product)) return 7
-
-  if (descriptionFamily === 'xa go' && product.includes('xa go')) return 7
-  if (descriptionFamily === 'ton can 5 13 song' && product.includes('ton can') && product.includes('song')) return 7
-  if (descriptionFamily === 'phu kien ton trung binh' && product.includes('phu kien ton trung binh')) return 9
-  if (descriptionFamily === 'phu kien inox kem' && product.includes('phu kien inox kem')) return 9
 
   return 0
 }
