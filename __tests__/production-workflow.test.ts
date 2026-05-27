@@ -1,5 +1,11 @@
 import type { NormItem, OpenProductionOrder, Order } from '@/types'
-import { compareLocalDateTimeStrings, normalizeLocalDateTimeString } from '@/lib/utils'
+import {
+  CONSTRUCTION_WORKSHOP_CODE,
+  compareLocalDateTimeStrings,
+  normalizeLocalDateTimeString,
+  normalizeWorkshop,
+  workshopCode,
+} from '@/lib/utils'
 import {
   getActiveProductionPcodes,
   isProductionDateProgressFilter,
@@ -14,6 +20,7 @@ import {
   filterProductionOrdersByPcode,
   getOpenOrdersSearchState,
   getOpenProductionOrdersQueryWindow,
+  getProductionEntryWorkshop,
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isOpenProductionOrder,
@@ -80,6 +87,13 @@ function norm(overrides: Partial<NormItem>): NormItem {
 }
 
 describe('production workflow helpers', () => {
+  it('normalizes construction site workshop as a separate production-entry workshop', () => {
+    expect(normalizeWorkshop('Hoạt động thi công tại công trình')).toBe(CONSTRUCTION_WORKSHOP_CODE)
+    expect(normalizeWorkshop('  hoạt   động thi công tại công trình  ')).toBe(CONSTRUCTION_WORKSHOP_CODE)
+    expect(workshopCode(normalizeWorkshop('Hoạt động thi công tại công trình'))).toBe(CONSTRUCTION_WORKSHOP_CODE)
+    expect(getProductionEntryWorkshop('Hoạt động thi công tại công trình', 'PK tôn')).toBe(CONSTRUCTION_WORKSHOP_CODE)
+  })
+
   it('ranks production statuses in data-entry priority order', () => {
     expect(getProductionOrderStatusRank('Chua san xuat')).toBe(0)
     expect(getProductionOrderStatusRank('Dang san xuat')).toBe(1)
@@ -499,6 +513,52 @@ describe('production workflow helpers', () => {
       missingNorm: false,
     })
     expect(plan.summary.totalEstimatedHours).toBe(3.51)
+  })
+
+  it('matches construction site deadline norms as a separate workshop', () => {
+    const plan = buildDeadlineProductionPlan([
+      openOrder({
+        pcode: 'LSX-CONG-TRINH',
+        workshop: 'Hoạt động thi công tại công trình',
+        description: 'Tôn sàn deck công trình',
+        remainingQuantity: 60,
+      }),
+    ], [
+      norm({ products: 'Tôn sàn deck', norm: 20, workshop: 'DMC1' }),
+      norm({ products: 'Tôn sàn deck', norm: 30, workshop: CONSTRUCTION_WORKSHOP_CODE }),
+    ])
+
+    expect(plan.rows).toHaveLength(1)
+    expect(plan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ workshop: CONSTRUCTION_WORKSHOP_CODE, norm: 30 }),
+      estimatedHours: 2,
+      missingNorm: false,
+    })
+    expect(plan.summary.totalEstimatedHours).toBe(2)
+  })
+
+  it('does not match construction site deadline orders to DMC1 norms', () => {
+    const plan = buildDeadlineProductionPlan([
+      openOrder({
+        pcode: 'LSX-CONG-TRINH-MISSING',
+        workshop: CONSTRUCTION_WORKSHOP_CODE,
+        description: 'Tôn sàn deck công trình',
+        remainingQuantity: 60,
+      }),
+    ], [
+      norm({ products: 'Tôn sàn deck', norm: 20, workshop: 'DMC1' }),
+    ])
+
+    expect(plan.rows).toHaveLength(1)
+    expect(plan.rows[0]).toMatchObject({
+      norm: null,
+      estimatedHours: null,
+      missingNorm: true,
+    })
+    expect(plan.summary).toMatchObject({
+      missingNormOrders: 1,
+      totalEstimatedHours: 0,
+    })
   })
 
   it('matches deadline production norms from production workshop names', () => {
