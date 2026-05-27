@@ -629,7 +629,7 @@ describe('production workflow helpers', () => {
     }
   })
 
-  it('uses average norm when one deadline order matches multiple norm variants', () => {
+  it('uses second-highest norm when one deadline order matches multiple norm variants', () => {
     const plan = buildDeadlineProductionPlan([
       openOrder({
         pcode: 'LSX-LOUVER',
@@ -639,19 +639,19 @@ describe('production workflow helpers', () => {
       }),
     ], [
       norm({ products: 'Louver 1', norm: 10, workshop: 'DMC1' }),
-      norm({ products: 'Louver 2', norm: 20, workshop: 'DMC1' }),
-      norm({ products: 'Louver 3', norm: 30, workshop: 'DMC1' }),
-      norm({ products: 'Louver 4', norm: 40, workshop: 'DMC3' }),
+      norm({ products: 'Louver 2', norm: 25, workshop: 'DMC1' }),
+      norm({ products: 'Louver 3', norm: 40, workshop: 'DMC1' }),
+      norm({ products: 'Louver 4', norm: 80, workshop: 'DMC3' }),
       norm({ products: 'Tôn sóng vuông 0.45mm', norm: 5, workshop: 'DMC1' }),
     ])
 
     expect(plan.rows).toHaveLength(1)
     expect(plan.rows[0]).toMatchObject({
-      norm: expect.objectContaining({ norm: 20, workshop: 'DMC1' }),
-      estimatedHours: 3,
+      norm: expect.objectContaining({ norm: 25, workshop: 'DMC1' }),
+      estimatedHours: 2.4,
       missingNorm: false,
     })
-    expect(plan.summary.totalEstimatedHours).toBe(3)
+    expect(plan.summary.totalEstimatedHours).toBe(2.4)
   })
 
   it.each([
@@ -659,50 +659,55 @@ describe('production workflow helpers', () => {
       description: 'PK tôn - công trình A',
       variants: [
         norm({ products: 'Phụ kiện tôn diềm', norm: 10, workshop: 'DMC1' }),
-        norm({ products: 'Phụ kiện tôn úp nóc', norm: 20, workshop: 'DMC1' }),
+        norm({ products: 'Phụ kiện tôn úp nóc', norm: 25, workshop: 'DMC1' }),
+        norm({ products: 'Phụ kiện tôn máng', norm: 40, workshop: 'DMC1' }),
         norm({ products: 'Phụ kiện inox - kẽm', norm: 90, workshop: 'DMC1' }),
       ],
-      expectedNorm: 15,
-      expectedHours: 4,
+      expectedNorm: 25,
+      expectedHours: 2.4,
     },
     {
       description: 'PKK - phụ kiện kẽm',
       variants: [
         norm({ products: 'Phụ kiện kẽm máng xối', norm: 12, workshop: 'DMC1' }),
         norm({ products: 'Phụ kiện inox chấn', norm: 24, workshop: 'DMC1' }),
+        norm({ products: 'Phụ kiện inox - kẽm', norm: 60, workshop: 'DMC1' }),
         norm({ products: 'Phụ kiện tôn diềm', norm: 90, workshop: 'DMC1' }),
       ],
-      expectedNorm: 18,
-      expectedHours: 3.33,
+      expectedNorm: 24,
+      expectedHours: 2.5,
     },
     {
       description: 'Xà gồ C công trình',
       variants: [
         norm({ products: 'Xà gồ C nhỏ', norm: 15, workshop: 'DMC1' }),
-        norm({ products: 'Xà gồ Z lớn', norm: 30, workshop: 'DMC1' }),
+        norm({ products: 'Xà gồ Z vừa', norm: 30, workshop: 'DMC1' }),
+        norm({ products: 'Xà gồ Z lớn', norm: 45, workshop: 'DMC1' }),
       ],
-      expectedNorm: 22.5,
-      expectedHours: 2.67,
+      expectedNorm: 30,
+      expectedHours: 2,
     },
     {
       description: 'Tôn sàn deck',
       variants: [
         norm({ products: 'Tôn sàn deck 50', norm: 20, workshop: 'DMC1' }),
-        norm({ products: 'Tôn deck 75', norm: 40, workshop: 'DMC1' }),
+        norm({ products: 'Tôn deck 75', norm: 35, workshop: 'DMC1' }),
+        norm({ products: 'Tôn deck 100', norm: 50, workshop: 'DMC1' }),
       ],
-      expectedNorm: 30,
-      expectedHours: 2,
+      expectedNorm: 35,
+      expectedHours: 1.71,
     },
     {
       description: 'Tôn kliplock seamlock',
       variants: [
         norm({ products: 'Tôn Kliplock 406', norm: 18, workshop: 'DMC1' }),
         norm({ products: 'Tôn Seamlock 500', norm: 36, workshop: 'DMC1' }),
+        norm({ products: 'Tôn Seamlock 600', norm: 54, workshop: 'DMC1' }),
       ],
-      expectedNorm: 27,
-      expectedHours: 2.22,
+      expectedNorm: 36,
+      expectedHours: 1.67,
     },
-  ])('uses average deadline norm for $description variants', ({ description, variants, expectedNorm, expectedHours }) => {
+  ])('uses second-highest deadline norm for $description variants', ({ description, variants, expectedNorm, expectedHours }) => {
     const plan = buildDeadlineProductionPlan([
       openOrder({
         pcode: `LSX-${description}`,
@@ -731,6 +736,7 @@ describe('production workflow helpers', () => {
     ['PN vách trong 1150', 'Panel xốp vách trong-1150'],
     ['Panel vách ngoài', 'Panel xốp vách ngoài'],
     ['PKK - pk kẽm', 'Phụ kiện inox - kẽm'],
+    ['PK inox - công trình A', 'Phụ kiện inox chấn'],
     ['PK tôn', 'Phụ kiện tôn trung bình'],
     ['TCS 11s', 'Tôn cán 5-13 sóng'],
     ['Tôn sàn deck', 'Tôn sàn deck'],
@@ -753,6 +759,58 @@ describe('production workflow helpers', () => {
       norm: expect.objectContaining({ products: expectedProduct, workshop: 'DMC1', norm: 10 }),
       estimatedHours: 2,
       missingNorm: false,
+    })
+  })
+
+  it('recalculates deadline estimated hours when norm values change', () => {
+    const orders = [openOrder({ description: 'Tôn sàn deck', remainingQuantity: 60 })]
+    const originalPlan = buildDeadlineProductionPlan(orders, [
+      norm({ products: 'Tôn sàn deck 50', norm: 20, workshop: 'DMC1' }),
+      norm({ products: 'Tôn deck 75', norm: 30, workshop: 'DMC1' }),
+      norm({ products: 'Tôn deck 100', norm: 50, workshop: 'DMC1' }),
+    ])
+    const updatedPlan = buildDeadlineProductionPlan(orders, [
+      norm({ products: 'Tôn sàn deck 50', norm: 20, workshop: 'DMC1' }),
+      norm({ products: 'Tôn deck 75', norm: 40, workshop: 'DMC1' }),
+      norm({ products: 'Tôn deck 100', norm: 50, workshop: 'DMC1' }),
+    ])
+
+    expect(originalPlan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ norm: 30 }),
+      estimatedHours: 2,
+    })
+    expect(updatedPlan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ norm: 40 }),
+      estimatedHours: 1.5,
+    })
+  })
+
+  it('updates deadline norm selection when norm rows are added or removed', () => {
+    const orders = [openOrder({ description: 'Xà gồ C công trình', remainingQuantity: 60 })]
+    const initialPlan = buildDeadlineProductionPlan(orders, [
+      norm({ products: 'Xà gồ C nhỏ', norm: 15, workshop: 'DMC1' }),
+      norm({ products: 'Xà gồ Z vừa', norm: 30, workshop: 'DMC1' }),
+    ])
+    const addedPlan = buildDeadlineProductionPlan(orders, [
+      norm({ products: 'Xà gồ C nhỏ', norm: 15, workshop: 'DMC1' }),
+      norm({ products: 'Xà gồ Z vừa', norm: 30, workshop: 'DMC1' }),
+      norm({ products: 'Xà gồ Z lớn', norm: 45, workshop: 'DMC1' }),
+    ])
+    const removedPlan = buildDeadlineProductionPlan(orders, [
+      norm({ products: 'Xà gồ Z lớn', norm: 45, workshop: 'DMC1' }),
+    ])
+
+    expect(initialPlan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ norm: 15 }),
+      estimatedHours: 4,
+    })
+    expect(addedPlan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ norm: 30 }),
+      estimatedHours: 2,
+    })
+    expect(removedPlan.rows[0]).toMatchObject({
+      norm: expect.objectContaining({ norm: 45 }),
+      estimatedHours: 1.33,
     })
   })
 

@@ -2,7 +2,7 @@
 
 import { revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { getCachedNorms, getCachedMaterials } from '@/lib/db/queries'
+import { getCachedNorms, getFreshNorms, getCachedMaterials } from '@/lib/db/queries'
 import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
@@ -424,7 +424,7 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const { today } = getOpenProductionOrdersQueryWindow()
 
     const [norms, materials, dataRows] = await Promise.all([
-      getCachedNorms(),
+      getFreshNorms(),
       getCachedMaterials(),
       fetchDataRowsUpToDate(supabase, today),
     ])
