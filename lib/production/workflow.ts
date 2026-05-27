@@ -132,6 +132,8 @@ function getDeadlinePlanNormFamily(description: string): string | null {
   if (deadlinePlanHasAnyWord(words, ['deck'])) return 'ton san deck'
   if (deadlinePlanHasAnyWord(words, ['vom'])) return 'ton nhan vom'
   if (deadlinePlanHasAnyText(value, ['roc', 'chiet', 'ton cuon'])) return 'roc chiet ton cuon'
+  if (deadlinePlanHasAnyText(value, ['pk inox'])) return 'phu kien inox'
+  if (deadlinePlanHasAnyText(value, ['pk kem', 'pkk']) || deadlinePlanHasAnyWord(words, ['inox', 'kem'])) return 'phu kien inox kem'
   if (deadlinePlanHasAnyWord(words, ['pu'])) return 'ton pu'
   if (deadlinePlanHasAnyText(value, ['panel bong']) || deadlinePlanHasAnyWord(words, ['bong'])) return 'panel bong'
   if (deadlinePlanHasAnyText(value, ['vach ngoai', 'tuong ngoai'])) return 'panel xop vach ngoai'
@@ -140,7 +142,6 @@ function getDeadlinePlanNormFamily(description: string): string | null {
   }
   if (deadlinePlanHasAnyWord(words, ['xg']) || deadlinePlanHasAnyText(value, ['xa go'])) return 'xa go'
   if (deadlinePlanHasAnyWord(words, ['tcs']) || /\b\d{1,2}s\b/.test(value)) return 'ton can 5 13 song'
-  if (deadlinePlanHasAnyText(value, ['pk inox', 'pk kem', 'pkk']) || deadlinePlanHasAnyWord(words, ['inox', 'kem'])) return 'phu kien inox kem'
   if (deadlinePlanHasAnyWord(words, ['pk']) || deadlinePlanHasAnyText(value, ['phu kien'])) return 'phu kien ton trung binh'
 
   return null
@@ -159,6 +160,9 @@ function getDeadlinePlanNormFamilyScore(descriptionFamily: string | null, normPr
   if (descriptionFamily === 'ton can 5 13 song' && product.includes('ton can') && product.includes('song')) return 7
   if (descriptionFamily === 'phu kien ton trung binh') {
     return product.includes('phu kien') && !deadlinePlanHasAnyText(product, ['inox', 'kem']) ? 7 : 0
+  }
+  if (descriptionFamily === 'phu kien inox') {
+    return product.includes('phu kien') && product.includes('inox') && !product.includes('kem') ? 8 : 0
   }
   if (descriptionFamily === 'phu kien inox kem') {
     return product.includes('phu kien') && deadlinePlanHasAnyText(product, ['inox', 'kem']) ? 7 : 0
@@ -190,6 +194,15 @@ function getDeadlinePlanNormMatchScore(order: OpenProductionOrder, norm: NormIte
   return sharedWords.length >= 2 ? 1 : 0
 }
 
+function pickSecondHighestDeadlineNorm(matches: Array<{ norm: NormItem; score: number }>): NormItem {
+  const sortedByNorm = [...matches].sort((a, b) => {
+    const normDiff = b.norm.norm - a.norm.norm
+    if (normDiff !== 0) return normDiff
+    return b.norm.products.length - a.norm.products.length
+  })
+  return (sortedByNorm[1] ?? sortedByNorm[0]).norm
+}
+
 function findDeadlineProductionNorm(order: OpenProductionOrder, norms: NormItem[]): NormItem | null {
   const matches = norms
     .map((norm) => ({ norm, score: getDeadlinePlanNormMatchScore(order, norm) }))
@@ -205,11 +218,7 @@ function findDeadlineProductionNorm(order: OpenProductionOrder, norms: NormItem[
   if (topMatches.length === 0) return null
   if (topMatches.length === 1) return topMatches[0].norm
 
-  const averageNorm = topMatches.reduce((sum, match) => sum + match.norm.norm, 0) / topMatches.length
-  return {
-    ...topMatches[0].norm,
-    norm: Math.round(averageNorm * 100) / 100,
-  }
+  return pickSecondHighestDeadlineNorm(topMatches)
 }
 
 function sortDeadlineProductionPlanRows(rows: DeadlineProductionPlanRow[]): DeadlineProductionPlanRow[] {

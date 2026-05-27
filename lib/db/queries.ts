@@ -16,21 +16,27 @@ function getAdminClient() {
   )
 }
 
+function mapNormRows(rows: Pick<NormRow, 'products' | 'norm' | 'nwforce' | 'workshop' | 'pspeed'>[] | null): NormItem[] {
+  return (rows ?? []).map((n) => ({
+    products: n.products,
+    norm: n.norm ?? 0,
+    nwforce: n.nwforce ?? 0,
+    workshop: normalizeWorkshop(n.workshop ?? ''),
+    pspeed: n.pspeed ?? 0,
+  }))
+}
+
+export async function getFreshNorms(): Promise<NormItem[]> {
+  const supabase = getAdminClient()
+  const { data } = await supabase
+    .from('Norm')
+    .select('products,norm,nwforce,workshop,pspeed')
+  return mapNormRows(data as Pick<NormRow, 'products' | 'norm' | 'nwforce' | 'workshop' | 'pspeed'>[] | null)
+}
+
 // Norm data: changes rarely → cache 5 minutes, tag for manual revalidation
 export const getCachedNorms = unstable_cache(
-  async (): Promise<NormItem[]> => {
-    const supabase = getAdminClient()
-    const { data } = await supabase
-      .from('Norm')
-      .select('products,norm,nwforce,workshop,pspeed')
-    return ((data ?? []) as Pick<NormRow, 'products' | 'norm' | 'nwforce' | 'workshop' | 'pspeed'>[]).map((n) => ({
-      products: n.products,
-      norm: n.norm ?? 0,
-      nwforce: n.nwforce ?? 0,
-      workshop: normalizeWorkshop(n.workshop ?? ''),
-      pspeed: n.pspeed ?? 0,
-    }))
-  },
+  getFreshNorms,
   ['norms-v1'],
   { revalidate: 300, tags: ['norms'] }
 )
