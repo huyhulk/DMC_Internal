@@ -246,6 +246,13 @@ export function calcRealNorm(params: {
 // workshopToDataFilter → returns ilike prefix when QUERYING data table by DMC code
 // data.WORKSHOP is source of truth — NEVER modify it.
 // PX1 and PX2 both belong to DMC1 but keep distinct display labels.
+const CONSTRUCTION_WORKSHOP_LABEL = 'Hoạt động thi công tại công trình'
+export const CONSTRUCTION_WORKSHOP_CODE = 'CONG_TRINH'
+
+function normalizeWorkshopText(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('vi')
+}
+
 const WORKSHOP_MAP: Array<{ prefix: string; code: string }> = [
   { prefix: 'Phân xưởng 1', code: 'DMC1' },
   { prefix: 'Phân xưởng 2', code: 'DMC1' },
@@ -261,9 +268,11 @@ const WORKSHOP_MAP: Array<{ prefix: string; code: string }> = [
 export function normalizeWorkshop(ws: string): string {
   if (!ws) return ws
   const trimmed = ws.trim()
-  const lower = trimmed.toLowerCase()
+  const normalizedText = normalizeWorkshopText(trimmed)
+  if (normalizedText === normalizeWorkshopText(CONSTRUCTION_WORKSHOP_LABEL)) return CONSTRUCTION_WORKSHOP_CODE
+
   for (const { prefix, code } of WORKSHOP_MAP) {
-    if (lower.startsWith(prefix.toLowerCase())) {
+    if (normalizedText.startsWith(normalizeWorkshopText(prefix))) {
       const rest = trimmed.slice(prefix.length) // " - Tôn & Phụ kiện"
       return `${code}${rest}`
     }
