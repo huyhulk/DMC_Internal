@@ -5,6 +5,7 @@ import {
   normalizeLocalDateTimeString,
   normalizeWorkshop,
   workshopCode,
+  workshopToDataFilters,
 } from '@/lib/utils'
 import {
   getActiveProductionPcodes,
@@ -92,6 +93,7 @@ describe('production workflow helpers', () => {
     expect(normalizeWorkshop('  hoạt   động thi công tại công trình  ')).toBe(CONSTRUCTION_WORKSHOP_CODE)
     expect(workshopCode(normalizeWorkshop('Hoạt động thi công tại công trình'))).toBe(CONSTRUCTION_WORKSHOP_CODE)
     expect(getProductionEntryWorkshop('Hoạt động thi công tại công trình', 'PK tôn')).toBe(CONSTRUCTION_WORKSHOP_CODE)
+    expect(workshopToDataFilters(CONSTRUCTION_WORKSHOP_CODE)).toEqual(['Hoạt động thi công tại công trình%'])
   })
 
   it('ranks production statuses in data-entry priority order', () => {

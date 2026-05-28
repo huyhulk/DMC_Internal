@@ -8,7 +8,7 @@ export type { AdministrationTabKey }
 export type MaintenanceMode = 'plan' | 'execute'
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'ALL'
 
-export const FACTORY_WORKSPACES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
+export const FACTORY_WORKSPACES = ['DMC1', 'DMC1-CT', 'DMC1-PK', 'DMC1-PU', 'DMC3', 'DMC4', 'DMC5', 'CONG_TRINH'] as const
 export const DEPARTMENT_WORKSPACES = [
   'PKT-SX',
   'Phòng điều phối',
@@ -33,6 +33,11 @@ const NORMALIZED_WORKSPACES = new Map<string, string>([
   ['DM4', 'DMC4'],
   ['DMC5', 'DMC5'],
   ['DM5', 'DMC5'],
+  ['CONG_TRINH', 'CONG_TRINH'],
+  ['CONG TRINH', 'CONG_TRINH'],
+  ['CONG-TRINH', 'CONG_TRINH'],
+  ['HOẠT ĐỘNG THI CÔNG TẠI CÔNG TRÌNH', 'CONG_TRINH'],
+  ['HOAT DONG THI CONG TAI CONG TRINH', 'CONG_TRINH'],
   ['PKT-SX', 'PKT-SX'],
   ['PKT_SX', 'PKT-SX'],
   ['PKTSX', 'PKT-SX'],

@@ -5,15 +5,15 @@ export type GroupBy = 'day' | 'week' | 'month' | 'year' | 'hour'
 export type FilterBy = 'deadline' | 'initialdate' | 'production_date' | 'completed_date'
 export type RankingMetric = 'oee' | 'quality' | 'output' | 'progress'
 
-export const WORKSHOP_CODES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
+export const WORKSHOP_CODES = ['DMC1', 'DMC3', 'DMC4', 'DMC5', 'CONG_TRINH'] as const
 export type WorkshopCode = typeof WORKSHOP_CODES[number]
 
-// Bảng màu cố định 4 xưởng — dùng nhất quán trên mọi chart
 export const WORKSHOP_COLORS: Record<WorkshopCode, string> = {
-  DMC1: '#3b82f6', // xanh
-  DMC3: '#f97316', // cam
-  DMC4: '#8b5cf6', // tím
-  DMC5: '#ef4444', // đỏ
+  DMC1: '#3b82f6',
+  DMC3: '#f97316',
+  DMC4: '#8b5cf6',
+  DMC5: '#ef4444',
+  CONG_TRINH: '#0f766e',
 }
 
 export const WORKSHOP_LABEL: Record<WorkshopCode, string> = {
@@ -21,6 +21,7 @@ export const WORKSHOP_LABEL: Record<WorkshopCode, string> = {
   DMC3: 'DMC3 — Tôn Panel',
   DMC4: 'DMC4 — Xà gồ',
   DMC5: 'DMC5 — Tôn & PU',
+  CONG_TRINH: 'Công trình — Thi công',
 }
 
 // 5 khung giờ ca sản xuất (bao gồm tăng ca)

@@ -266,8 +266,11 @@ export function workshopCode(ws: string): string {
 // Returns ilike patterns for querying data.WORKSHOP by DMC code.
 // DMC1 → ['Phân xưởng 1%', 'Phân xưởng 2%']
 export function workshopToDataFilters(code: string): string[] {
+  const normalized = workshopCode(normalizeWorkshop(code))
+  if (normalized === CONSTRUCTION_WORKSHOP_CODE) return [`${CONSTRUCTION_WORKSHOP_LABEL}%`]
+
   return WORKSHOP_MAP
-    .filter((m) => m.code === code.toUpperCase())
+    .filter((m) => m.code === normalized)
     .map((m) => `${m.prefix}%`)
 }
 

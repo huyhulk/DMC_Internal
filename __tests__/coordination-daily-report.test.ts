@@ -18,6 +18,7 @@ describe('coordination daily report helpers', () => {
     expect(resolveDailyReportWorkshop('Phân xưởng 3 - Cửa')).toBe('DMC3')
     expect(resolveDailyReportWorkshop('Phân xưởng 4')).toBe('DMC4')
     expect(resolveDailyReportWorkshop('Phân xưởng 5')).toBe('DMC5')
+    expect(resolveDailyReportWorkshop('Hoạt động thi công tại công trình')).toBe('CONG_TRINH')
   })
 
   it('calculates remaining quantity and completion percentage', () => {
@@ -40,10 +41,12 @@ describe('coordination daily report helpers', () => {
       ['DMC3', []],
       ['DMC4', []],
       ['DMC5', []],
+      ['CONG_TRINH', []],
     ])
 
     const sections = groupDailyRows(rows)
     expect(sections[0].workshop).toBe('DMC1')
+    expect(sections[4].workshop).toBe('CONG_TRINH')
     expect(sections[0].summary).toEqual({ orderCount: 2, failedCount: 0, totalQuantity: 30 })
   })
 
@@ -56,6 +59,7 @@ describe('coordination daily report helpers', () => {
       ['DMC3', []],
       ['DMC4', []],
       ['DMC5', []],
+      ['CONG_TRINH', []],
     ])
 
     const sections = groupDailyRows(rows)

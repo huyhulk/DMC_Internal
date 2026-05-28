@@ -37,7 +37,7 @@ export function parseReportParams(searchParams: URLSearchParams) {
   const errors: string[] = []
   if (!['detail', 'comparison'].includes(mode)) errors.push('mode phải là detail hoặc comparison')
   if (mode === 'detail' && (!workshopId || !WORKSHOP_CODES.includes(workshopId))) {
-    errors.push('workshopId bắt buộc khi mode=detail, phải là DMC1/DMC3/DMC4/DMC5')
+    errors.push(`workshopId bắt buộc khi mode=detail, phải là ${WORKSHOP_CODES.join('/')}`)
   }
   if (!VALID_GROUP_BY.includes(groupBy)) {
     errors.push(`groupBy không hợp lệ: "${groupBy}". Dùng: ${VALID_GROUP_BY.join(', ')}`)

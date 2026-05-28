@@ -31,7 +31,25 @@ describe('API parameter parsing', () => {
   it('rejects invalid KPI workshops with the current allowed list', () => {
     const params = new URLSearchParams({ workshop: 'PKT-SX' })
 
-    expect(parseKpiParams(params).errors).toContain('workshop phải là ALL, DMC1, DMC3, DMC4 hoặc DMC5')
+    expect(parseKpiParams(params).errors).toContain('workshop phải là ALL, DMC1, DMC3, DMC4, DMC5, CONG_TRINH')
+  })
+
+  it('accepts construction site KPI workshop', () => {
+    const params = new URLSearchParams({ workshop: 'CONG_TRINH' })
+
+    const result = parseKpiParams(params)
+
+    expect(result.workshop).toBe('CONG_TRINH')
+    expect(result.errors).not.toEqual(expect.arrayContaining([expect.stringContaining('workshop phải là')]))
+  })
+
+  it('accepts construction site report detail workshop', () => {
+    const params = new URLSearchParams({ mode: 'detail', workshopId: 'CONG_TRINH' })
+
+    const result = parseReportParams(params)
+
+    expect(result.workshopId).toBe('CONG_TRINH')
+    expect(result.errors).not.toEqual(expect.arrayContaining([expect.stringContaining('workshopId bắt buộc')]))
   })
 
   it('rejects impossible report calendar dates', () => {
@@ -61,5 +79,6 @@ describe('API parameter parsing', () => {
     )
     expect(resolveReportWorkshopAccess(user, 'detail', 'DMC3')).toBe('Không có quyền xem dữ liệu xưởng này')
     expect(resolveReportWorkshopAccess(user, 'detail', 'DMC1')).toBeNull()
+    expect(resolveReportWorkshopAccess({ ...user, workspace: 'CONG_TRINH' }, 'detail', 'CONG_TRINH')).toBeNull()
   })
 })
