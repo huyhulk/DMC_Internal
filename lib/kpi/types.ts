@@ -8,15 +8,16 @@ export type KpiTargetOperator = OperatorType
 
 export type ViewMode = 'overview' | 'workshop' | 'compare'
 
-export const WORKSHOPS = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
+export const WORKSHOPS = ['DMC1', 'DMC3', 'DMC4', 'DMC5', 'CONG_TRINH'] as const
 export type WorkshopCode = typeof WORKSHOPS[number]
-export type KpiWorkshop = 'DMC1' | 'DMC3' | 'DMC4' | 'DMC5'
+export type KpiWorkshop = WorkshopCode
 
 export const WORKSHOP_COLORS: Record<WorkshopCode, string> = {
   DMC1: '#3b5bdb',
   DMC3: '#2f9e44',
   DMC4: '#d4870c',
   DMC5: '#ae3ec9',
+  CONG_TRINH: '#0f766e',
 }
 
 export const DEPARTMENTS: { key: Department; label: string; shortLabel: string; kpiCount: number }[] = [

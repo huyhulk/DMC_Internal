@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/actions/auth'
 import { canAccessWorkspace, getWorkspaceScopedFilter } from '@/lib/approval/workflow'
-import { isKpiDepartment, isKpiWorkshop, isPeriodType } from '@/lib/kpi/constants'
+import { isKpiDepartment, isKpiWorkshop, isPeriodType, KPI_WORKSHOPS } from '@/lib/kpi/constants'
 import type { KpiDepartment, KpiWorkshop, PeriodType } from '@/lib/kpi/types'
 import type { SessionUser } from '@/types'
 
@@ -49,7 +49,7 @@ export function parseKpiParams(searchParams: URLSearchParams, defaultDepartment?
     if (isKpiWorkshop(workshopValue)) {
       workshop = workshopValue
     } else {
-      errors.push('workshop phải là ALL, DMC1, DMC3, DMC4 hoặc DMC5')
+      errors.push(`workshop phải là ALL, ${KPI_WORKSHOPS.join(', ')}`)
     }
   }
 

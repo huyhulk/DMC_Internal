@@ -13,6 +13,7 @@ describe('report workshop normalization', () => {
     expect(resolveReportWorkshop('Phân xưởng 3 - Cửa')).toBe('DMC3')
     expect(resolveReportWorkshop('Phân xưởng 4')).toBe('DMC4')
     expect(resolveReportWorkshop('Phân xưởng 5')).toBe('DMC5')
+    expect(resolveReportWorkshop('Hoạt động thi công tại công trình')).toBe('CONG_TRINH')
   })
   it('uses actual Production.pdate for progress Ngày SX', () => {
     expect(getOrderProductionDate([
@@ -32,6 +33,7 @@ describe('report workshop normalization', () => {
 describe('production KPI normalization', () => {
   it('uses the shared workshop mapping instead of digit guessing', () => {
     expect(wsNormalize('Phân xưởng 2 - Tôn Pu & Phụ kiện')).toBe('DMC1')
+    expect(wsNormalize('Hoạt động thi công tại công trình')).toBe('CONG_TRINH')
     expect(wsNormalize('Kho 5')).toBe('')
   })
 

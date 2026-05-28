@@ -5,6 +5,7 @@ import {
   normalizeLocalDateTimeString,
   normalizeWorkshop,
   workshopCode,
+  workshopToDataFilters,
 } from '@/lib/utils'
 import {
   getActiveProductionPcodes,
@@ -121,6 +122,7 @@ describe('production workflow helpers', () => {
     expect(workshopCode(normalizeWorkshop('Hoạt động thi công tại công trình'))).toBe(CONSTRUCTION_WORKSHOP_CODE)
     expect(getProductionEntryWorkshop('Hoạt động thi công tại công trình', 'PK tôn')).toBe(CONSTRUCTION_WORKSHOP_CODE)
     expect(getProductionEntryBaseWorkshop(CONSTRUCTION_WORKSHOP_CODE)).toBe(CONSTRUCTION_WORKSHOP_CODE)
+    expect(workshopToDataFilters(CONSTRUCTION_WORKSHOP_CODE)).toEqual(['Hoạt động thi công tại công trình%'])
   })
 
   it('scopes construction site workshop separately from DMC1 workspaces', () => {

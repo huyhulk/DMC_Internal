@@ -5,7 +5,7 @@ import { calculateProductionCompletion, buildProductionDeadlineCutoff } from '@/
 import { buildProductionStatusMapFromRows, applyEffectiveStatusToOrder } from '@/lib/production/status-server'
 import { shouldShowOpenProductionOrder } from '@/lib/production/status'
 
-export const DAILY_REPORT_WORKSHOPS = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
+export const DAILY_REPORT_WORKSHOPS = ['DMC1', 'DMC3', 'DMC4', 'DMC5', 'CONG_TRINH'] as const
 export type DailyReportWorkshop = typeof DAILY_REPORT_WORKSHOPS[number]
 export type DailyReportType = 'plan' | 'result' | 'both'
 export type ProgressEvaluation = 'ĐẠT' | 'KHÔNG ĐẠT'
