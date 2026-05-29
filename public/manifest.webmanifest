@@ -1,0 +1,58 @@
+{
+  "name": "DMC Production Manager",
+  "short_name": "DMC Production",
+  "description": "Hệ thống quản lý sản xuất DMC",
+  "id": "/dashboard/production",
+  "start_url": "/dashboard/production?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#f5f5f7",
+  "theme_color": "#f5f5f7",
+  "categories": ["business", "productivity", "utilities"],
+  "lang": "vi-VN",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nhập sản xuất",
+      "short_name": "Sản xuất",
+      "description": "Mở màn hình nhập liệu sản xuất",
+      "url": "/dashboard/production?source=pwa-shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Báo cáo",
+      "short_name": "Báo cáo",
+      "description": "Mở dashboard báo cáo sản xuất",
+      "url": "/dashboard/report?source=pwa-shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
