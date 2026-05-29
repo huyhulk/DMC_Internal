@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { format } from 'date-fns'
 import { Search, BarChart2, Layers } from 'lucide-react'
 import { VietnameseDatePicker } from '@/components/ui/vietnamese-date-picker'
-import { cn } from '@/lib/utils'
+import { cn, getTodayLocal } from '@/lib/utils'
 import type { ReportMode, WorkshopCode, GroupBy, FilterBy } from '@/lib/reports/report-types'
 import { WORKSHOP_CODES, WORKSHOP_LABEL } from '@/lib/reports/report-types'
+import { getReportPeriodRange } from '@/lib/reports/report-period'
 import { ProgressDetail, ProgressComparison } from './sections/progress-section'
 import { OutputSection } from './sections/output-section'
 import { QualitySection } from './sections/quality-section'
@@ -51,12 +51,12 @@ function daysBetween(from: string, to: string) {
 // ── Filter bar ────────────────────────────────────────────────────────────
 
 function FilterBar({
-  from, to, groupBy, filterBy,
-  onFrom, onTo, onGroupBy, onFilterBy,
+  from, to, baseDate, groupBy, filterBy,
+  onFrom, onTo, onBaseDate, onGroupBy, onFilterBy,
   onSearch, loading,
 }: {
-  from: string; to: string; groupBy: GroupBy; filterBy: FilterBy
-  onFrom: (v: string) => void; onTo: (v: string) => void
+  from: string; to: string; baseDate: string; groupBy: GroupBy; filterBy: FilterBy
+  onFrom: (v: string) => void; onTo: (v: string) => void; onBaseDate: (v: string) => void
   onGroupBy: (v: GroupBy) => void; onFilterBy: (v: FilterBy) => void
   onSearch: () => void; loading: boolean
 }) {
@@ -64,16 +64,30 @@ function FilterBar({
               'focus:outline-none focus:ring-1 focus:ring-dmc-primary/40 transition-all'
   const days = daysBetween(from, to)
   const hourBlocked = groupBy === 'hour' && days > 7
+  const isFixedPeriod = groupBy === 'week' || groupBy === 'month' || groupBy === 'year'
+  const periodHint = groupBy === 'week'
+    ? 'Tuần: tự động chọn Thứ 2 - Chủ nhật theo ngày mốc'
+    : groupBy === 'month'
+      ? 'Tháng: tự động chọn ngày đầu - cuối tháng theo ngày mốc'
+      : groupBy === 'year'
+        ? 'Năm: tự động chọn 01/01 - 31/12 theo ngày mốc'
+        : null
 
   return (
     <div className="flex flex-wrap items-end gap-3 p-4 bg-white rounded-2xl border border-[#d2d2d7]/60 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+      {isFixedPeriod && (
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Ngày mốc</label>
+          <VietnameseDatePicker value={baseDate} onChange={onBaseDate} className={inp} />
+        </div>
+      )}
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Từ</label>
-        <VietnameseDatePicker value={from} onChange={onFrom} className={inp} />
+        <VietnameseDatePicker value={from} onChange={onFrom} disabled={isFixedPeriod} className={inp} />
       </div>
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Đến</label>
-        <VietnameseDatePicker value={to} onChange={onTo} className={inp} />
+        <VietnameseDatePicker value={to} onChange={onTo} disabled={isFixedPeriod} className={inp} />
       </div>
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-[#6e6e73] uppercase tracking-wide">Nhóm theo</label>
@@ -109,6 +123,9 @@ function FilterBar({
       <div className="flex flex-col gap-1">
         {hourBlocked && (
           <p className="text-[11px] text-[#ff3b30]">Giờ: chọn khoảng ≤ 7 ngày</p>
+        )}
+        {periodHint && (
+          <p className="text-[11px] text-[#6e6e73]">{periodHint}</p>
         )}
         <button type="button" onClick={onSearch} disabled={loading || hourBlocked}
           className="h-9 px-5 rounded-xl bg-dmc-primary text-white text-[13px] font-semibold
@@ -157,10 +174,12 @@ const ErrorMsg = ({ msg }: { msg: string }) => (
 // ── Main dashboard ────────────────────────────────────────────────────────
 
 export function ReportDashboard() {
+  const today = getTodayLocal()
   const [mode, setMode]           = useState<ReportMode>('comparison')
   const [workshopId, setWorkshop] = useState<WorkshopCode>('DMC1')
-  const [from, setFrom]           = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [to, setTo]               = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [from, setFrom]           = useState(today)
+  const [to, setTo]               = useState(today)
+  const [baseDate, setBaseDate]   = useState(today)
   const [groupBy, setGroupBy]     = useState<GroupBy>('day')
   const [filterBy, setFilterBy]   = useState<FilterBy>(() => {
     if (typeof window === 'undefined') return 'production_date'
@@ -170,6 +189,20 @@ export function ReportDashboard() {
   const handleFilterBy = (v: FilterBy) => {
     setFilterBy(v)
     localStorage.setItem('report_filterBy', v)
+  }
+
+  const handleGroupBy = (nextGroupBy: GroupBy) => {
+    setGroupBy(nextGroupBy)
+    const nextRange = getReportPeriodRange(nextGroupBy, baseDate, from, to)
+    setFrom(nextRange.from)
+    setTo(nextRange.to)
+  }
+
+  const handleBaseDate = (nextBaseDate: string) => {
+    setBaseDate(nextBaseDate)
+    const nextRange = getReportPeriodRange(groupBy, nextBaseDate, from, to)
+    setFrom(nextRange.from)
+    setTo(nextRange.to)
   }
 
   const [progress, setProgress] = useState<SectionState>(INIT)
@@ -251,8 +284,8 @@ export function ReportDashboard() {
 
         {/* ── Filter bar ── */}
         <FilterBar
-          from={from} to={to} groupBy={groupBy} filterBy={filterBy}
-          onFrom={setFrom} onTo={setTo} onGroupBy={setGroupBy} onFilterBy={handleFilterBy}
+          from={from} to={to} baseDate={baseDate} groupBy={groupBy} filterBy={filterBy}
+          onFrom={setFrom} onTo={setTo} onBaseDate={handleBaseDate} onGroupBy={handleGroupBy} onFilterBy={handleFilterBy}
           onSearch={loadAll} loading={anyLoading}
         />
 
