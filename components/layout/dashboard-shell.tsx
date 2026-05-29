@@ -19,6 +19,7 @@ import { logoutAction, changePasswordAction } from '@/lib/actions/auth'
 import { ROLE_LABELS, type SessionUser, type TabId } from '@/types'
 import type { PermissionKey } from '@/lib/permissions/tabs'
 import { ChangePasswordDialog } from '@/components/shared/change-password-dialog'
+import { InstallAppPrompt } from '@/components/pwa/install-app-prompt'
 import { ApprovalNotificationBell } from '@/components/layout/approval-notification-bell'
 import {
   getAdministrationTabs,
@@ -819,6 +820,8 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, child
       <main className="flex-1 overflow-hidden">
         {children}
       </main>
+
+      <InstallAppPrompt />
 
       <ChangePasswordDialog
         open={showChangePass}
