@@ -152,13 +152,14 @@ jobs:
           esac
 
           write_conninfo() {
-            python3 - "$1" "$2" <<'PY'
+            python3 - "$1" "$2" "$3" <<'PY'
           import os
           import sys
           import urllib.parse
 
           url = os.environ[sys.argv[1]]
           out = sys.argv[2]
+          project_ref = sys.argv[3]
           u = urllib.parse.urlparse(url)
 
           def esc(value):
@@ -169,6 +170,9 @@ jobs:
           dbname = (u.path or '/postgres').lstrip('/') or 'postgres'
           user = urllib.parse.unquote(u.username or '')
           password = urllib.parse.unquote(u.password or '')
+
+          if 'pooler.supabase.com' in host and user == 'postgres':
+              user = f'postgres.{project_ref}'
 
           if not host or not user:
               raise SystemExit('Invalid database URL: missing host or user')
@@ -190,8 +194,9 @@ jobs:
 
           # Write libpq keyword/value connection strings so psql/pg_dump use TCP even
           # when a pooler URL contains a leading @ in the parsed hostname.
-          write_conninfo PROD_DB_URL /tmp/prod_db.conninfo
-          write_conninfo STAGING_DB_URL /tmp/staging_db.conninfo
+          # Supabase pooler requires username postgres.<project-ref>.
+          write_conninfo PROD_DB_URL /tmp/prod_db.conninfo hzuyucyxyohppxfwresq
+          write_conninfo STAGING_DB_URL /tmp/staging_db.conninfo vfzjweyzwjczrxphnvaa
 
       - name: Verify table availability and capture source counts
         env:
