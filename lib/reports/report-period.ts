@@ -1,4 +1,4 @@
-import { endOfMonth, endOfWeek, endOfYear, format, isValid, startOfMonth, startOfWeek, startOfYear } from 'date-fns'
+import { addDays, endOfMonth, endOfYear, format, isValid, startOfMonth, startOfYear, subDays } from 'date-fns'
 import type { GroupBy } from '@/lib/reports/report-types'
 
 export interface ReportPeriodRange {
@@ -25,6 +25,16 @@ function formatDateOnly(date: Date): string {
   return format(date, 'yyyy-MM-dd')
 }
 
+function getFridayBasedWeekRange(base: Date): ReportPeriodRange {
+  const daysSinceFriday = (base.getDay() + 2) % 7
+  const start = subDays(base, daysSinceFriday)
+
+  return {
+    from: formatDateOnly(start),
+    to: formatDateOnly(addDays(start, 6)),
+  }
+}
+
 export function getReportPeriodRange(
   groupBy: GroupBy,
   baseDate: string,
@@ -38,10 +48,7 @@ export function getReportPeriodRange(
   const base = parseDateOnly(baseDate) ?? parseDateOnly(currentFrom) ?? new Date()
 
   if (groupBy === 'week') {
-    return {
-      from: formatDateOnly(startOfWeek(base, { weekStartsOn: 1 })),
-      to: formatDateOnly(endOfWeek(base, { weekStartsOn: 1 })),
-    }
+    return getFridayBasedWeekRange(base)
   }
 
   if (groupBy === 'month') {
