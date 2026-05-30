@@ -244,12 +244,15 @@ jobs:
             --table='public."Production"' \
             --table='public."Norm"' \
             --table='public."Material"' \
-            --table='public.production_order_status' \
             --file=/tmp/main_core_data.sql
 
+          psql "$(cat /tmp/prod_db.conninfo)" -v ON_ERROR_STOP=1 -c "\\copy (select pcode, status, produced_quantity, quantity, completion_pct, null::uuid as updated_by, updated_at from public.production_order_status) to '/tmp/production_order_status.csv' with (format csv, header true)"
+
           test -s /tmp/main_core_data.sql
-          echo "Dump completed. Production was accessed with default_transaction_read_only=on."
+          test -s /tmp/production_order_status.csv
+          echo "Dump completed. Production was accessed with default_transaction_read_only=on. production_order_status.updated_by is nulled for staging because it references production auth.users."
           grep -E "^(COPY|INSERT INTO)" /tmp/main_core_data.sql | sed 's/ FROM stdin;//' || true
+          echo "COPY public.production_order_status (pcode, status, produced_quantity, quantity, completion_pct, updated_by, updated_at)"
 
       - name: Replace staging core data
         env:
@@ -270,6 +273,7 @@ jobs:
           SQL
 
           psql "$(cat /tmp/staging_db.conninfo)" -v ON_ERROR_STOP=1 -f /tmp/main_core_data.sql
+          psql "$(cat /tmp/staging_db.conninfo)" -v ON_ERROR_STOP=1 -c "\\copy public.production_order_status (pcode, status, produced_quantity, quantity, completion_pct, updated_by, updated_at) from '/tmp/production_order_status.csv' with (format csv, header true)"
 
       - name: Verify staging row counts
         env:
