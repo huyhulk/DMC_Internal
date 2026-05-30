@@ -138,14 +138,17 @@ jobs:
             exit 1
           fi
 
-          case "${prod_host}" in
+          # Supabase pooler URLs can share the same pooler host. The project ref is
+          # embedded in the parsed URL parts (commonly the username), so validate
+          # against the parsed target identity rather than host only.
+          case "${prod_parts}" in
             *hzuyucyxyohppxfwresq*) ;;
-            *) echo "Unexpected production host: ${prod_host}"; exit 1 ;;
+            *) echo "Unexpected production target identity."; exit 1 ;;
           esac
 
-          case "${staging_host}" in
+          case "${staging_parts}" in
             *vfzjweyzwjczrxphnvaa*) ;;
-            *) echo "Unexpected staging host: ${staging_host}"; exit 1 ;;
+            *) echo "Unexpected staging target identity."; exit 1 ;;
           esac
 
       - name: Verify table availability and capture source counts
