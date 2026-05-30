@@ -15,17 +15,24 @@ describe('getReportPeriodRange', () => {
     })
   })
 
-  it('returns Monday to Sunday for week grouping', () => {
+  it('returns Friday to Thursday for week grouping', () => {
     expect(getReportPeriodRange('week', '2026-05-13', '2026-05-01', '2026-05-03')).toEqual({
-      from: '2026-05-11',
-      to: '2026-05-17',
+      from: '2026-05-08',
+      to: '2026-05-14',
     })
   })
 
-  it('keeps Sunday in the same ISO week', () => {
-    expect(getReportPeriodRange('week', '2026-05-17', '2026-05-01', '2026-05-03')).toEqual({
-      from: '2026-05-11',
-      to: '2026-05-17',
+  it('keeps Thursday in the Friday-based report week', () => {
+    expect(getReportPeriodRange('week', '2026-05-14', '2026-05-01', '2026-05-03')).toEqual({
+      from: '2026-05-08',
+      to: '2026-05-14',
+    })
+  })
+
+  it('starts a new report week on Friday', () => {
+    expect(getReportPeriodRange('week', '2026-05-15', '2026-05-01', '2026-05-03')).toEqual({
+      from: '2026-05-15',
+      to: '2026-05-21',
     })
   })
 

@@ -66,7 +66,7 @@ function FilterBar({
   const hourBlocked = groupBy === 'hour' && days > 7
   const isFixedPeriod = groupBy === 'week' || groupBy === 'month' || groupBy === 'year'
   const periodHint = groupBy === 'week'
-    ? 'Tuần: tự động chọn Thứ 2 - Chủ nhật theo ngày mốc'
+    ? 'Tuần: tự động chọn Thứ 6 - Thứ 5 theo ngày mốc'
     : groupBy === 'month'
       ? 'Tháng: tự động chọn ngày đầu - cuối tháng theo ngày mốc'
       : groupBy === 'year'
