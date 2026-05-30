@@ -111,7 +111,7 @@ jobs:
           set -Eeuo pipefail
 
           parse_url() {
-            python3 -c 'import os, sys, urllib.parse; u=urllib.parse.urlparse(os.environ[sys.argv[1]]); print("|".join([u.hostname or "", str(u.port or ""), (u.path or "").lstrip("/"), u.username or ""]))' "$1"
+            python3 -c 'import os, sys, urllib.parse; u=urllib.parse.urlparse(os.environ[sys.argv[1]]); print("|".join([(u.hostname or "").lstrip("@"), str(u.port or ""), (u.path or "").lstrip("/"), u.username or ""]))' "$1"
           }
 
           prod_parts="$(parse_url PROD_DB_URL)"
@@ -151,6 +151,48 @@ jobs:
             *) echo "Unexpected staging target identity."; exit 1 ;;
           esac
 
+          write_conninfo() {
+            python3 - "$1" "$2" <<'PY'
+          import os
+          import sys
+          import urllib.parse
+
+          url = os.environ[sys.argv[1]]
+          out = sys.argv[2]
+          u = urllib.parse.urlparse(url)
+
+          def esc(value):
+              return (value or '').replace('\\', '\\\\').replace("'", "\\'")
+
+          host = (u.hostname or '').lstrip('@')
+          port = str(u.port or '5432')
+          dbname = (u.path or '/postgres').lstrip('/') or 'postgres'
+          user = urllib.parse.unquote(u.username or '')
+          password = urllib.parse.unquote(u.password or '')
+
+          if not host or not user:
+              raise SystemExit('Invalid database URL: missing host or user')
+
+          conninfo = ' '.join([
+              f"host='{esc(host)}'",
+              f"port='{esc(port)}'",
+              f"dbname='{esc(dbname)}'",
+              f"user='{esc(user)}'",
+              f"password='{esc(password)}'",
+              "sslmode='require'",
+          ])
+
+          with open(out, 'w', encoding='utf-8') as f:
+              f.write(conninfo)
+          PY
+            chmod 600 "$2"
+          }
+
+          # Write libpq keyword/value connection strings so psql/pg_dump use TCP even
+          # when a pooler URL contains a leading @ in the parsed hostname.
+          write_conninfo PROD_DB_URL /tmp/prod_db.conninfo
+          write_conninfo STAGING_DB_URL /tmp/staging_db.conninfo
+
       - name: Verify table availability and capture source counts
         env:
           PROD_DB_URL: ${{ secrets.PROD_DB_URL }}
@@ -169,10 +211,10 @@ jobs:
           SQL
 
           echo "Production source row counts:"
-          psql "${PROD_DB_URL}" -v ON_ERROR_STOP=1 -f /tmp/counts.sql | tee /tmp/prod_counts.txt
+          psql "$(cat /tmp/prod_db.conninfo)" -v ON_ERROR_STOP=1 -f /tmp/counts.sql | tee /tmp/prod_counts.txt
 
           echo "Staging pre-sync row counts:"
-          psql "${STAGING_DB_URL}" -v ON_ERROR_STOP=1 -f /tmp/counts.sql | tee /tmp/staging_before_counts.txt
+          psql "$(cat /tmp/staging_db.conninfo)" -v ON_ERROR_STOP=1 -f /tmp/counts.sql | tee /tmp/staging_before_counts.txt
 
       - name: Dump core data from production/main read-only
         env:
@@ -181,7 +223,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          pg_dump "${PROD_DB_URL}" \
+          pg_dump "$(cat /tmp/prod_db.conninfo)" \
             --data-only \
             --no-owner \
             --no-privileges \
@@ -202,7 +244,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          psql "${STAGING_DB_URL}" -v ON_ERROR_STOP=1 <<'SQL'
+          psql "$(cat /tmp/staging_db.conninfo)" -v ON_ERROR_STOP=1 <<'SQL'
           begin;
           truncate table
             public.production_order_status,
@@ -214,7 +256,7 @@ jobs:
           commit;
           SQL
 
-          psql "${STAGING_DB_URL}" -v ON_ERROR_STOP=1 -f /tmp/main_core_data.sql
+          psql "$(cat /tmp/staging_db.conninfo)" -v ON_ERROR_STOP=1 -f /tmp/main_core_data.sql
 
       - name: Verify staging row counts
         env:
@@ -232,7 +274,7 @@ jobs:
           SQL
 
           echo "Staging post-sync row counts:"
-          psql "${STAGING_DB_URL}" -v ON_ERROR_STOP=1 -f /tmp/counts.sql | tee /tmp/staging_after_counts.txt
+          psql "$(cat /tmp/staging_db.conninfo)" -v ON_ERROR_STOP=1 -f /tmp/counts.sql | tee /tmp/staging_after_counts.txt
 
           prod_counts="$(grep -E '^( data| Material| Norm| Production| production_order_status) ' /tmp/prod_counts.txt | tr -d ' ')"
           staging_counts="$(grep -E '^( data| Material| Norm| Production| production_order_status) ' /tmp/staging_after_counts.txt | tr -d ' ')"
