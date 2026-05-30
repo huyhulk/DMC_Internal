@@ -215,6 +215,7 @@ export function DashboardShell({ user, visibleTabs, visiblePermissionKeys, child
   }
 
   if (pathname.startsWith('/dashboard/coordination/daily-report')) return <>{children}</>
+  if (pathname.startsWith('/dashboard/mobile-production')) return <>{children}</>
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#f5f5f7]">

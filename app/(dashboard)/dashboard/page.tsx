@@ -6,6 +6,10 @@ export default async function DashboardPage() {
   const user = await getSessionUser()
   if (!user) redirect('/login')
 
+  if (user.role === 'TEAM_LEADER') {
+    redirect('/dashboard/mobile-production')
+  }
+
   const visibleTabs = await getVisibleTopLevelTabs(user.role)
   redirect(`/dashboard/${visibleTabs[0] ?? 'production'}`)
 }

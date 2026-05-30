@@ -135,6 +135,63 @@ export interface Database {
           updated_at?: string
         }
       }
+      semi_finished_production: {
+        Row: {
+          id: number
+          pdate: string
+          pcode: string
+          workshop: string
+          products: string | null
+          material: string | null
+          quantity: number
+          defect_quantity: number
+          recycle_quantity: number
+          workforce: number
+          starttime: string | null
+          endtime: string | null
+          realnorm: number
+          log: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: number
+          pdate: string
+          pcode: string
+          workshop: string
+          products?: string | null
+          material?: string | null
+          quantity?: number
+          defect_quantity?: number
+          recycle_quantity?: number
+          workforce?: number
+          starttime?: string | null
+          endtime?: string | null
+          realnorm?: number
+          log?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          pdate?: string
+          pcode?: string
+          workshop?: string
+          products?: string | null
+          material?: string | null
+          quantity?: number
+          defect_quantity?: number
+          recycle_quantity?: number
+          workforce?: number
+          starttime?: string | null
+          endtime?: string | null
+          realnorm?: number
+          log?: string | null
+          created_by?: string | null
+          updated_at?: string | null
+        }
+      }
       Production: {
         Row: {
           id: number

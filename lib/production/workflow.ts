@@ -1,5 +1,5 @@
 import { normalizeProductionStatus } from '@/lib/production/status'
-import { normalizeWorkshop, workshopCode } from '@/lib/utils'
+import { normalizeWorkshop, parseDecimalInput, workshopCode } from '@/lib/utils'
 import type { NormItem, OpenProductionOrder, Order } from '@/types'
 
 export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
@@ -47,6 +47,61 @@ export interface DeadlineProductionPlanSummary {
 }
 
 const PRODUCTION_APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+const DMC1_PRODUCTION_ENTRY_WORKSHOPS = new Set(['DMC1', 'DMC1-CT', 'DMC1-PK', 'DMC1-PU'])
+const OTHER_PRODUCTION_ENTRY_TASKS = new Set(['5S', 'Đào tạo', 'Hỗ trợ PX khác'])
+
+function getProductionEntryWorkshopCode(workshop: string): string {
+  const normalizedWorkshop = normalizeWorkshop(workshop)
+  const directCode = normalizedWorkshop.trim().toUpperCase()
+  if (DMC1_PRODUCTION_ENTRY_WORKSHOPS.has(directCode)) return directCode
+  return workshopCode(normalizedWorkshop)
+}
+
+export function isOtherProductionEntryTask(pcode: string): boolean {
+  return OTHER_PRODUCTION_ENTRY_TASKS.has(pcode)
+}
+
+export function getOtherProductionEntryBaseWorkshop(workshop: string): string {
+  const normalizedWorkshop = workshop.replace(/^Việc khác\s*-\s*/i, '')
+  return getProductionEntryBaseWorkshop(normalizedWorkshop)
+}
+
+export function getProductionEntryWorkshop(workshop: string, description: string | null | undefined): string {
+  const normalizedWorkshop = normalizeWorkshop(workshop)
+  const baseCode = workshopCode(normalizedWorkshop)
+  if (baseCode !== 'DMC1') return normalizedWorkshop
+
+  const normalizedDescription = (description ?? '').toLocaleLowerCase('vi')
+  if (normalizedDescription.includes('pu')) return 'DMC1-PU'
+  if (normalizedDescription.includes('phụ kiện') || normalizedDescription.includes('pk')) return 'DMC1-PK'
+  return 'DMC1-CT'
+}
+
+export function getProductionEntryBaseWorkshop(workshop: string): string {
+  const normalizedWorkshop = normalizeWorkshop(workshop)
+  const code = getProductionEntryWorkshopCode(normalizedWorkshop)
+  if (DMC1_PRODUCTION_ENTRY_WORKSHOPS.has(code)) return 'DMC1'
+  return code || normalizedWorkshop
+}
+
+export function isProductionEntryWorkspaceAllowed(
+  entryWorkshop: string,
+  role: string,
+  userWorkspaces: string[],
+  workspace?: string | null,
+): boolean {
+  if (role === 'ADMIN') return true
+  if (workspace?.trim().toUpperCase() === 'ALL') return true
+  if (userWorkspaces.length === 0) return false
+
+  const entryCode = getProductionEntryWorkshopCode(entryWorkshop)
+  return userWorkspaces.some((workspace) => {
+    const workspaceCode = getProductionEntryWorkshopCode(workspace)
+    if (workspaceCode === 'DMC1') return DMC1_PRODUCTION_ENTRY_WORKSHOPS.has(entryCode)
+    if (DMC1_PRODUCTION_ENTRY_WORKSHOPS.has(workspaceCode)) return entryCode === workspaceCode
+    return getProductionEntryBaseWorkshop(entryCode) === workspaceCode
+  })
+}
 
 export function getProductionOrderStatusRank(status: string): number {
   const normalized = normalizeProductionStatus(status)
@@ -82,15 +137,13 @@ export function calculateProductionCompletion(quantity: number, produced: number
   }
 }
 
-export function getProductionEntryWorkshop(workshop: string, description: string | null | undefined): string {
-  const normalizedWorkshop = normalizeWorkshop(workshop)
-  const baseCode = workshopCode(normalizedWorkshop)
-  if (baseCode !== 'DMC1') return normalizedWorkshop
-
-  const normalizedDescription = (description ?? '').toLocaleLowerCase('vi')
-  if (normalizedDescription.includes('pu')) return 'DMC1-PU'
-  if (normalizedDescription.includes('phụ kiện') || normalizedDescription.includes('pk')) return 'DMC1-PK'
-  return 'DMC1-CT'
+export function calculateRemainingProductionOutput(
+  orderQuantity: string | number | null | undefined,
+  previousLines: Array<Pick<ProductionInputRow, 'poutput'>>,
+): number {
+  const quantity = parseDecimalInput(orderQuantity)
+  const usedQuantity = previousLines.reduce((sum, line) => sum + parseDecimalInput(line.poutput), 0)
+  return Math.max(0, Math.round((quantity - usedQuantity) * 1000) / 1000)
 }
 
 function normalizeDeadlinePlanText(value: string): string {
@@ -374,7 +427,7 @@ export function isOpenProductionOrder(
   closed: boolean,
 ): boolean {
   if (closed) return false
-  const quantity = Number(order.quantity) || 0
+  const quantity = parseDecimalInput(order.quantity)
   return calculateProductionCompletion(quantity, produced).completionPct < 100
 }
 

@@ -66,7 +66,15 @@ export async function loginAction(formData: FormData) {
 
   logger.info({ username, userId: data.user.id }, 'Login success')
   revalidatePath('/', 'layout')
-  redirect('/dashboard/production')
+
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', data.user.id)
+    .single()
+  const profile = profileData as { role?: UserRole } | null
+
+  redirect(profile?.role === 'TEAM_LEADER' ? '/dashboard/mobile-production' : '/dashboard/production')
 }
 
 export async function logoutAction() {

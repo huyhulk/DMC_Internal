@@ -7,7 +7,11 @@ import {
   calculateProductionCompletion,
   calculateProductionCompletionTime,
   getOpenProductionOrdersQueryWindow,
+  getProductionEntryBaseWorkshop,
+  getProductionEntryWorkshop,
   getProductionRowsValidationError,
+  isOtherProductionEntryTask,
+  isProductionEntryWorkspaceAllowed,
   shouldAutoCloseProductionOrder,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
@@ -24,7 +28,7 @@ import {
   shouldShowOpenProductionOrder,
 } from '@/lib/production/status'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
-import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, workshopCode } from '@/lib/utils'
+import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, parseDecimalInput, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
 import type { InitData, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
@@ -43,12 +47,36 @@ type ProductionOrderStatusRow = Pick<
   Database['public']['Tables']['production_order_status']['Row'],
   'pcode' | 'status' | 'produced_quantity' | 'quantity' | 'completion_pct' | 'updated_at'
 >
+type SemiFinishedProductionInsert = Database['public']['Tables']['semi_finished_production']['Insert']
+type SemiFinishedProductionInput = {
+  pdate: string
+  pcode: string
+  workshop?: string
+  products: string
+  material?: string
+  quantity: number
+  defect_quantity: number
+  recycle_quantity: number
+  workforce: number
+  starttime: string
+  endtime: string
+  realnorm: number
+  log: string
+}
 
 // Columns that exist in the "data" table (uppercase, no deadlinetime, no created_at)
 const DATA_SELECT = 'PCODE,INITIALDATE,CUSTOMER,WORKSHOP,DESCRIPTION,QUANTITY,DEADLINEDATE,STATUS'
 const SUPABASE_PAGE_SIZE = 1000
 
 function mapDataRowToOrder(row: DataRow): Order {
+  return mapDataRowToOrderWithWorkshop(row, normalizeWorkshop(row.WORKSHOP ?? ''))
+}
+
+function mapDataRowToProductionEntryOrder(row: DataRow): Order {
+  return mapDataRowToOrderWithWorkshop(row, getProductionEntryWorkshop(row.WORKSHOP ?? '', row.DESCRIPTION))
+}
+
+function mapDataRowToOrderWithWorkshop(row: DataRow, workshop: string): Order {
   // DEADLINEDATE is "TIMESTAMP WITHOUT TIME ZONE" → "2026-04-13T11:00:00"
   // Split into date "2026-04-13" and time "11:00" for clean display
   const deadlineRaw = row.DEADLINEDATE ?? ''
@@ -58,7 +86,7 @@ function mapDataRowToOrder(row: DataRow): Order {
   return {
     pcode: row.PCODE,
     initialdate: row.INITIALDATE ?? '',
-    workshop: normalizeWorkshop(row.WORKSHOP ?? ''),
+    workshop,
     customer: row.CUSTOMER ?? '',
     quantity: row.QUANTITY != null ? String(row.QUANTITY) : '',
     description: row.DESCRIPTION ?? '',
@@ -110,13 +138,13 @@ export async function getInitData(
     }
 
     const orders: Order[] = ((dataRes.data ?? []) as DataRow[])
-      .filter((row) => {
-        const ws = normalizeWorkshop(row.WORKSHOP ?? '') // "DMC1 - Tôn & Phụ kiện"
-        const code = workshopCode(ws)                    // "DMC1"
-        const allowed = isWorkspaceAllowed(ws, role, userWorkspaces)
-        return allowed && (!hasNormData || validWorkshops.has(code))
+      .map((row) => ({ row, entryWorkshop: getProductionEntryWorkshop(row.WORKSHOP ?? '', row.DESCRIPTION) }))
+      .filter(({ entryWorkshop }) => {
+        const baseWorkshop = getProductionEntryBaseWorkshop(entryWorkshop)
+        const allowed = isProductionEntryWorkspaceAllowed(entryWorkshop, role, userWorkspaces, rawWorkspace)
+        return allowed && (!hasNormData || validWorkshops.has(baseWorkshop))
       })
-      .map(mapDataRowToOrder)
+      .map(({ row }) => mapDataRowToProductionEntryOrder(row))
 
     const orderPcodes = orders.map((order) => order.pcode)
     const { data: cumulativeProductionRows, error: cumulativeProductionError } = orderPcodes.length > 0
@@ -185,7 +213,7 @@ export async function searchOrderByPcode(
       return { success: false, message: `Không tìm thấy mã ${pcode}` }
     }
 
-    const order = mapDataRowToOrder(data as DataRow)
+    const order = mapDataRowToProductionEntryOrder(data as DataRow)
     const { data: productionRows, error: productionError } = await supabase
       .from('Production')
       .select('pcode,poutput,save_status')
@@ -208,8 +236,8 @@ export async function searchOrderByPcode(
       if (profileData) {
         const p = profileData as { role: string; workspace: string }
         const ws = getUserWorkspaces(p.workspace ?? '')
-        if (!isWorkspaceAllowed(order.workshop, p.role, ws)) {
-          return { success: false, message: `Không có quyền truy cập mã ${pcode} (xưởng ${workshopCode(order.workshop)}).` }
+        if (!isProductionEntryWorkspaceAllowed(order.workshop, p.role, ws, p.workspace)) {
+          return { success: false, message: `Không có quyền truy cập mã ${pcode} (xưởng ${order.workshop}).` }
         }
       }
     }
@@ -416,10 +444,11 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       getCachedMaterials(),
       fetchDataRowsUpToDate(supabase, today),
     ])
-    const scopedDataRows = dataRows.filter((row) =>
-      isWorkspaceAllowed(normalizeWorkshop(row.WORKSHOP ?? ''), role, userWorkspaces)
-    )
-    const scopedOrders = scopedDataRows.map(mapDataRowToOrder)
+    const scopedDataRows = dataRows.filter((row) => {
+      const entryWorkshop = getProductionEntryWorkshop(row.WORKSHOP ?? '', row.DESCRIPTION)
+      return isProductionEntryWorkspaceAllowed(entryWorkshop, role, userWorkspaces, rawWorkspace)
+    })
+    const scopedOrders = scopedDataRows.map(mapDataRowToProductionEntryOrder)
     const pcodes = [...new Set(scopedOrders.map((order) => order.pcode).filter(Boolean))]
     const quantityByPcode = new Map(scopedOrders.map((order) => [order.pcode, Number(order.quantity) || 0]))
 
@@ -490,8 +519,11 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
       .map((order) => order.pcode)
 
     const closedPcodeSet = new Set(closedPcodes)
+    const todayDate = now.toLocaleDateString('en-CA')
     const orders = sortProductionOrdersForEntry(
       effectiveOrders.filter((order) => {
+        if (closedPcodeSet.has(order.pcode) && order.completedAt?.slice(0, 10) !== todayDate) return false
+
         if (!shouldShowOpenProductionOrder({
           status: order.status,
           closed: closedPcodeSet.has(order.pcode),
@@ -555,6 +587,27 @@ export async function recordProductionAction(rows: Array<{
     const profile = profileData as { role: string; workspace: string }
     const userWorkspaces = getUserWorkspaces(profile.workspace ?? '')
 
+    const uniquePcodes = [...new Set(rows.map((r) => r.pcode).filter(Boolean))]
+    const productionPcodes = uniquePcodes.filter((pcode) => !isOtherProductionEntryTask(pcode))
+    const { data: orderData, error: orderError } = productionPcodes.length > 0
+      ? await supabase
+          .from('data')
+          .select('PCODE,QUANTITY,STATUS,WORKSHOP,DESCRIPTION')
+          .in('PCODE', productionPcodes)
+      : { data: [], error: null }
+
+    if (orderError) {
+      logger.error({ error: orderError.message, pcodes: productionPcodes, userId: user.id }, 'recordProduction status source error')
+      return { success: false, message: `Lỗi đọc trạng thái LSX: ${orderError.message}` }
+    }
+
+    const statusDataRows = (orderData ?? []) as Array<{ PCODE: string; QUANTITY: number | null; STATUS: string | null; WORKSHOP: string | null; DESCRIPTION: string | null }>
+    const foundPcodes = new Set(statusDataRows.map((row) => row.PCODE))
+    const missingPcode = productionPcodes.find((pcode) => !foundPcodes.has(pcode))
+    if (missingPcode) {
+      return { success: false, message: `Không tìm thấy mã ${missingPcode}.` }
+    }
+
     // ── 2. Workshop permission check — only ADMIN is unrestricted ───────────
     // MANAGER/SUPERVISOR/USER are all workspace-scoped.
     if (profile.role !== 'ADMIN') {
@@ -563,31 +616,16 @@ export async function recordProductionAction(rows: Array<{
         'recordProduction: permission check'
       )
 
-      // Empty workspace = full access (admin explicitly left it blank to mean "all").
-      // This is logged above so misconfigurations are visible in server logs.
-      if (userWorkspaces.length > 0) {
-        const uniquePcodes = [...new Set(rows.map((r) => r.pcode).filter(Boolean))]
-
-        const { data: orderData } = await supabase
-          .from('data').select('PCODE,WORKSHOP').in('PCODE', uniquePcodes)
-
-        const foundPcodes = new Set(((orderData ?? []) as Array<{ PCODE: string }>).map((row) => row.PCODE))
-        const missingPcode = uniquePcodes.find((pcode) => !foundPcodes.has(pcode))
-        if (missingPcode) {
-          return { success: false, message: `Không tìm thấy mã ${missingPcode}.` }
-        }
-
-        for (const row of (orderData ?? []) as Array<{ PCODE: string; WORKSHOP: string | null }>) {
-          const ws = normalizeWorkshop(row.WORKSHOP ?? '')
-          if (!isWorkspaceAllowed(ws, profile.role, userWorkspaces)) {
-            logger.warn(
-              { userId: user.id, pcode: row.PCODE, workshop: workshopCode(ws), userWorkspaces },
-              'recordProduction: unauthorized workshop — blocked'
-            )
-            return {
-              success: false,
-              message: `Không có quyền nhập sản xuất cho xưởng ${workshopCode(ws)}. Bạn chỉ được phép nhập cho: ${userWorkspaces.join(', ')}.`,
-            }
+      for (const row of statusDataRows) {
+        const entryWorkshop = getProductionEntryWorkshop(row.WORKSHOP ?? '', row.DESCRIPTION)
+        if (!isProductionEntryWorkspaceAllowed(entryWorkshop, profile.role, userWorkspaces, profile.workspace)) {
+          logger.warn(
+            { userId: user.id, pcode: row.PCODE, workshop: entryWorkshop, userWorkspaces },
+            'recordProduction: unauthorized workshop — blocked'
+          )
+          return {
+            success: false,
+            message: `Không có quyền nhập sản xuất cho xưởng ${entryWorkshop}. Bạn chỉ được phép nhập cho: ${userWorkspaces.join(', ')}.`,
           }
         }
       }
@@ -597,25 +635,6 @@ export async function recordProductionAction(rows: Array<{
     const validationError = getProductionRowsValidationError(rows)
     if (validationError) {
       return { success: false, message: validationError }
-    }
-
-    const uniquePcodes = [...new Set(rows.map((r) => r.pcode).filter(Boolean))]
-    const { data: orderData, error: orderError } = await supabase
-      .from('data')
-      .select('PCODE,QUANTITY,STATUS,WORKSHOP')
-      .in('PCODE', uniquePcodes)
-
-    if (orderError) {
-      logger.error({ error: orderError.message, pcodes: uniquePcodes, userId: user.id }, 'recordProduction status source error')
-      return { success: false, message: `Lỗi đọc trạng thái LSX: ${orderError.message}` }
-    }
-
-    const statusDataRows = (orderData ?? []) as Array<{ PCODE: string; QUANTITY: number | null; STATUS: string | null; WORKSHOP: string | null }>
-    const foundPcodes = new Set(statusDataRows.map((row) => row.PCODE))
-    const productionPcodes = uniquePcodes.filter((pcode) => !pcode.startsWith('5S') && !pcode.startsWith('Đào tạo') && !pcode.startsWith('Hỗ trợ PX khác'))
-    const missingPcode = productionPcodes.find((pcode) => !foundPcodes.has(pcode))
-    if (missingPcode) {
-      return { success: false, message: `Không tìm thấy mã ${missingPcode}.` }
     }
 
     const productionLockRes = productionPcodes.length > 0
@@ -639,11 +658,28 @@ export async function recordProductionAction(rows: Array<{
       return { success: false, message: `LSX ${lockedPcodes.join(', ')} đã đóng hoặc đã đủ sản lượng, không thể nhập thêm.` }
     }
 
-    let { error } = await supabase.from('Production').insert(rows)
+    const statusDataRowsByPcode = new Map(statusDataRows.map((row) => [row.PCODE, row]))
+    const insertRows = rows.map((row) => {
+      const sourceRow = statusDataRowsByPcode.get(row.pcode)
+      const entryWorkshop = sourceRow
+        ? getProductionEntryWorkshop(sourceRow.WORKSHOP ?? '', sourceRow.DESCRIPTION)
+        : row.totalem
+      return {
+        ...row,
+        totalem: getProductionEntryBaseWorkshop(entryWorkshop),
+        poutput: parseDecimalInput(row.poutput),
+        eoutput: parseDecimalInput(row.eoutput),
+        routput: parseDecimalInput(row.routput),
+        workforce: parseDecimalInput(row.workforce),
+        realnorm: parseDecimalInput(row.realnorm),
+      }
+    })
+
+    let { error } = await supabase.from('Production').insert(insertRows)
 
     if (error?.code === '23505' && error.message.includes('Production_pkey')) {
       await repairProductionIdSequence(supabase)
-      const retry = await supabase.from('Production').insert(rows)
+      const retry = await supabase.from('Production').insert(insertRows)
       error = retry.error
     }
 
@@ -682,6 +718,110 @@ export async function recordProductionAction(rows: Array<{
   }
 }
 
+export async function recordSemiFinishedProductionAction(rows: SemiFinishedProductionInput[]): Promise<{ success: boolean; message: string }> {
+  try {
+    const editor = await requireTabEdit('production')
+    if (!editor) return { success: false, message: 'Bạn chỉ có quyền xem tab này.' }
+
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return { success: false, message: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.' }
+    }
+
+    const { data: profileData } = await supabase
+      .from('profiles').select('role,workspace').eq('id', user.id).single()
+    if (!profileData) {
+      return { success: false, message: 'Không tìm thấy thông tin người dùng.' }
+    }
+
+    const profile = profileData as { role: string; workspace: string }
+    const userWorkspaces = getUserWorkspaces(profile.workspace ?? '')
+    const uniquePcodes = [...new Set(rows.map((row) => row.pcode).filter(Boolean))]
+
+    const { data: orderData, error: orderError } = uniquePcodes.length > 0
+      ? await supabase
+          .from('data')
+          .select('PCODE,WORKSHOP,DESCRIPTION')
+          .in('PCODE', uniquePcodes)
+      : { data: [], error: null }
+
+    if (orderError) {
+      logger.error({ error: orderError.message, pcodes: uniquePcodes, userId: user.id }, 'recordSemiFinishedProduction source error')
+      return { success: false, message: `Lỗi đọc LSX: ${orderError.message}` }
+    }
+
+    const orderRows = (orderData ?? []) as Array<{ PCODE: string; WORKSHOP: string | null; DESCRIPTION: string | null }>
+    const orderRowsByPcode = new Map(orderRows.map((row) => [row.PCODE, row]))
+    const missingPcode = uniquePcodes.find((pcode) => !orderRowsByPcode.has(pcode))
+    if (missingPcode) return { success: false, message: `Không tìm thấy mã ${missingPcode}.` }
+
+    for (const row of orderRows) {
+      const entryWorkshop = getProductionEntryWorkshop(row.WORKSHOP ?? '', row.DESCRIPTION)
+      if (!isProductionEntryWorkspaceAllowed(entryWorkshop, profile.role, userWorkspaces, profile.workspace)) {
+        logger.warn(
+          { userId: user.id, pcode: row.PCODE, workshop: entryWorkshop, userWorkspaces },
+          'recordSemiFinishedProduction: unauthorized workshop — blocked'
+        )
+        return {
+          success: false,
+          message: `Không có quyền nhập bán thành phẩm cho xưởng ${entryWorkshop}. Bạn chỉ được phép nhập cho: ${userWorkspaces.join(', ')}.`,
+        }
+      }
+    }
+
+    const validationError = getProductionRowsValidationError(rows.map((row) => ({
+      pdate: row.pdate,
+      pcode: row.pcode,
+      products: row.products,
+      poutput: parseDecimalInput(row.quantity),
+      eoutput: parseDecimalInput(row.defect_quantity),
+      routput: parseDecimalInput(row.recycle_quantity),
+      workforce: parseDecimalInput(row.workforce),
+      starttime: row.starttime,
+      endtime: row.endtime,
+    })))
+    if (validationError) return { success: false, message: validationError }
+
+    const insertRows: SemiFinishedProductionInsert[] = rows.map((row) => {
+      const sourceRow = orderRowsByPcode.get(row.pcode)
+      const entryWorkshop = sourceRow
+        ? getProductionEntryWorkshop(sourceRow.WORKSHOP ?? '', sourceRow.DESCRIPTION)
+        : row.workshop ?? ''
+
+      return {
+        pdate: row.pdate,
+        pcode: row.pcode,
+        workshop: getProductionEntryBaseWorkshop(entryWorkshop),
+        products: row.products,
+        material: row.material ?? '',
+        quantity: parseDecimalInput(row.quantity),
+        defect_quantity: parseDecimalInput(row.defect_quantity),
+        recycle_quantity: parseDecimalInput(row.recycle_quantity),
+        workforce: parseDecimalInput(row.workforce),
+        starttime: row.starttime,
+        endtime: row.endtime,
+        realnorm: parseDecimalInput(row.realnorm),
+        log: row.log,
+        created_by: user.id,
+      }
+    })
+
+    const { error } = await supabase.from('semi_finished_production').insert(insertRows)
+    if (error) {
+      logger.error({ error: error.message }, 'recordSemiFinishedProduction DB error')
+      return { success: false, message: `Lỗi: ${error.message}` }
+    }
+
+    logger.info({ count: rows.length, userId: user.id }, 'Semi-finished production recorded')
+    return { success: true, message: `Đã lưu ${rows.length} dòng bán thành phẩm thành công!` }
+  } catch (err) {
+    logger.error({ err }, 'recordSemiFinishedProductionAction error')
+    return { success: false, message: String(err) }
+  }
+}
+
 export async function listProductionInputHistoryAction(filters: {
   fromDate: string
   toDate: string
@@ -716,7 +856,7 @@ export async function listProductionInputHistoryAction(filters: {
     const rows: ProductionInputHistoryRow[] = prodRows
       .map((row) => {
         const order = orderMap.get(row.pcode ?? '')
-        const workshop = normalizeWorkshop(order?.WORKSHOP ?? '')
+        const workshop = getProductionEntryWorkshop(order?.WORKSHOP ?? '', order?.DESCRIPTION)
         return {
           id: row.id,
           pdate: row.pdate ?? '',
@@ -737,7 +877,7 @@ export async function listProductionInputHistoryAction(filters: {
           created_at: row.created_at ?? '',
         }
       })
-      .filter((row) => isWorkspaceAllowed(row.workshop, viewer.role, userWorkspaces))
+      .filter((row) => isProductionEntryWorkspaceAllowed(row.workshop, viewer.role, userWorkspaces, viewer.workspace))
       .filter((row) => {
         if (!needle) return true
         const statusLabel = row.save_status === 'closed' ? 'đã đóng da dong closed' : 'lưu tạm luu tam draft'
