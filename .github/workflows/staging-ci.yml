@@ -171,7 +171,7 @@ jobs:
           user = urllib.parse.unquote(u.username or '')
           password = urllib.parse.unquote(u.password or '')
 
-          if 'pooler.supabase.com' in host and user == 'postgres':
+          if 'pooler.supabase.com' in host and project_ref not in user:
               user = f'postgres.{project_ref}'
 
           if not host or not user:
