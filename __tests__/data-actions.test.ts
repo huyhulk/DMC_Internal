@@ -5,6 +5,7 @@ const mockGetOpenProductionOrdersQueryWindow = jest.fn()
 const mockLoggerError = jest.fn()
 const mockRequireTabView = jest.fn()
 
+let mockGte: jest.Mock
 let mockLte: jest.Mock
 let mockOr: jest.Mock
 let mockDataIn: jest.Mock
@@ -36,6 +37,7 @@ jest.mock('@/lib/supabase/server', () => ({
 
 jest.mock('@/lib/db/queries', () => ({
   getCachedNorms: mockGetCachedNorms,
+  getFreshNorms: mockGetCachedNorms,
   getCachedMaterials: mockGetCachedMaterials,
 }))
 
@@ -82,7 +84,7 @@ describe('data actions', () => {
     mockRequireTabView.mockResolvedValue({ role: 'admin', workspace: 'ALL' })
 
     const mockSingle = jest.fn().mockResolvedValue({
-      data: { role: 'admin', workspace: 'DMC1' },
+      data: { role: 'ADMIN', workspace: 'ALL' },
     })
     const mockEq = jest.fn().mockReturnValue({ single: mockSingle })
     const mockProfilesSelect = jest.fn().mockReturnValue({ eq: mockEq })
@@ -101,9 +103,10 @@ describe('data actions', () => {
     }
     mockDataOrder = jest.fn().mockReturnValue(dataQueryResult)
     mockLte = jest.fn().mockReturnValue(dataQueryResult)
+    mockGte = jest.fn().mockReturnValue({ lte: mockLte })
     const mockDataSelect = jest.fn((columns: string) => {
       if (columns === 'PCODE,CUSTOMER,WORKSHOP,DESCRIPTION') return { in: mockDataIn }
-      return { lte: mockLte }
+      return { gte: mockGte, lte: mockLte }
     })
 
     mockStatusIn = jest.fn().mockImplementation(() => Promise.resolve({ data: currentStatusRows, error: null }))
@@ -151,7 +154,7 @@ describe('data actions', () => {
     })
   })
 
-  it('queries all production orders up to the Vietnam current day without applying a lower-bound window', async () => {
+  it('queries production orders within the open-orders date window using newest orders first', async () => {
     await expect(getOpenProductionOrdersAction()).resolves.toEqual({
       success: true,
       data: {
@@ -164,8 +167,9 @@ describe('data actions', () => {
     })
 
     expect(mockGetOpenProductionOrdersQueryWindow).toHaveBeenCalledWith()
+    expect(mockGte).toHaveBeenCalledWith('INITIALDATE', '2026-04-01')
     expect(mockLte).toHaveBeenCalledWith('INITIALDATE', '2026-05-09')
-    expect(mockDataOrder).toHaveBeenCalledWith('INITIALDATE', { ascending: true })
+    expect(mockDataOrder).toHaveBeenCalledWith('INITIALDATE', { ascending: false })
     expect(mockDataOrder).toHaveBeenCalledWith('PCODE', { ascending: true })
     expect(mockDataRange).toHaveBeenCalledWith(0, 999)
     expect(mockOr).not.toHaveBeenCalled()
@@ -421,6 +425,29 @@ describe('data actions', () => {
     expect(mockProductionIn.mock.calls[0][1]).toHaveLength(200)
     expect(mockProductionIn.mock.calls[1][0]).toBe('pcode')
     expect(mockProductionIn.mock.calls[1][1]).toHaveLength(1)
+  })
+
+  it('uses the open-orders date window instead of scanning all historical data', async () => {
+    currentDataRows = [
+      {
+        PCODE: 'LSX-WINDOW-CURRENT',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Window Customer',
+        WORKSHOP: 'DMC3',
+        DESCRIPTION: 'Current window order',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(mockGte).toHaveBeenCalledWith('INITIALDATE', '2026-04-01')
+    expect(mockLte).toHaveBeenCalledWith('INITIALDATE', '2026-05-09')
+    expect(mockDataOrder).toHaveBeenCalledWith('INITIALDATE', { ascending: false })
+    expect(result.data?.orders.map((order) => order.pcode)).toEqual(['LSX-WINDOW-CURRENT'])
   })
 
   it('loads production input history workshops by the history pcodes instead of relying on an unbounded data page', async () => {

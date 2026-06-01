@@ -329,8 +329,9 @@ async function fetchHistoryDataRowsByPcodes(
   return rows
 }
 
-async function fetchDataRowsUpToDate(
+async function fetchDataRowsInOpenOrdersWindow(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  fromDate: string,
   today: string,
 ): Promise<DataRow[]> {
   const rows: DataRow[] = []
@@ -339,8 +340,9 @@ async function fetchDataRowsUpToDate(
     const { data, error } = await supabase
       .from('data')
       .select(DATA_SELECT)
+      .gte('INITIALDATE', fromDate)
       .lte('INITIALDATE', today)
-      .order('INITIALDATE', { ascending: true })
+      .order('INITIALDATE', { ascending: false })
       .order('PCODE', { ascending: true })
       .range(from, from + SUPABASE_PAGE_SIZE - 1)
 
@@ -437,12 +439,12 @@ export async function getOpenProductionOrdersAction(): Promise<{ success: boolea
     const { role, workspace: rawWorkspace } = profileData as { role: string; workspace: string }
     const userWorkspaces = getUserWorkspaces(rawWorkspace ?? '')
 
-    const { today } = getOpenProductionOrdersQueryWindow()
+    const { today, fromDate } = getOpenProductionOrdersQueryWindow()
 
     const [norms, materials, dataRows] = await Promise.all([
       getFreshNorms(),
       getCachedMaterials(),
-      fetchDataRowsUpToDate(supabase, today),
+      fetchDataRowsInOpenOrdersWindow(supabase, fromDate, today),
     ])
     const scopedDataRows = dataRows.filter((row) => {
       const entryWorkshop = getProductionEntryWorkshop(row.WORKSHOP ?? '', row.DESCRIPTION)
