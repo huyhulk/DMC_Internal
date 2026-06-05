@@ -73,6 +73,45 @@ jobs:
       # supabase db push là idempotent: chỉ chạy migrations chưa có trong
       # supabase_migrations.schema_migrations. Fresh staging DB cũng OK vì
       # migration 001 đã được fix đúng schema (lowercase table, UPPERCASE columns).
+      - name: Install PostgreSQL client
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          psql --version
+
+      # Staging đã từng apply thủ công migration 041/042 nhưng chưa ghi vào
+      # supabase_migrations.schema_migrations, nên db push bị kẹt ở duplicate
+      # policy/column và không tới được 043. Chỉ repair history khi object tương
+      # ứng thật sự đã tồn tại trên staging; nếu chưa tồn tại thì để db push apply
+      # migration bình thường.
+      - name: Repair staging migration history for existing Google Sheet sync objects
+        env:
+          STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
+        run: |
+          set -Eeuo pipefail
+
+          migration_applied() {
+            local version="$1"
+            psql "$STAGING_DB_URL" -Atqc "select exists(select 1 from supabase_migrations.schema_migrations where version = '${version}');"
+          }
+
+          sheet_sync_tables_exist="$(psql "$STAGING_DB_URL" -Atqc "select exists(select 1 from information_schema.tables where table_schema = 'public' and table_name = 'google_sheet_sync_configs') and exists(select 1 from information_schema.tables where table_schema = 'public' and table_name = 'google_sheet_sync_runs') and exists(select 1 from pg_policies where schemaname = 'public' and tablename = 'google_sheet_sync_configs' and policyname = 'google_sheet_sync_configs_admin_select');")"
+          if [ "$(migration_applied 041)" = "f" ] && [ "$sheet_sync_tables_exist" = "t" ]; then
+            echo "Repairing staging migration history: mark 041 as applied because Google Sheet sync tables/policies already exist."
+            supabase migration repair --status applied 041 --db-url "$STAGING_DB_URL"
+          else
+            echo "No repair needed for migration 041."
+          fi
+
+          sheet_c_column_exists="$(psql "$STAGING_DB_URL" -Atqc "select exists(select 1 from information_schema.columns where table_schema = 'public' and table_name = 'google_sheet_sync_configs' and column_name = 'sheet_c_column_map');")"
+          if [ "$(migration_applied 042)" = "f" ] && [ "$sheet_c_column_exists" = "t" ]; then
+            echo "Repairing staging migration history: mark 042 as applied because sheet_c_column_map already exists."
+            supabase migration repair --status applied 042 --db-url "$STAGING_DB_URL"
+          else
+            echo "No repair needed for migration 042."
+          fi
+
       - name: Apply pending migrations to staging
         run: supabase db push --db-url "${{ secrets.STAGING_DB_URL }}"
 
