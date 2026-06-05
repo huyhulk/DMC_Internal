@@ -140,14 +140,18 @@ function isBeforeCutoff(record: DataRecord, cutoffDate: string | null | undefine
   return Boolean(cutoffDate && record.INITIALDATE && record.INITIALDATE < cutoffDate)
 }
 
-export function transformSheetValues(values: unknown[][], config: GoogleSheetSyncConfig): SheetTransformResult {
+export function transformSheetValues(
+  values: unknown[][],
+  config: GoogleSheetSyncConfig,
+  columnMap: GoogleSheetColumnMap[] = config.column_map
+): SheetTransformResult {
   const [headers = [], ...rows] = values
-  const mappedHeaders = mapHeaders(headers, config.column_map)
+  const mappedHeaders = mapHeaders(headers, columnMap)
   const issues: TransformIssue[] = []
   const records: DataRecord[] = []
   const seen = new Set<string>()
 
-  for (const column of config.column_map) {
+  for (const column of columnMap) {
     if (column.required && !mappedHeaders.has(column.dest)) {
       issues.push({ rowNumber: 1, reason: `Thiếu cột bắt buộc: ${column.src}` })
     }
@@ -163,7 +167,7 @@ export function transformSheetValues(values: unknown[][], config: GoogleSheetSyn
       DEADLINEDATE: null,
     }
 
-    for (const column of config.column_map) {
+    for (const column of columnMap) {
       const index = mappedHeaders.get(column.dest)
       const value = index == null ? null : row[index]
       const normalized = normalizeCell(value, column)
@@ -173,7 +177,7 @@ export function transformSheetValues(values: unknown[][], config: GoogleSheetSyn
     record.PCODE = normalizePcode(record.PCODE)
     record.INITIALDATE = record.INITIALDATE ?? null
 
-    const missingRequired = config.column_map.some((column) => {
+    const missingRequired = columnMap.some((column) => {
       if (!column.required) return false
       const value = (record as Record<string, unknown>)[column.dest]
       return value == null || value === ''

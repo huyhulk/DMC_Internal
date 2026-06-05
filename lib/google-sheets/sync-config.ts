@@ -47,6 +47,7 @@ export const googleSheetSyncConfigSchema = z.object({
   soft_delete_reason: z.string().trim().min(1).default('missing_from_google_sheet_reconcile'),
   max_soft_delete_ratio: z.coerce.number().min(0).max(1).default(0.2),
   column_map: z.array(columnMapSchema).min(1).default(DEFAULT_GOOGLE_SHEET_COLUMN_MAP),
+  sheet_c_column_map: z.array(columnMapSchema).min(1).default(DEFAULT_GOOGLE_SHEET_COLUMN_MAP),
 })
 
 export type GoogleSheetSyncConfigInput = z.input<typeof googleSheetSyncConfigSchema>
@@ -55,6 +56,7 @@ export type GoogleSheetSyncConfig = z.output<typeof googleSheetSyncConfigSchema>
 export const DEFAULT_GOOGLE_SHEET_SYNC_CONFIG: GoogleSheetSyncConfig = googleSheetSyncConfigSchema.parse({
   sheet_a_file_id: 'placeholder',
   column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+  sheet_c_column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
 })
 
 export function normalizeConfigInput(input: GoogleSheetSyncConfigInput): GoogleSheetSyncConfig {
@@ -67,7 +69,9 @@ export function normalizeConfigInput(input: GoogleSheetSyncConfigInput): GoogleS
   }
 }
 
-export function configFromDatabaseRow(row: (Record<string, unknown> & { column_map?: unknown }) | null | undefined): GoogleSheetSyncConfigInput {
+export function configFromDatabaseRow(
+  row: (Record<string, unknown> & { column_map?: unknown; sheet_c_column_map?: unknown }) | null | undefined
+): GoogleSheetSyncConfigInput {
   if (!row) {
     return {
       name: 'Google Sheet sản xuất',
@@ -89,11 +93,16 @@ export function configFromDatabaseRow(row: (Record<string, unknown> & { column_m
       soft_delete_reason: 'missing_from_google_sheet_reconcile',
       max_soft_delete_ratio: 0.2,
       column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+      sheet_c_column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
     }
   }
 
+  const sheetAColumnMap = Array.isArray(row.column_map) ? row.column_map : DEFAULT_GOOGLE_SHEET_COLUMN_MAP
+  const sheetCColumnMap = Array.isArray(row.sheet_c_column_map) ? row.sheet_c_column_map : sheetAColumnMap
+
   return {
     ...row,
-    column_map: Array.isArray(row.column_map) ? row.column_map : DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+    column_map: sheetAColumnMap,
+    sheet_c_column_map: sheetCColumnMap,
   } as GoogleSheetSyncConfigInput
 }

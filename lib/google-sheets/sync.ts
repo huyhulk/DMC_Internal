@@ -217,8 +217,8 @@ export async function executeGoogleSheetSync(
     ? await readGoogleSheetValues(config.sheet_b_file_id, config.sheet_b_tab_name)
     : null
 
-  const aResult = transformSheetValues(sheetAValues, config)
-  const cResult = transformSheetValues(sheetCValues, config)
+  const aResult = transformSheetValues(sheetAValues, config, config.column_map)
+  const cResult = transformSheetValues(sheetCValues, config, config.sheet_c_column_map)
   const sourceRecords = mergeByPcode(
     aResult.records.concat(cResult.records).map((record) => withSourceMetadata(record, config, seenAt))
   )

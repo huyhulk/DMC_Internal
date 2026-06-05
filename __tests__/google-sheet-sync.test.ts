@@ -1,5 +1,5 @@
 import { executeGoogleSheetSync, testConfiguredGoogleSheet } from '@/lib/google-sheets/sync'
-import { DEFAULT_GOOGLE_SHEET_COLUMN_MAP, type GoogleSheetSyncConfig } from '@/lib/google-sheets/sync-config'
+import { DEFAULT_GOOGLE_SHEET_COLUMN_MAP, type GoogleSheetColumnMap, type GoogleSheetSyncConfig } from '@/lib/google-sheets/sync-config'
 import { readGoogleSheetValues, testGoogleSheetConnection } from '@/lib/google-sheets/client'
 
 jest.mock('@/lib/google-sheets/client', () => ({
@@ -9,6 +9,16 @@ jest.mock('@/lib/google-sheets/client', () => ({
 
 const mockReadGoogleSheetValues = readGoogleSheetValues as jest.MockedFunction<typeof readGoogleSheetValues>
 const mockTestGoogleSheetConnection = testGoogleSheetConnection as jest.MockedFunction<typeof testGoogleSheetConnection>
+
+const sheetCColumnMap: GoogleSheetColumnMap[] = [
+  { src: 'Mã LSX', dest: 'PCODE', required: true, type: 'text' },
+  { src: 'Ngày tạo', dest: 'INITIALDATE', required: true, type: 'date' },
+  { src: 'Khách', dest: 'CUSTOMER', required: false, type: 'text' },
+  { src: 'Xưởng', dest: 'WORKSHOP', required: false, type: 'text' },
+  { src: 'Tên hàng', dest: 'DESCRIPTION', required: false, type: 'text' },
+  { src: 'SL', dest: 'QUANTITY', required: false, type: 'number' },
+  { src: 'Deadline', dest: 'DEADLINEDATE', required: false, type: 'datetime' },
+]
 
 const config: GoogleSheetSyncConfig = {
   name: 'Test sync',
@@ -30,6 +40,7 @@ const config: GoogleSheetSyncConfig = {
   soft_delete_reason: 'missing_from_google_sheet_reconcile',
   max_soft_delete_ratio: 1,
   column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+  sheet_c_column_map: sheetCColumnMap,
 }
 
 const headers = ['số YCSX', 'Ngày lập phiếu', 'Khách hàng', 'Xưởng Sản Xuất', 'Diễn giải', 'Số lượng', 'Ngày KD']
@@ -38,8 +49,9 @@ const sheetA = [
   ['LSX-A-NEW', '04/06/2026', 'A', 'DMC1', 'Mới', 100, '05/06/2026'],
   ['LSX-A-EXISTING', '04/06/2026', 'B', 'DMC1', 'Cập nhật', 200, '05/06/2026'],
 ]
+const sheetCHeaders = ['Mã LSX', 'Ngày tạo', 'Khách', 'Xưởng', 'Tên hàng', 'SL', 'Deadline']
 const sheetC = [
-  headers,
+  sheetCHeaders,
   ['LSX-C-PENDING', '04/06/2026', 'C', 'DMC3', 'Đang kiểm', 300, '06/06/2026'],
   ['LSX-A-NEW', '04/06/2026', 'A', 'DMC1', 'Trùng A', 999, '05/06/2026'],
 ]

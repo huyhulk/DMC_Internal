@@ -542,6 +542,7 @@ export interface Database {
           soft_delete_reason: string
           max_soft_delete_ratio: number
           column_map: Json
+          sheet_c_column_map: Json | null
           created_by: string | null
           updated_by: string | null
           created_at: string
@@ -568,6 +569,7 @@ export interface Database {
           soft_delete_reason?: string
           max_soft_delete_ratio?: number
           column_map?: Json
+          sheet_c_column_map?: Json | null
           created_by?: string | null
           updated_by?: string | null
           created_at?: string
@@ -593,6 +595,7 @@ export interface Database {
           soft_delete_reason: string
           max_soft_delete_ratio: number
           column_map: Json
+          sheet_c_column_map: Json | null
           updated_by: string | null
           updated_at: string
         }>

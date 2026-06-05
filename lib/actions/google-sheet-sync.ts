@@ -81,6 +81,7 @@ export async function saveGoogleSheetSyncConfigAction(input: SaveConfigInput): P
       soft_delete_reason: parsed.soft_delete_reason,
       max_soft_delete_ratio: parsed.max_soft_delete_ratio,
       column_map: parsed.column_map,
+      sheet_c_column_map: parsed.sheet_c_column_map,
       updated_by: editor.id,
     }
 

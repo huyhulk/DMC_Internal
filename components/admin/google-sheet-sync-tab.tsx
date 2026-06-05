@@ -14,7 +14,12 @@ import {
   type GoogleSheetSyncRunRow,
 } from '@/lib/actions/google-sheet-sync'
 import type { GoogleSheetSyncSummary } from '@/lib/google-sheets/sync'
-import type { GoogleSheetSyncConfigInput } from '@/lib/google-sheets/sync-config'
+import {
+  DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+  type GoogleSheetColumnMap,
+  type GoogleSheetColumnType,
+  type GoogleSheetSyncConfigInput,
+} from '@/lib/google-sheets/sync-config'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -49,6 +54,24 @@ const inputCls =
   'h-9 w-full rounded-lg border border-dmc-border bg-white px-3 text-sm text-dmc-text-primary ' +
   'focus:border-dmc-primary/50 focus:outline-none focus:ring-1 focus:ring-dmc-primary/30 disabled:opacity-50'
 
+const DEST_LABELS: Record<GoogleSheetColumnMap['dest'], string> = {
+  PCODE: 'PCODE',
+  INITIALDATE: 'Ngày lập',
+  CUSTOMER: 'Khách hàng',
+  WORKSHOP: 'Xưởng',
+  DESCRIPTION: 'Diễn giải',
+  QUANTITY: 'Số lượng',
+  DEADLINEDATE: 'Deadline',
+}
+
+const COLUMN_TYPES: GoogleSheetColumnType[] = ['text', 'date', 'datetime', 'number']
+
+function cloneColumnMap(columnMap: GoogleSheetSyncConfigInput['column_map']): GoogleSheetColumnMap[] {
+  return (Array.isArray(columnMap) && columnMap.length > 0 ? columnMap : DEFAULT_GOOGLE_SHEET_COLUMN_MAP).map((column) => ({
+    ...column,
+  })) as GoogleSheetColumnMap[]
+}
+
 function toFormValues(config: GoogleSheetSyncConfigInput): FormValues {
   return {
     id: config.id,
@@ -73,7 +96,12 @@ function toFormValues(config: GoogleSheetSyncConfigInput): FormValues {
   }
 }
 
-function toActionInput(values: FormValues, initialConfig: GoogleSheetSyncConfigInput): GoogleSheetSyncConfigInput {
+function toActionInput(
+  values: FormValues,
+  initialConfig: GoogleSheetSyncConfigInput,
+  sheetAColumnMap: GoogleSheetColumnMap[],
+  sheetCColumnMap: GoogleSheetColumnMap[]
+): GoogleSheetSyncConfigInput {
   return {
     ...initialConfig,
     id: values.id,
@@ -98,6 +126,8 @@ function toActionInput(values: FormValues, initialConfig: GoogleSheetSyncConfigI
     soft_delete_missing: values.soft_delete_missing,
     soft_delete_reason: values.soft_delete_reason,
     max_soft_delete_ratio: Number(values.max_soft_delete_ratio),
+    column_map: sheetAColumnMap,
+    sheet_c_column_map: sheetCColumnMap,
   }
 }
 
@@ -123,11 +153,87 @@ function configRowToInput(row: GoogleSheetSyncConfigRow): GoogleSheetSyncConfigI
     soft_delete_reason: row.soft_delete_reason,
     max_soft_delete_ratio: row.max_soft_delete_ratio,
     column_map: initialConfigColumnMap(row.column_map),
+    sheet_c_column_map: initialConfigColumnMap(row.sheet_c_column_map) ?? initialConfigColumnMap(row.column_map),
   }
 }
 
 function initialConfigColumnMap(columnMap: unknown): GoogleSheetSyncConfigInput['column_map'] {
   return Array.isArray(columnMap) ? (columnMap as GoogleSheetSyncConfigInput['column_map']) : undefined
+}
+
+function ColumnMapEditor({
+  title,
+  description,
+  value,
+  onChange,
+  disabled,
+}: {
+  title: string
+  description: string
+  value: GoogleSheetColumnMap[]
+  onChange: (value: GoogleSheetColumnMap[]) => void
+  disabled: boolean
+}) {
+  function updateColumn(index: number, patch: Partial<GoogleSheetColumnMap>) {
+    onChange(value.map((column, columnIndex) => (columnIndex === index ? { ...column, ...patch } : column)))
+  }
+
+  return (
+    <div className="rounded-2xl border border-dmc-border bg-[#f8fafc] p-4">
+      <div>
+        <h2 className="text-sm font-semibold text-dmc-text-primary">{title}</h2>
+        <p className="mt-0.5 text-xs text-dmc-text-muted">{description}</p>
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead className="text-[11px] uppercase tracking-wide text-dmc-text-muted">
+            <tr>
+              <th className="px-2 py-2 text-left">Trường data</th>
+              <th className="px-2 py-2 text-left">Tên cột trên Google Sheet</th>
+              <th className="px-2 py-2 text-left">Kiểu</th>
+              <th className="px-2 py-2 text-left">Bắt buộc</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-dmc-border">
+            {value.map((column, index) => (
+              <tr key={column.dest}>
+                <td className="px-2 py-2 font-medium text-dmc-text-primary">{DEST_LABELS[column.dest]}</td>
+                <td className="px-2 py-2">
+                  <input
+                    value={column.src}
+                    onChange={(event) => updateColumn(index, { src: event.target.value })}
+                    disabled={disabled}
+                    className={inputCls}
+                  />
+                </td>
+                <td className="px-2 py-2">
+                  <select
+                    value={column.type}
+                    onChange={(event) => updateColumn(index, { type: event.target.value as GoogleSheetColumnType })}
+                    disabled={disabled}
+                    className={inputCls}
+                  >
+                    {COLUMN_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </td>
+                <td className="px-2 py-2">
+                  <label className="inline-flex items-center gap-2 text-xs text-dmc-text-muted">
+                    <input
+                      type="checkbox"
+                      checked={column.required}
+                      onChange={(event) => updateColumn(index, { required: event.target.checked })}
+                      disabled={disabled}
+                    />
+                    required
+                  </label>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 function SummaryCard({ summary }: { summary: GoogleSheetSyncSummary | null }) {
@@ -211,7 +317,9 @@ function HistoryTable({ rows }: { rows: GoogleSheetSyncRunRow[] }) {
 export function GoogleSheetSyncTab({ initialConfig, history, canEdit }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
   const [summary, setSummary] = useState<GoogleSheetSyncSummary | null>(null)
-  const { register, handleSubmit, reset, formState: { isDirty } } = useForm<FormValues>({
+  const [sheetAColumnMap, setSheetAColumnMap] = useState(() => cloneColumnMap(initialConfig.column_map))
+  const [sheetCColumnMap, setSheetCColumnMap] = useState(() => cloneColumnMap(initialConfig.sheet_c_column_map ?? initialConfig.column_map))
+  const { register, handleSubmit, reset } = useForm<FormValues>({
     defaultValues: toFormValues(initialConfig),
   })
 
@@ -219,11 +327,14 @@ export function GoogleSheetSyncTab({ initialConfig, history, canEdit }: Props) {
     if (!canEdit) return toast.error('Bạn chỉ có quyền xem tab này.')
     setBusy('save')
     try {
-      const result = await saveGoogleSheetSyncConfigAction(toActionInput(values, initialConfig))
+      const result = await saveGoogleSheetSyncConfigAction(toActionInput(values, initialConfig, sheetAColumnMap, sheetCColumnMap))
       if (result.error) toast.error(result.error)
       else if (result.data) {
+        const savedConfig = configRowToInput(result.data)
         toast.success('Đã lưu cấu hình Google Sheet sync')
-        reset(toFormValues(configRowToInput(result.data)))
+        reset(toFormValues(savedConfig))
+        setSheetAColumnMap(cloneColumnMap(savedConfig.column_map))
+        setSheetCColumnMap(cloneColumnMap(savedConfig.sheet_c_column_map ?? savedConfig.column_map))
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Lỗi lưu cấu hình Google Sheet sync')
@@ -269,7 +380,7 @@ export function GoogleSheetSyncTab({ initialConfig, history, canEdit }: Props) {
               Web app đọc Google Sheet bằng service account, preview và ghi vào bảng data bằng PCODE reconcile.
             </p>
           </div>
-          <button type="submit" disabled={!canEdit || busy === 'save' || !isDirty} className="flex items-center gap-1.5 rounded-xl bg-dmc-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
+          <button type="submit" disabled={!canEdit || busy === 'save'} className="flex items-center gap-1.5 rounded-xl bg-dmc-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
             <Save size={14} /> {busy === 'save' ? 'Đang lưu...' : 'Lưu cấu hình'}
           </button>
         </div>
@@ -296,6 +407,23 @@ export function GoogleSheetSyncTab({ initialConfig, history, canEdit }: Props) {
         <div className="mt-4 flex items-center gap-4 text-sm text-dmc-text-muted">
           <label className="flex items-center gap-2"><input type="checkbox" {...register('enabled')} disabled={!canEdit} /> Bật cấu hình</label>
           <label className="flex items-center gap-2"><input type="checkbox" {...register('soft_delete_missing')} disabled={!canEdit} /> Soft-delete PCODE mất khỏi nguồn</label>
+        </div>
+
+        <div className="mt-5 grid gap-4">
+          <ColumnMapEditor
+            title="Mapping cột Sheet A"
+            description="Dùng cho sheet lệnh sản xuất đã duyệt. Tên cột phải khớp header trên Google Sheet."
+            value={sheetAColumnMap}
+            onChange={setSheetAColumnMap}
+            disabled={!canEdit}
+          />
+          <ColumnMapEditor
+            title="Mapping cột Sheet C"
+            description="Dùng cho sheet lệnh đang kiểm. Có thể khác hoàn toàn header Sheet A."
+            value={sheetCColumnMap}
+            onChange={setSheetCColumnMap}
+            disabled={!canEdit}
+          />
         </div>
       </form>
 
