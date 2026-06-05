@@ -1,5 +1,21 @@
-import { DEFAULT_GOOGLE_SHEET_COLUMN_MAP, type GoogleSheetSyncConfig } from '@/lib/google-sheets/sync-config'
+import {
+  DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
+  DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+  normalizeConfigInput,
+  type GoogleSheetColumnMap,
+  type GoogleSheetSyncConfig,
+} from '@/lib/google-sheets/sync-config'
 import { normalizePcode, transformSheetValues, withSourceMetadata } from '@/lib/google-sheets/transform'
+
+const sheetCColumnMap: GoogleSheetColumnMap[] = [
+  { src: 'Mã LSX', dest: 'PCODE', required: true, type: 'text' },
+  { src: 'Ngày tạo', dest: 'INITIALDATE', required: true, type: 'date' },
+  { src: 'Khách', dest: 'CUSTOMER', required: false, type: 'text' },
+  { src: 'Xưởng', dest: 'WORKSHOP', required: false, type: 'text' },
+  { src: 'Tên hàng', dest: 'DESCRIPTION', required: false, type: 'text' },
+  { src: 'SL', dest: 'QUANTITY', required: false, type: 'number' },
+  { src: 'Deadline', dest: 'DEADLINEDATE', required: false, type: 'datetime' },
+]
 
 const baseConfig: GoogleSheetSyncConfig = {
   name: 'Test sync',
@@ -20,7 +36,12 @@ const baseConfig: GoogleSheetSyncConfig = {
   soft_delete_missing: true,
   soft_delete_reason: 'missing_from_google_sheet_reconcile',
   max_soft_delete_ratio: 0.2,
+  auto_sync_enabled: false,
+  auto_sync_time: '07:00',
+  auto_sync_timezone: 'Asia/Ho_Chi_Minh',
+  auto_sync_interval_minutes: 1440,
   column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+  sheet_c_column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
 }
 
 const headers = ['số YCSX', 'Ngày lập phiếu', 'Khách hàng', 'Xưởng Sản Xuất', 'Diễn giải', 'Số lượng', 'Ngày KD']
@@ -86,7 +107,43 @@ describe('google sheet transform', () => {
     expect(result.records.map((row) => row.PCODE)).toEqual(['LSX-NEW'])
   })
 
+  it('uses an explicit column map for sheets with different headers', () => {
+    const result = transformSheetValues([
+      ['Mã LSX', 'Ngày tạo', 'Khách', 'Xưởng', 'Tên hàng', 'SL', 'Deadline'],
+      ['lsx-c-001', '04/06/2026', 'Khách C', 'DMC3', 'Hàng đang kiểm', '300', '06/06/2026 08:15'],
+    ], baseConfig, sheetCColumnMap)
+
+    expect(result.issues).toEqual([])
+    expect(result.records).toEqual([
+      {
+        PCODE: 'LSX-C-001',
+        INITIALDATE: '2026-06-04',
+        CUSTOMER: 'Khách C',
+        WORKSHOP: 'DMC3',
+        DESCRIPTION: 'Hàng đang kiểm',
+        QUANTITY: 300,
+        DEADLINEDATE: '2026-06-06T08:15:00+07:00',
+      },
+    ])
+  })
+
   it('normalizes PCODE consistently', () => {
     expect(normalizePcode(' lsx-abc ')).toBe('LSX-ABC')
+  })
+
+  it('validates interval-based auto sync settings', () => {
+    const minimalConfig = {
+      sheet_a_file_id: 'sheet-a',
+      column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+      sheet_c_column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+    }
+
+    expect(normalizeConfigInput(minimalConfig).auto_sync_interval_minutes).toBe(DEFAULT_AUTO_SYNC_INTERVAL_MINUTES)
+    expect(normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: '15' as never }).auto_sync_interval_minutes).toBe(15)
+    expect(normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 5 }).auto_sync_interval_minutes).toBe(5)
+    expect(normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 60 }).auto_sync_interval_minutes).toBe(60)
+    expect(normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 1440 }).auto_sync_interval_minutes).toBe(1440)
+    expect(() => normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 4 })).toThrow()
+    expect(() => normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 7 })).toThrow('Khoảng cách auto sync phải là bội số của 5 phút')
   })
 })

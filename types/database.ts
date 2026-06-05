@@ -147,6 +147,63 @@ export interface Database {
           updated_at?: string
         }
       }
+      semi_finished_production: {
+        Row: {
+          id: number
+          pdate: string
+          pcode: string
+          workshop: string
+          products: string | null
+          material: string | null
+          quantity: number
+          defect_quantity: number
+          recycle_quantity: number
+          workforce: number
+          starttime: string | null
+          endtime: string | null
+          realnorm: number
+          log: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: number
+          pdate: string
+          pcode: string
+          workshop: string
+          products?: string | null
+          material?: string | null
+          quantity?: number
+          defect_quantity?: number
+          recycle_quantity?: number
+          workforce?: number
+          starttime?: string | null
+          endtime?: string | null
+          realnorm?: number
+          log?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          pdate?: string
+          pcode?: string
+          workshop?: string
+          products?: string | null
+          material?: string | null
+          quantity?: number
+          defect_quantity?: number
+          recycle_quantity?: number
+          workforce?: number
+          starttime?: string | null
+          endtime?: string | null
+          realnorm?: number
+          log?: string | null
+          created_by?: string | null
+          updated_at?: string | null
+        }
+      }
       Production: {
         Row: {
           id: number
@@ -484,7 +541,12 @@ export interface Database {
           soft_delete_missing: boolean
           soft_delete_reason: string
           max_soft_delete_ratio: number
+          auto_sync_enabled: boolean
+          auto_sync_time: string
+          auto_sync_timezone: string
+          auto_sync_interval_minutes: number
           column_map: Json
+          sheet_c_column_map: Json | null
           created_by: string | null
           updated_by: string | null
           created_at: string
@@ -510,7 +572,12 @@ export interface Database {
           soft_delete_missing?: boolean
           soft_delete_reason?: string
           max_soft_delete_ratio?: number
+          auto_sync_enabled?: boolean
+          auto_sync_time?: string
+          auto_sync_timezone?: string
+          auto_sync_interval_minutes?: number
           column_map?: Json
+          sheet_c_column_map?: Json | null
           created_by?: string | null
           updated_by?: string | null
           created_at?: string
@@ -535,7 +602,12 @@ export interface Database {
           soft_delete_missing: boolean
           soft_delete_reason: string
           max_soft_delete_ratio: number
+          auto_sync_enabled: boolean
+          auto_sync_time: string
+          auto_sync_timezone: string
+          auto_sync_interval_minutes: number
           column_map: Json
+          sheet_c_column_map: Json | null
           updated_by: string | null
           updated_at: string
         }>

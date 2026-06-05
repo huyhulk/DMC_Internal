@@ -12,6 +12,16 @@ type SyncConfigRow = Database['public']['Tables']['google_sheet_sync_configs']['
 export type GoogleSheetSyncConfigRow = SyncConfigRow
 export type GoogleSheetSyncRunRow = Database['public']['Tables']['google_sheet_sync_runs']['Row']
 
+export type GoogleSheetSyncHistoryPage = {
+  rows: GoogleSheetSyncRunRow[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
+const GOOGLE_SHEET_SYNC_HISTORY_PAGE_SIZE = 10
+
 type ActionResult<T> = {
   data?: T
   error?: string
@@ -33,24 +43,68 @@ async function requireAdminView(): Promise<{ id: string } | null> {
   return { id: viewer.id }
 }
 
-export async function getGoogleSheetSyncSetupAction(): Promise<ActionResult<{ config: GoogleSheetSyncConfigInput; history: GoogleSheetSyncRunRow[] }>> {
+function normalizeHistoryPage(page = 1): number {
+  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1
+}
+
+async function fetchGoogleSheetSyncHistory(page = 1, pageSize = GOOGLE_SHEET_SYNC_HISTORY_PAGE_SIZE): Promise<GoogleSheetSyncHistoryPage> {
+  const normalizedPage = normalizeHistoryPage(page)
+  const normalizedPageSize = Math.max(1, Math.min(50, Math.floor(pageSize)))
+  const from = (normalizedPage - 1) * normalizedPageSize
+  const to = from + normalizedPageSize - 1
+  const supabase = await createClient()
+  const { data, error, count } = await supabase
+    .from('google_sheet_sync_runs')
+    .select('*', { count: 'exact' })
+    .order('started_at', { ascending: false })
+    .range(from, to)
+
+  if (error) throw new Error(error.message)
+
+  const total = count ?? 0
+  return {
+    rows: (data ?? []) as GoogleSheetSyncRunRow[],
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / normalizedPageSize)),
+  }
+}
+
+export async function getGoogleSheetSyncHistoryAction(page = 1): Promise<ActionResult<GoogleSheetSyncHistoryPage>> {
+  const viewer = await requireAdminView()
+  if (!viewer) return { error: 'Bạn không có quyền xem lịch sử đồng bộ Google Sheet.' }
+
+  try {
+    return { data: await fetchGoogleSheetSyncHistory(page) }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Không tải được lịch sử đồng bộ Google Sheet.' }
+  }
+}
+
+export async function getGoogleSheetSyncSetupAction(): Promise<ActionResult<{ config: GoogleSheetSyncConfigInput; history: GoogleSheetSyncHistoryPage }>> {
   const viewer = await requireAdminView()
   if (!viewer) return { error: 'Bạn không có quyền xem cấu hình đồng bộ Google Sheet.' }
 
   const supabase = await createClient()
-  const [configResult, historyResult] = await Promise.all([
-    supabase.from('google_sheet_sync_configs').select('*').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
-    supabase.from('google_sheet_sync_runs').select('*').order('started_at', { ascending: false }).limit(20),
-  ])
+  const configResult = await supabase
+    .from('google_sheet_sync_configs')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
   if (configResult.error) return { error: configResult.error.message }
-  if (historyResult.error) return { error: historyResult.error.message }
 
-  return {
-    data: {
-      config: configFromDatabaseRow(configResult.data as SyncConfigRow | null),
-      history: (historyResult.data ?? []) as GoogleSheetSyncRunRow[],
-    },
+  try {
+    return {
+      data: {
+        config: configFromDatabaseRow(configResult.data as SyncConfigRow | null),
+        history: await fetchGoogleSheetSyncHistory(1),
+      },
+    }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Không tải được lịch sử đồng bộ Google Sheet.' }
   }
 }
 
@@ -80,7 +134,12 @@ export async function saveGoogleSheetSyncConfigAction(input: SaveConfigInput): P
       soft_delete_missing: parsed.soft_delete_missing,
       soft_delete_reason: parsed.soft_delete_reason,
       max_soft_delete_ratio: parsed.max_soft_delete_ratio,
+      auto_sync_enabled: parsed.auto_sync_enabled,
+      auto_sync_time: parsed.auto_sync_time,
+      auto_sync_timezone: parsed.auto_sync_timezone,
+      auto_sync_interval_minutes: parsed.auto_sync_interval_minutes,
       column_map: parsed.column_map,
+      sheet_c_column_map: parsed.sheet_c_column_map,
       updated_by: editor.id,
     }
 
@@ -102,7 +161,7 @@ export async function saveGoogleSheetSyncConfigAction(input: SaveConfigInput): P
   }
 }
 
-async function getLatestConfig(): Promise<SyncConfigRow> {
+export async function getLatestGoogleSheetSyncConfig(): Promise<SyncConfigRow> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('google_sheet_sync_configs')
@@ -116,7 +175,7 @@ async function getLatestConfig(): Promise<SyncConfigRow> {
   return data as SyncConfigRow
 }
 
-async function createRun(mode: 'test' | 'preview' | 'run', userId: string, configId: string): Promise<string> {
+async function createRun(mode: 'test' | 'preview' | 'run', userId: string | null, configId: string): Promise<string> {
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('google_sheet_sync_runs')
@@ -164,7 +223,7 @@ export async function testGoogleSheetSyncConnectionAction(): Promise<ActionResul
 
   let runId: string | null = null
   try {
-    const row = await getLatestConfig()
+    const row = await getLatestGoogleSheetSyncConfig()
     const config = normalizeConfigInput(configFromDatabaseRow(row))
     runId = await createRun('test', editor.id, row.id)
     const result = await testConfiguredGoogleSheet(config)
@@ -198,7 +257,7 @@ export async function previewGoogleSheetSyncAction(): Promise<ActionResult<Googl
 
   let runId: string | null = null
   try {
-    const row = await getLatestConfig()
+    const row = await getLatestGoogleSheetSyncConfig()
     const config = normalizeConfigInput(configFromDatabaseRow(row))
     runId = await createRun('preview', editor.id, row.id)
     const supabase = await createServiceClient()
@@ -213,25 +272,42 @@ export async function previewGoogleSheetSyncAction(): Promise<ActionResult<Googl
   }
 }
 
-export async function runGoogleSheetSyncAction(): Promise<ActionResult<GoogleSheetSyncSummary>> {
-  const editor = await requireAdminEdit()
-  if (!editor) return { error: 'Chỉ ADMIN có quyền chạy đồng bộ.' }
+type ExecuteConfiguredGoogleSheetSyncRunOptions = {
+  initiatedBy: string | null
+  requireAutoSyncEnabled?: boolean
+}
 
+export async function executeConfiguredGoogleSheetSyncRun({
+  initiatedBy,
+  requireAutoSyncEnabled = false,
+}: ExecuteConfiguredGoogleSheetSyncRunOptions): Promise<GoogleSheetSyncSummary> {
   let runId: string | null = null
   try {
-    const row = await getLatestConfig()
+    const row = await getLatestGoogleSheetSyncConfig()
     const config = normalizeConfigInput(configFromDatabaseRow(row))
     if (!config.enabled) throw new Error('Cấu hình đang tắt, không thể chạy sync')
+    if (requireAutoSyncEnabled && !config.auto_sync_enabled) throw new Error('Auto sync đang tắt')
 
-    runId = await createRun('run', editor.id, row.id)
+    runId = await createRun('run', initiatedBy, row.id)
     const supabase = await createServiceClient()
     const summary = await executeGoogleSheetSync(supabase, config, 'run')
     await finishRun(runId, summary)
     revalidatePath('/dashboard/admin/google-sheet-sync')
-    return { data: summary }
+    return summary
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Lỗi chạy đồng bộ'
     if (runId) await finishRun(runId, {}, message)
-    return { error: message }
+    throw new Error(message)
+  }
+}
+
+export async function runGoogleSheetSyncAction(): Promise<ActionResult<GoogleSheetSyncSummary>> {
+  const editor = await requireAdminEdit()
+  if (!editor) return { error: 'Chỉ ADMIN có quyền chạy đồng bộ.' }
+
+  try {
+    return { data: await executeConfiguredGoogleSheetSyncRun({ initiatedBy: editor.id }) }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Lỗi chạy đồng bộ' }
   }
 }
