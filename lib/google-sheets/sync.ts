@@ -236,10 +236,14 @@ export async function executeGoogleSheetSync(
   const activeSourcePcodes = config.soft_delete_missing ? await fetchActiveSourcePcodes(supabase, config) : []
   const sourceSet = new Set(records.map((record) => record.PCODE))
   const softDeletePcodesList = activeSourcePcodes.filter((pcode) => !sourceSet.has(pcode))
+  const issues = aResult.issues.concat(cResult.issues, sheetBIssues)
   const activeCount = Math.max(activeSourcePcodes.length, 1)
   if (config.soft_delete_missing && softDeletePcodesList.length / activeCount > config.max_soft_delete_ratio) {
     throw new Error(
-      `Số dòng soft-delete dự kiến ${softDeletePcodesList.length}/${activeSourcePcodes.length} vượt ngưỡng ${Math.round(config.max_soft_delete_ratio * 100)}%`
+      `Số dòng soft-delete dự kiến ${softDeletePcodesList.length}/${activeSourcePcodes.length} vượt ngưỡng ${Math.round(config.max_soft_delete_ratio * 100)}%. ` +
+        `Debug: Sheet A đọc ${aResult.rawCount} dòng/${aResult.records.length} hợp lệ, Sheet C đọc ${cResult.rawCount} dòng/${cResult.records.length} hợp lệ, ` +
+        `source PCODE hợp lệ ${records.length}, lỗi mapping/dữ liệu ${issues.length}. ` +
+        `Kiểm tra mapping cột và tab name; lỗi đầu tiên: ${issues[0]?.reason ?? 'không có lỗi transform'}`
     )
   }
 
@@ -247,7 +251,6 @@ export async function executeGoogleSheetSync(
     await applySyncChanges(supabase, diff.inserts.concat(diff.updates, diff.unchanged), softDeletePcodesList, config, seenAt)
   }
 
-  const issues = aResult.issues.concat(cResult.issues, sheetBIssues)
   return {
     mode,
     sheetRowsRead: aResult.rawCount + cResult.rawCount,
