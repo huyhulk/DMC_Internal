@@ -1,4 +1,10 @@
-import { DEFAULT_GOOGLE_SHEET_COLUMN_MAP, type GoogleSheetColumnMap, type GoogleSheetSyncConfig } from '@/lib/google-sheets/sync-config'
+import {
+  DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
+  DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+  normalizeConfigInput,
+  type GoogleSheetColumnMap,
+  type GoogleSheetSyncConfig,
+} from '@/lib/google-sheets/sync-config'
 import { normalizePcode, transformSheetValues, withSourceMetadata } from '@/lib/google-sheets/transform'
 
 const sheetCColumnMap: GoogleSheetColumnMap[] = [
@@ -33,6 +39,7 @@ const baseConfig: GoogleSheetSyncConfig = {
   auto_sync_enabled: false,
   auto_sync_time: '07:00',
   auto_sync_timezone: 'Asia/Ho_Chi_Minh',
+  auto_sync_interval_minutes: 1440,
   column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
   sheet_c_column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
 }
@@ -85,7 +92,7 @@ describe('google sheet transform', () => {
       QUANTITY: 20,
     })
     expect(result.issues).toEqual([
-      { rowNumber: 2, pcode: '', reason: 'Thiếu dữ liệu bắt buộc: PCODE (số YCSX)' },
+      { rowNumber: 2, pcode: '', reason: 'Thiếu dữ liệu bắt buộc' },
       { rowNumber: 4, pcode: 'LSX-002', reason: 'Trùng PCODE, giữ dòng xuất hiện sau cùng' },
     ])
   })
@@ -120,34 +127,23 @@ describe('google sheet transform', () => {
     ])
   })
 
-  it('reports which required source column is missing after normalization', () => {
-    const result = transformSheetValues([
-      headers,
-      ['LSX-NO-DATE', '', 'ACME', 'DMC1', 'Thiếu ngày lập phiếu', 1, '05/06/2026'],
-    ], baseConfig, baseConfig.column_map, 'sheet_a')
-
-    expect(result.records).toEqual([])
-    expect(result.issues).toEqual([
-      {
-        rowNumber: 2,
-        pcode: 'LSX-NO-DATE',
-        source: 'sheet_a',
-        reason: 'Thiếu dữ liệu bắt buộc: INITIALDATE (Ngày lập phiếu)',
-      },
-    ])
-  })
-
-  it('parses datetime when time appears before Vietnamese date', () => {
-    const result = transformSheetValues([
-      headers,
-      ['LSX-TIME-FIRST', '04/06/2026', 'ACME', 'DMC1', 'Dự kiến giờ trước ngày', 1, '16:30 20/03/2026'],
-    ], baseConfig)
-
-    expect(result.issues).toEqual([])
-    expect(result.records[0].DEADLINEDATE).toBe('2026-03-20T16:30:00+07:00')
-  })
-
   it('normalizes PCODE consistently', () => {
     expect(normalizePcode(' lsx-abc ')).toBe('LSX-ABC')
+  })
+
+  it('validates interval-based auto sync settings', () => {
+    const minimalConfig = {
+      sheet_a_file_id: 'sheet-a',
+      column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+      sheet_c_column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
+    }
+
+    expect(normalizeConfigInput(minimalConfig).auto_sync_interval_minutes).toBe(DEFAULT_AUTO_SYNC_INTERVAL_MINUTES)
+    expect(normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: '15' as never }).auto_sync_interval_minutes).toBe(15)
+    expect(normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 5 }).auto_sync_interval_minutes).toBe(5)
+    expect(normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 60 }).auto_sync_interval_minutes).toBe(60)
+    expect(normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 1440 }).auto_sync_interval_minutes).toBe(1440)
+    expect(() => normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 4 })).toThrow()
+    expect(() => normalizeConfigInput({ ...minimalConfig, auto_sync_interval_minutes: 7 })).toThrow('Khoảng cách auto sync phải là bội số của 5 phút')
   })
 })

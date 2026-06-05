@@ -544,6 +544,7 @@ export interface Database {
           auto_sync_enabled: boolean
           auto_sync_time: string
           auto_sync_timezone: string
+          auto_sync_interval_minutes: number
           column_map: Json
           sheet_c_column_map: Json | null
           created_by: string | null
@@ -574,6 +575,7 @@ export interface Database {
           auto_sync_enabled?: boolean
           auto_sync_time?: string
           auto_sync_timezone?: string
+          auto_sync_interval_minutes?: number
           column_map?: Json
           sheet_c_column_map?: Json | null
           created_by?: string | null
@@ -603,6 +605,7 @@ export interface Database {
           auto_sync_enabled: boolean
           auto_sync_time: string
           auto_sync_timezone: string
+          auto_sync_interval_minutes: number
           column_map: Json
           sheet_c_column_map: Json | null
           updated_by: string | null
