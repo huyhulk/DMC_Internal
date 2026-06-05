@@ -73,7 +73,7 @@ function normalizeDate(value: unknown): string | null {
   const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
   if (isoMatch) return `${isoMatch[1]}-${pad(Number(isoMatch[2]))}-${pad(Number(isoMatch[3]))}`
 
-  const vnMatch = text.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/)
+  const vnMatch = text.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/)
   if (vnMatch) {
     const year = Number(vnMatch[3].length === 2 ? `20${vnMatch[3]}` : vnMatch[3])
     return `${year}-${pad(Number(vnMatch[2]))}-${pad(Number(vnMatch[1]))}`

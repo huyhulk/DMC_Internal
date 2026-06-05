@@ -134,6 +134,16 @@ describe('google sheet transform', () => {
     ])
   })
 
+  it('parses datetime when time appears before Vietnamese date', () => {
+    const result = transformSheetValues([
+      headers,
+      ['LSX-TIME-FIRST', '04/06/2026', 'ACME', 'DMC1', 'Dự kiến giờ trước ngày', 1, '16:30 20/03/2026'],
+    ], baseConfig)
+
+    expect(result.issues).toEqual([])
+    expect(result.records[0].DEADLINEDATE).toBe('2026-03-20T16:30:00+07:00')
+  })
+
   it('normalizes PCODE consistently', () => {
     expect(normalizePcode(' lsx-abc ')).toBe('LSX-ABC')
   })
