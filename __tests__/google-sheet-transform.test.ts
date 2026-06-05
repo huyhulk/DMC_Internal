@@ -30,6 +30,9 @@ const baseConfig: GoogleSheetSyncConfig = {
   soft_delete_missing: true,
   soft_delete_reason: 'missing_from_google_sheet_reconcile',
   max_soft_delete_ratio: 0.2,
+  auto_sync_enabled: false,
+  auto_sync_time: '07:00',
+  auto_sync_timezone: 'Asia/Ho_Chi_Minh',
   column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
   sheet_c_column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
 }

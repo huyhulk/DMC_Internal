@@ -48,6 +48,9 @@ type FormValues = {
   soft_delete_missing: boolean
   soft_delete_reason: string
   max_soft_delete_ratio: number
+  auto_sync_enabled: boolean
+  auto_sync_time: string
+  auto_sync_timezone: string
 }
 
 const inputCls =
@@ -93,7 +96,16 @@ function toFormValues(config: GoogleSheetSyncConfigInput): FormValues {
     soft_delete_missing: config.soft_delete_missing ?? true,
     soft_delete_reason: config.soft_delete_reason ?? 'missing_from_google_sheet_reconcile',
     max_soft_delete_ratio: config.max_soft_delete_ratio ?? 0.2,
+    auto_sync_enabled: config.auto_sync_enabled ?? false,
+    auto_sync_time: normalizeTimeInput(config.auto_sync_time),
+    auto_sync_timezone: config.auto_sync_timezone ?? 'Asia/Ho_Chi_Minh',
   }
+}
+
+function normalizeTimeInput(value: unknown): string {
+  const text = String(value ?? '07:00').trim()
+  const match = text.match(/^(\d{2}:\d{2})(?::\d{2})?$/)
+  return match ? match[1] : '07:00'
 }
 
 function toActionInput(
@@ -126,6 +138,9 @@ function toActionInput(
     soft_delete_missing: values.soft_delete_missing,
     soft_delete_reason: values.soft_delete_reason,
     max_soft_delete_ratio: Number(values.max_soft_delete_ratio),
+    auto_sync_enabled: values.auto_sync_enabled,
+    auto_sync_time: normalizeTimeInput(values.auto_sync_time),
+    auto_sync_timezone: values.auto_sync_timezone || 'Asia/Ho_Chi_Minh',
     column_map: sheetAColumnMap,
     sheet_c_column_map: sheetCColumnMap,
   }
@@ -152,6 +167,9 @@ function configRowToInput(row: GoogleSheetSyncConfigRow): GoogleSheetSyncConfigI
     soft_delete_missing: row.soft_delete_missing,
     soft_delete_reason: row.soft_delete_reason,
     max_soft_delete_ratio: row.max_soft_delete_ratio,
+    auto_sync_enabled: row.auto_sync_enabled,
+    auto_sync_time: normalizeTimeInput(row.auto_sync_time),
+    auto_sync_timezone: row.auto_sync_timezone,
     column_map: initialConfigColumnMap(row.column_map),
     sheet_c_column_map: initialConfigColumnMap(row.sheet_c_column_map) ?? initialConfigColumnMap(row.column_map),
   }
@@ -402,12 +420,18 @@ export function GoogleSheetSyncTab({ initialConfig, history, canEdit }: Props) {
           <label className="space-y-1 text-xs font-medium text-dmc-text-muted">source_name<input {...register('source_name')} disabled={!canEdit} className={inputCls} /></label>
           <label className="space-y-1 text-xs font-medium text-dmc-text-muted">Soft-delete reason<input {...register('soft_delete_reason')} disabled={!canEdit} className={inputCls} /></label>
           <label className="space-y-1 text-xs font-medium text-dmc-text-muted">Ngưỡng soft-delete<input type="number" step="0.01" min="0" max="1" {...register('max_soft_delete_ratio', { valueAsNumber: true })} disabled={!canEdit} className={inputCls} /></label>
+          <label className="space-y-1 text-xs font-medium text-dmc-text-muted">Giờ tự động sync<input type="time" {...register('auto_sync_time')} disabled={!canEdit} className={inputCls} /></label>
+          <label className="space-y-1 text-xs font-medium text-dmc-text-muted">Timezone tự động sync<input {...register('auto_sync_timezone')} disabled={!canEdit} className={inputCls} /></label>
         </div>
 
-        <div className="mt-4 flex items-center gap-4 text-sm text-dmc-text-muted">
+        <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-dmc-text-muted">
           <label className="flex items-center gap-2"><input type="checkbox" {...register('enabled')} disabled={!canEdit} /> Bật cấu hình</label>
           <label className="flex items-center gap-2"><input type="checkbox" {...register('soft_delete_missing')} disabled={!canEdit} /> Soft-delete PCODE mất khỏi nguồn</label>
+          <label className="flex items-center gap-2"><input type="checkbox" {...register('auto_sync_enabled')} disabled={!canEdit} /> Tự động chạy sync mỗi ngày</label>
         </div>
+        <p className="mt-2 text-xs text-dmc-text-muted">
+          Vercel Cron kiểm tra mỗi 5 phút và chỉ chạy thật quanh giờ đã cấu hình theo Asia/Ho_Chi_Minh. Cần cấu hình CRON_SECRET trên Vercel staging.
+        </p>
 
         <div className="mt-5 grid gap-4">
           <ColumnMapEditor

@@ -19,6 +19,10 @@ export const DEFAULT_GOOGLE_SHEET_COLUMN_MAP: GoogleSheetColumnMap[] = [
   { src: 'Ngày KD', dest: 'DEADLINEDATE', required: false, type: 'datetime' },
 ]
 
+const AUTO_SYNC_TIME_PATTERN = /^\d{2}:\d{2}(?::\d{2})?$/
+const DEFAULT_AUTO_SYNC_TIME = '07:00'
+const DEFAULT_AUTO_SYNC_TIMEZONE = 'Asia/Ho_Chi_Minh'
+
 const columnMapSchema = z.object({
   src: z.string().trim().min(1),
   dest: z.enum(['PCODE', 'INITIALDATE', 'CUSTOMER', 'WORKSHOP', 'DESCRIPTION', 'QUANTITY', 'DEADLINEDATE']),
@@ -46,6 +50,9 @@ export const googleSheetSyncConfigSchema = z.object({
   soft_delete_missing: z.boolean().default(true),
   soft_delete_reason: z.string().trim().min(1).default('missing_from_google_sheet_reconcile'),
   max_soft_delete_ratio: z.coerce.number().min(0).max(1).default(0.2),
+  auto_sync_enabled: z.boolean().default(false),
+  auto_sync_time: z.string().trim().regex(AUTO_SYNC_TIME_PATTERN).default(DEFAULT_AUTO_SYNC_TIME),
+  auto_sync_timezone: z.string().trim().min(1).default(DEFAULT_AUTO_SYNC_TIMEZONE),
   column_map: z.array(columnMapSchema).min(1).default(DEFAULT_GOOGLE_SHEET_COLUMN_MAP),
   sheet_c_column_map: z.array(columnMapSchema).min(1).default(DEFAULT_GOOGLE_SHEET_COLUMN_MAP),
 })
@@ -59,6 +66,12 @@ export const DEFAULT_GOOGLE_SHEET_SYNC_CONFIG: GoogleSheetSyncConfig = googleShe
   sheet_c_column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
 })
 
+function normalizeAutoSyncTime(value: unknown): string {
+  const text = String(value ?? DEFAULT_AUTO_SYNC_TIME).trim()
+  const match = text.match(/^(\d{2}:\d{2})(?::\d{2})?$/)
+  return match ? match[1] : DEFAULT_AUTO_SYNC_TIME
+}
+
 export function normalizeConfigInput(input: GoogleSheetSyncConfigInput): GoogleSheetSyncConfig {
   const parsed = googleSheetSyncConfigSchema.parse(input)
   return {
@@ -66,6 +79,7 @@ export function normalizeConfigInput(input: GoogleSheetSyncConfigInput): GoogleS
     sheet_c_file_id: parsed.sheet_c_file_id || null,
     sheet_b_file_id: parsed.sheet_b_file_id || null,
     cutoff_date: parsed.cutoff_date || null,
+    auto_sync_time: normalizeAutoSyncTime(parsed.auto_sync_time),
   }
 }
 
@@ -92,6 +106,9 @@ export function configFromDatabaseRow(
       soft_delete_missing: true,
       soft_delete_reason: 'missing_from_google_sheet_reconcile',
       max_soft_delete_ratio: 0.2,
+      auto_sync_enabled: false,
+      auto_sync_time: DEFAULT_AUTO_SYNC_TIME,
+      auto_sync_timezone: DEFAULT_AUTO_SYNC_TIMEZONE,
       column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
       sheet_c_column_map: DEFAULT_GOOGLE_SHEET_COLUMN_MAP,
     }
@@ -102,6 +119,7 @@ export function configFromDatabaseRow(
 
   return {
     ...row,
+    auto_sync_time: normalizeAutoSyncTime(row.auto_sync_time),
     column_map: sheetAColumnMap,
     sheet_c_column_map: sheetCColumnMap,
   } as GoogleSheetSyncConfigInput

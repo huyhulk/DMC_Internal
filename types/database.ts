@@ -541,6 +541,9 @@ export interface Database {
           soft_delete_missing: boolean
           soft_delete_reason: string
           max_soft_delete_ratio: number
+          auto_sync_enabled: boolean
+          auto_sync_time: string
+          auto_sync_timezone: string
           column_map: Json
           sheet_c_column_map: Json | null
           created_by: string | null
@@ -568,6 +571,9 @@ export interface Database {
           soft_delete_missing?: boolean
           soft_delete_reason?: string
           max_soft_delete_ratio?: number
+          auto_sync_enabled?: boolean
+          auto_sync_time?: string
+          auto_sync_timezone?: string
           column_map?: Json
           sheet_c_column_map?: Json | null
           created_by?: string | null
@@ -594,6 +600,9 @@ export interface Database {
           soft_delete_missing: boolean
           soft_delete_reason: string
           max_soft_delete_ratio: number
+          auto_sync_enabled: boolean
+          auto_sync_time: string
+          auto_sync_timezone: string
           column_map: Json
           sheet_c_column_map: Json | null
           updated_by: string | null

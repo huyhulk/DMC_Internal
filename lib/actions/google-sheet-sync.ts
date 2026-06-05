@@ -80,6 +80,9 @@ export async function saveGoogleSheetSyncConfigAction(input: SaveConfigInput): P
       soft_delete_missing: parsed.soft_delete_missing,
       soft_delete_reason: parsed.soft_delete_reason,
       max_soft_delete_ratio: parsed.max_soft_delete_ratio,
+      auto_sync_enabled: parsed.auto_sync_enabled,
+      auto_sync_time: parsed.auto_sync_time,
+      auto_sync_timezone: parsed.auto_sync_timezone,
       column_map: parsed.column_map,
       sheet_c_column_map: parsed.sheet_c_column_map,
       updated_by: editor.id,
@@ -103,8 +106,8 @@ export async function saveGoogleSheetSyncConfigAction(input: SaveConfigInput): P
   }
 }
 
-async function getLatestConfig(): Promise<SyncConfigRow> {
-  const supabase = await createClient()
+export async function getLatestGoogleSheetSyncConfig(): Promise<SyncConfigRow> {
+  const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('google_sheet_sync_configs')
     .select('*')
@@ -117,7 +120,7 @@ async function getLatestConfig(): Promise<SyncConfigRow> {
   return data as SyncConfigRow
 }
 
-async function createRun(mode: 'test' | 'preview' | 'run', userId: string, configId: string): Promise<string> {
+async function createRun(mode: 'test' | 'preview' | 'run', userId: string | null, configId: string): Promise<string> {
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('google_sheet_sync_runs')
@@ -165,7 +168,7 @@ export async function testGoogleSheetSyncConnectionAction(): Promise<ActionResul
 
   let runId: string | null = null
   try {
-    const row = await getLatestConfig()
+    const row = await getLatestGoogleSheetSyncConfig()
     const config = normalizeConfigInput(configFromDatabaseRow(row))
     runId = await createRun('test', editor.id, row.id)
     const result = await testConfiguredGoogleSheet(config)
@@ -199,7 +202,7 @@ export async function previewGoogleSheetSyncAction(): Promise<ActionResult<Googl
 
   let runId: string | null = null
   try {
-    const row = await getLatestConfig()
+    const row = await getLatestGoogleSheetSyncConfig()
     const config = normalizeConfigInput(configFromDatabaseRow(row))
     runId = await createRun('preview', editor.id, row.id)
     const supabase = await createServiceClient()
@@ -214,25 +217,37 @@ export async function previewGoogleSheetSyncAction(): Promise<ActionResult<Googl
   }
 }
 
+export async function executeConfiguredGoogleSheetSyncRun(options: {
+  initiatedBy: string | null
+  requireAutoSyncEnabled?: boolean
+}): Promise<GoogleSheetSyncSummary> {
+  const row = await getLatestGoogleSheetSyncConfig()
+  const config = normalizeConfigInput(configFromDatabaseRow(row))
+  if (!config.enabled) throw new Error('Cấu hình đang tắt, không thể chạy sync')
+  if (options.requireAutoSyncEnabled && !config.auto_sync_enabled) throw new Error('Tự động sync đang tắt')
+
+  const runId = await createRun('run', options.initiatedBy, row.id)
+  try {
+    const supabase = await createServiceClient()
+    const summary = await executeGoogleSheetSync(supabase, config, 'run')
+    await finishRun(runId, summary)
+    return summary
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi chạy đồng bộ'
+    await finishRun(runId, {}, message)
+    throw new Error(message)
+  }
+}
+
 export async function runGoogleSheetSyncAction(): Promise<ActionResult<GoogleSheetSyncSummary>> {
   const editor = await requireAdminEdit()
   if (!editor) return { error: 'Chỉ ADMIN có quyền chạy đồng bộ.' }
 
-  let runId: string | null = null
   try {
-    const row = await getLatestConfig()
-    const config = normalizeConfigInput(configFromDatabaseRow(row))
-    if (!config.enabled) throw new Error('Cấu hình đang tắt, không thể chạy sync')
-
-    runId = await createRun('run', editor.id, row.id)
-    const supabase = await createServiceClient()
-    const summary = await executeGoogleSheetSync(supabase, config, 'run')
-    await finishRun(runId, summary)
+    const summary = await executeConfiguredGoogleSheetSyncRun({ initiatedBy: editor.id })
     revalidatePath('/dashboard/admin/google-sheet-sync')
     return { data: summary }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Lỗi chạy đồng bộ'
-    if (runId) await finishRun(runId, {}, message)
-    return { error: message }
+    return { error: error instanceof Error ? error.message : 'Lỗi chạy đồng bộ' }
   }
 }
