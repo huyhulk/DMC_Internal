@@ -18,6 +18,7 @@ export type DataRecord = {
 export type TransformIssue = {
   rowNumber: number
   pcode?: string
+  source?: 'sheet_a' | 'sheet_c' | 'sheet_b'
   reason: string
 }
 
@@ -143,7 +144,8 @@ function isBeforeCutoff(record: DataRecord, cutoffDate: string | null | undefine
 export function transformSheetValues(
   values: unknown[][],
   config: GoogleSheetSyncConfig,
-  columnMap: GoogleSheetColumnMap[] = config.column_map
+  columnMap: GoogleSheetColumnMap[] = config.column_map,
+  source?: TransformIssue['source']
 ): SheetTransformResult {
   const [headers = [], ...rows] = values
   const mappedHeaders = mapHeaders(headers, columnMap)
@@ -153,7 +155,7 @@ export function transformSheetValues(
 
   for (const column of columnMap) {
     if (column.required && !mappedHeaders.has(column.dest)) {
-      issues.push({ rowNumber: 1, reason: `Thiếu cột bắt buộc: ${column.src}` })
+      issues.push({ rowNumber: 1, source, reason: `Thiếu cột bắt buộc: ${column.dest} (${column.src})` })
     }
   }
 
@@ -177,20 +179,21 @@ export function transformSheetValues(
     record.PCODE = normalizePcode(record.PCODE)
     record.INITIALDATE = record.INITIALDATE ?? null
 
-    const missingRequired = columnMap.some((column) => {
+    const missingRequiredColumns = columnMap.filter((column) => {
       if (!column.required) return false
       const value = (record as Record<string, unknown>)[column.dest]
       return value == null || value === ''
     })
 
     if (!record.PCODE && !Object.values(record).some(Boolean)) return
-    if (missingRequired || !record.PCODE) {
-      issues.push({ rowNumber, pcode: record.PCODE, reason: 'Thiếu dữ liệu bắt buộc' })
+    if (missingRequiredColumns.length > 0) {
+      const missingFields = missingRequiredColumns.map((column) => `${column.dest} (${column.src})`).join(', ')
+      issues.push({ rowNumber, pcode: record.PCODE, source, reason: `Thiếu dữ liệu bắt buộc: ${missingFields}` })
       return
     }
     if (isBeforeCutoff(record as DataRecord, config.cutoff_date)) return
     if (seen.has(record.PCODE)) {
-      issues.push({ rowNumber, pcode: record.PCODE, reason: 'Trùng PCODE, giữ dòng xuất hiện sau cùng' })
+      issues.push({ rowNumber, pcode: record.PCODE, source, reason: 'Trùng PCODE, giữ dòng xuất hiện sau cùng' })
       const existingIndex = records.findIndex((item) => item.PCODE === record.PCODE)
       if (existingIndex >= 0) records.splice(existingIndex, 1)
     }

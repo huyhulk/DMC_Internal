@@ -207,6 +207,20 @@ describe('google sheet sync', () => {
     expect(summary.statusOverrides).toBe(0)
   })
 
+  it('includes detailed Sheet A and Sheet C diagnostics when soft-delete threshold is exceeded', async () => {
+    mockReadGoogleSheetValues.mockImplementation(async (_fileId: string, tabName: string) => {
+      if (tabName === 'Tổng hợp 2026') return [headers, ['LSX-NO-DATE', '', 'A', 'DMC1', 'Thiếu ngày', 100, '05/06/2026']]
+      if (tabName === 'STEP3') return [['Sai header'], ['LSX-C-PENDING']]
+      if (tabName === 'OnlyView') return sheetB
+      return []
+    })
+    const { supabase } = createSupabaseMock([], ['LSX-ACTIVE'])
+
+    await expect(executeGoogleSheetSync(supabase as never, { ...config, max_soft_delete_ratio: 0.2 }, 'preview')).rejects.toThrow(
+      'Chi tiết lỗi: sheet_a dòng 2: Thiếu dữ liệu bắt buộc: INITIALDATE (Ngày lập phiếu); sheet_c dòng 1: Thiếu cột bắt buộc: PCODE (Mã LSX); sheet_c dòng 1: Thiếu cột bắt buộc: INITIALDATE (Ngày tạo)'
+    )
+  })
+
   it('tests Sheet A, Sheet C and configured Sheet B connections', async () => {
     mockTestGoogleSheetConnection.mockImplementation(async (_fileId: string, tabName: string) => {
       if (tabName === 'Tổng hợp 2026') return { rows: 2, columns: 7 }

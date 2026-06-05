@@ -82,7 +82,7 @@ describe('google sheet transform', () => {
       QUANTITY: 20,
     })
     expect(result.issues).toEqual([
-      { rowNumber: 2, pcode: '', reason: 'Thiếu dữ liệu bắt buộc' },
+      { rowNumber: 2, pcode: '', reason: 'Thiếu dữ liệu bắt buộc: PCODE (số YCSX)' },
       { rowNumber: 4, pcode: 'LSX-002', reason: 'Trùng PCODE, giữ dòng xuất hiện sau cùng' },
     ])
   })
@@ -113,6 +113,23 @@ describe('google sheet transform', () => {
         DESCRIPTION: 'Hàng đang kiểm',
         QUANTITY: 300,
         DEADLINEDATE: '2026-06-06T08:15:00+07:00',
+      },
+    ])
+  })
+
+  it('reports which required source column is missing after normalization', () => {
+    const result = transformSheetValues([
+      headers,
+      ['LSX-NO-DATE', '', 'ACME', 'DMC1', 'Thiếu ngày lập phiếu', 1, '05/06/2026'],
+    ], baseConfig, baseConfig.column_map, 'sheet_a')
+
+    expect(result.records).toEqual([])
+    expect(result.issues).toEqual([
+      {
+        rowNumber: 2,
+        pcode: 'LSX-NO-DATE',
+        source: 'sheet_a',
+        reason: 'Thiếu dữ liệu bắt buộc: INITIALDATE (Ngày lập phiếu)',
       },
     ])
   })

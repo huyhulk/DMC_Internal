@@ -203,6 +203,19 @@ export async function testConfiguredGoogleSheet(config: GoogleSheetSyncConfig): 
   }
 }
 
+function summarizeIssues(issues: TransformIssue[]): string {
+  const counts = new Map<string, number>()
+  issues.forEach((issue) => {
+    const label = `${issue.source ?? 'unknown'} dòng ${issue.rowNumber}: ${issue.reason}`
+    counts.set(label, (counts.get(label) ?? 0) + 1)
+  })
+
+  return Array.from(counts.entries())
+    .slice(0, 3)
+    .map(([label, count]) => `${label}${count > 1 ? ` (${count} dòng)` : ''}`)
+    .join('; ')
+}
+
 export async function executeGoogleSheetSync(
   supabase: SupabaseClient,
   config: GoogleSheetSyncConfig,
@@ -217,8 +230,8 @@ export async function executeGoogleSheetSync(
     ? await readGoogleSheetValues(config.sheet_b_file_id, config.sheet_b_tab_name)
     : null
 
-  const aResult = transformSheetValues(sheetAValues, config, config.column_map)
-  const cResult = transformSheetValues(sheetCValues, config, config.sheet_c_column_map)
+  const aResult = transformSheetValues(sheetAValues, config, config.column_map, 'sheet_a')
+  const cResult = transformSheetValues(sheetCValues, config, config.sheet_c_column_map, 'sheet_c')
   const sourceRecords = mergeByPcode(
     aResult.records.concat(cResult.records).map((record) => withSourceMetadata(record, config, seenAt))
   )
@@ -238,12 +251,13 @@ export async function executeGoogleSheetSync(
   const softDeletePcodesList = activeSourcePcodes.filter((pcode) => !sourceSet.has(pcode))
   const issues = aResult.issues.concat(cResult.issues, sheetBIssues)
   const activeCount = Math.max(activeSourcePcodes.length, 1)
+  const issueSummary = summarizeIssues(issues)
   if (config.soft_delete_missing && softDeletePcodesList.length / activeCount > config.max_soft_delete_ratio) {
     throw new Error(
       `Số dòng soft-delete dự kiến ${softDeletePcodesList.length}/${activeSourcePcodes.length} vượt ngưỡng ${Math.round(config.max_soft_delete_ratio * 100)}%. ` +
         `Debug: Sheet A đọc ${aResult.rawCount} dòng/${aResult.records.length} hợp lệ, Sheet C đọc ${cResult.rawCount} dòng/${cResult.records.length} hợp lệ, ` +
         `source PCODE hợp lệ ${records.length}, lỗi mapping/dữ liệu ${issues.length}. ` +
-        `Kiểm tra mapping cột và tab name; lỗi đầu tiên: ${issues[0]?.reason ?? 'không có lỗi transform'}`
+        `Chi tiết lỗi: ${issueSummary || 'không có lỗi transform'}`
     )
   }
 
