@@ -5,6 +5,12 @@ const mockGetOpenProductionOrdersQueryWindow = jest.fn()
 const mockLoggerError = jest.fn()
 const mockRequireTabView = jest.fn()
 
+let mockProfile: { role: string; workspace: string }
+let mockSingle: jest.Mock
+let mockEq: jest.Mock
+let mockLimit: jest.Mock
+let mockIlike: jest.Mock
+let mockIs: jest.Mock
 let mockGte: jest.Mock
 let mockLte: jest.Mock
 let mockOr: jest.Mock
@@ -73,6 +79,7 @@ describe('data actions', () => {
     currentStatusRows = []
     currentProductionRows = []
     currentHistoryRows = []
+    mockProfile = { role: 'ADMIN', workspace: 'ALL' }
 
     mockGetCachedNorms.mockResolvedValue([])
     mockGetCachedMaterials.mockResolvedValue([])
@@ -83,18 +90,45 @@ describe('data actions', () => {
     })
     mockRequireTabView.mockResolvedValue({ role: 'admin', workspace: 'ALL' })
 
-    const mockSingle = jest.fn().mockResolvedValue({
-      data: { role: 'ADMIN', workspace: 'ALL' },
+    const activeSourceRows = () => currentDataRows.filter((row) => row.source_deleted_at == null)
+    const dataByPcodes = (values: string[]) =>
+      activeSourceRows().filter((row) => values.includes(String(row.PCODE ?? '')))
+
+    mockSingle = jest.fn().mockImplementation(() => {
+      const row = activeSourceRows()[0]
+      return Promise.resolve({ data: row ?? null, error: row ? null : { message: 'not found' } })
     })
-    const mockEq = jest.fn().mockReturnValue({ single: mockSingle })
+    mockEq = jest.fn().mockImplementation((column: string, value: unknown) => {
+      if (column === 'id') return { single: jest.fn().mockResolvedValue({ data: mockProfile }) }
+      if (column === 'pdate') return Promise.resolve({ data: currentProductionRows, error: null })
+      if (column === 'pcode') return Promise.resolve({ data: currentProductionRows, error: null })
+      if (column === 'INITIALDATE') {
+        return {
+          is: jest.fn().mockResolvedValue({
+            data: activeSourceRows().filter((row) => row.INITIALDATE === value),
+            error: null,
+          }),
+        }
+      }
+      return { single: mockSingle }
+    })
+    mockLimit = jest.fn().mockReturnValue({ single: mockSingle })
+    mockIs = jest.fn().mockReturnValue({ limit: mockLimit })
+    mockIlike = jest.fn().mockReturnValue({ is: mockIs })
     const mockProfilesSelect = jest.fn().mockReturnValue({ eq: mockEq })
 
     mockOr = jest.fn().mockImplementation(() => Promise.resolve({ data: currentDataRows, error: null }))
-    mockDataIn = jest.fn().mockImplementation(() => Promise.resolve({ data: currentDataRows, error: null }))
+    mockDataIn = jest.fn().mockImplementation((column: string, values: string[]) => ({
+      is: jest.fn().mockResolvedValue({ data: column === 'PCODE' ? dataByPcodes(values) : [], error: null }),
+    }))
     mockDataRange = jest.fn().mockImplementation((from: number, to: number) =>
-      Promise.resolve({ data: currentDataRows.slice(from, to + 1), error: null })
+      Promise.resolve({ data: activeSourceRows().slice(from, to + 1), error: null })
     )
     const dataQueryResult = {
+      is: (...args: unknown[]) => {
+        mockIs(...args)
+        return dataQueryResult
+      },
       order: (...args: unknown[]) => {
         mockDataOrder(...args)
         return dataQueryResult
@@ -105,8 +139,18 @@ describe('data actions', () => {
     mockLte = jest.fn().mockReturnValue(dataQueryResult)
     mockGte = jest.fn().mockReturnValue({ lte: mockLte })
     const mockDataSelect = jest.fn((columns: string) => {
-      if (columns === 'PCODE,CUSTOMER,WORKSHOP,DESCRIPTION') return { in: mockDataIn }
-      return { gte: mockGte, lte: mockLte }
+      if (columns === 'PCODE,CUSTOMER,WORKSHOP,DESCRIPTION') {
+        return {
+          in: jest.fn().mockImplementation((column: string, values: string[]) => {
+            mockDataIn(column, values)
+            return Promise.resolve({
+              data: currentDataRows.filter((row) => values.includes(String(row[column] ?? ''))),
+              error: null,
+            })
+          }),
+        }
+      }
+      return { gte: mockGte, lte: mockLte, eq: mockEq, ilike: mockIlike, in: mockDataIn }
     })
 
     mockStatusIn = jest.fn().mockImplementation(() => Promise.resolve({ data: currentStatusRows, error: null }))
