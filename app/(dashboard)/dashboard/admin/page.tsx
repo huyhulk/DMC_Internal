@@ -2,19 +2,12 @@ import { getSessionUser } from '@/lib/actions/auth'
 import { listRoleTabPermissionsAction } from '@/lib/actions/permissions'
 import { canEdit, requireTabView } from '@/lib/permissions/server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { UserManagement } from '@/components/admin/user-management'
 import { PermissionMatrixTab } from '@/components/admin/permission-matrix-tab'
-import { cn } from '@/lib/utils'
+import { AdminTabs } from '@/components/admin/admin-tabs'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Hệ Thống | DMC Production' }
-
-const ADMIN_TABS = [
-  { key: 'users', label: 'Người dùng', href: '/dashboard/admin' },
-  { key: 'permissions', label: 'Phân quyền tab', href: '/dashboard/admin?sub=permissions' },
-  { key: 'kpi-settings', label: 'Cài đặt KPI', href: '/dashboard/admin/kpi-settings' },
-] as const
 
 export default async function AdminPage({
   searchParams,
@@ -55,27 +48,6 @@ export default async function AdminPage({
       <div className="h-[calc(100%-57px)] overflow-hidden">
         <UserManagement currentUserId={user.id} canEdit={canEditUsers} />
       </div>
-    </div>
-  )
-}
-
-function AdminTabs({ active }: { active: 'users' | 'permissions' | 'kpi-settings' }) {
-  return (
-    <div className="flex h-[57px] shrink-0 items-center gap-2 border-b border-dmc-border bg-white px-5">
-      {ADMIN_TABS.map((tab) => (
-        <Link
-          key={tab.key}
-          href={tab.href}
-          className={cn(
-            'rounded-xl px-4 py-2 text-sm font-medium transition',
-            active === tab.key
-              ? 'bg-dmc-primary text-white shadow-sm'
-              : 'text-dmc-text-muted hover:bg-[#f5f5f7] hover:text-dmc-text-primary'
-          )}
-        >
-          {tab.label}
-        </Link>
-      ))}
     </div>
   )
 }

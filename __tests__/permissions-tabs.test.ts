@@ -29,7 +29,9 @@ describe('role tab permissions', () => {
     expect(normalizePermissionLevel('MANAGER', 'admin', 'edit')).toBe('invisible')
     expect(normalizePermissionLevel('TEAM_LEADER', 'admin.users', 'view')).toBe('invisible')
     expect(normalizePermissionLevel('HR', 'admin.kpi-settings', 'edit')).toBe('invisible')
+    expect(normalizePermissionLevel('SALES', 'admin.google-sheet-sync', 'view')).toBe('invisible')
     expect(normalizePermissionLevel('ADMIN', 'admin.users', 'edit')).toBe('edit')
+    expect(normalizePermissionLevel('ADMIN', 'admin.google-sheet-sync', 'edit')).toBe('edit')
   })
 
   it('maps levels to view and edit capabilities', () => {

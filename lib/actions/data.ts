@@ -49,7 +49,8 @@ type ProductionOrderStatusRow = Pick<
 >
 
 // Columns that exist in the "data" table (uppercase, no deadlinetime, no created_at)
-const DATA_SELECT = 'PCODE,INITIALDATE,CUSTOMER,WORKSHOP,DESCRIPTION,QUANTITY,DEADLINEDATE,STATUS'
+const DATA_SELECT = 'PCODE,INITIALDATE,CUSTOMER,WORKSHOP,DESCRIPTION,QUANTITY,DEADLINEDATE,STATUS,source_deleted_at'
+const ACTIVE_SOURCE_FILTER_COLUMN = 'source_deleted_at'
 const SUPABASE_PAGE_SIZE = 1000
 
 function mapDataRowToOrder(row: DataRow): Order {
@@ -104,7 +105,8 @@ export async function getInitData(
       supabase
         .from('data')
         .select(DATA_SELECT)
-        .eq('INITIALDATE', selectedDate),
+        .eq('INITIALDATE', selectedDate)
+        .is(ACTIVE_SOURCE_FILTER_COLUMN, null),
       supabase
         .from('Production')
         .select('pcode,poutput,save_status')
@@ -190,6 +192,7 @@ export async function searchOrderByPcode(
       .from('data')
       .select(DATA_SELECT)
       .ilike('PCODE', pcode.trim())
+      .is(ACTIVE_SOURCE_FILTER_COLUMN, null)
       .limit(1)
       .single()
 
@@ -324,6 +327,7 @@ async function fetchDataRowsUpToDate(
       .from('data')
       .select(DATA_SELECT)
       .lte('INITIALDATE', today)
+      .is(ACTIVE_SOURCE_FILTER_COLUMN, null)
       .order('INITIALDATE', { ascending: true })
       .order('PCODE', { ascending: true })
       .range(from, from + SUPABASE_PAGE_SIZE - 1)
@@ -578,6 +582,7 @@ export async function recordProductionAction(rows: Array<{
           .from('data')
           .select('PCODE,QUANTITY,STATUS,WORKSHOP,DESCRIPTION')
           .in('PCODE', productionPcodes)
+          .is(ACTIVE_SOURCE_FILTER_COLUMN, null)
       : { data: [], error: null }
 
     if (orderError) {

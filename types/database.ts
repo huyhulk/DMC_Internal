@@ -44,6 +44,10 @@ export interface Database {
           QUANTITY: number | null
           DEADLINEDATE: string | null        // PostgreSQL TIMESTAMP WITHOUT TZ → "YYYY-MM-DDTHH:mm:ss"
           STATUS: string | null
+          source_name: string | null
+          source_last_seen_at: string | null
+          source_deleted_at: string | null
+          source_deleted_reason: string | null
         }
         Insert: {
           PCODE: string
@@ -54,6 +58,10 @@ export interface Database {
           QUANTITY?: number | null
           DEADLINEDATE?: string | null
           STATUS?: string | null
+          source_name?: string | null
+          source_last_seen_at?: string | null
+          source_deleted_at?: string | null
+          source_deleted_reason?: string | null
         }
         Update: {
           PCODE?: string
@@ -64,6 +72,10 @@ export interface Database {
           QUANTITY?: number | null
           DEADLINEDATE?: string | null
           STATUS?: string | null
+          source_name?: string | null
+          source_last_seen_at?: string | null
+          source_deleted_at?: string | null
+          source_deleted_reason?: string | null
         }
       }
       Norm: {
@@ -451,11 +463,161 @@ export interface Database {
         }>
         Relationships: []
       }
+      google_sheet_sync_configs: {
+        Row: {
+          id: string
+          name: string
+          enabled: boolean
+          sheet_a_file_id: string
+          sheet_a_tab_name: string
+          sheet_c_file_id: string | null
+          sheet_c_tab_name: string
+          sheet_b_file_id: string | null
+          sheet_b_tab_name: string
+          sheet_b_pcode_col: string
+          sheet_b_status_col: string
+          sheet_b_override_statuses: string[]
+          cutoff_date: string | null
+          default_status: string
+          sheet_c_status: string
+          source_name: string
+          soft_delete_missing: boolean
+          soft_delete_reason: string
+          max_soft_delete_ratio: number
+          column_map: Json
+          created_by: string | null
+          updated_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name?: string
+          enabled?: boolean
+          sheet_a_file_id?: string
+          sheet_a_tab_name?: string
+          sheet_c_file_id?: string | null
+          sheet_c_tab_name?: string
+          sheet_b_file_id?: string | null
+          sheet_b_tab_name?: string
+          sheet_b_pcode_col?: string
+          sheet_b_status_col?: string
+          sheet_b_override_statuses?: string[]
+          cutoff_date?: string | null
+          default_status?: string
+          sheet_c_status?: string
+          source_name?: string
+          soft_delete_missing?: boolean
+          soft_delete_reason?: string
+          max_soft_delete_ratio?: number
+          column_map?: Json
+          created_by?: string | null
+          updated_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<{
+          name: string
+          enabled: boolean
+          sheet_a_file_id: string
+          sheet_a_tab_name: string
+          sheet_c_file_id: string | null
+          sheet_c_tab_name: string
+          sheet_b_file_id: string | null
+          sheet_b_tab_name: string
+          sheet_b_pcode_col: string
+          sheet_b_status_col: string
+          sheet_b_override_statuses: string[]
+          cutoff_date: string | null
+          default_status: string
+          sheet_c_status: string
+          source_name: string
+          soft_delete_missing: boolean
+          soft_delete_reason: string
+          max_soft_delete_ratio: number
+          column_map: Json
+          updated_by: string | null
+          updated_at: string
+        }>
+      }
+      google_sheet_sync_runs: {
+        Row: {
+          id: string
+          config_id: string | null
+          mode: 'test' | 'preview' | 'run'
+          status: 'running' | 'success' | 'failed'
+          started_at: string
+          finished_at: string | null
+          initiated_by: string | null
+          sheet_rows_read: number
+          valid_rows: number
+          skipped_rows: number
+          inserted_rows: number
+          updated_rows: number
+          unchanged_rows: number
+          soft_deleted_rows: number
+          status_overrides: number
+          default_status_applied: number
+          error_count: number
+          summary: Json | null
+          error_message: string | null
+        }
+        Insert: {
+          id?: string
+          config_id?: string | null
+          mode: 'test' | 'preview' | 'run'
+          status: 'running' | 'success' | 'failed'
+          started_at?: string
+          finished_at?: string | null
+          initiated_by?: string | null
+          sheet_rows_read?: number
+          valid_rows?: number
+          skipped_rows?: number
+          inserted_rows?: number
+          updated_rows?: number
+          unchanged_rows?: number
+          soft_deleted_rows?: number
+          status_overrides?: number
+          default_status_applied?: number
+          error_count?: number
+          summary?: Json | null
+          error_message?: string | null
+        }
+        Update: Partial<{
+          config_id: string | null
+          mode: 'test' | 'preview' | 'run'
+          status: 'running' | 'success' | 'failed'
+          finished_at: string | null
+          initiated_by: string | null
+          sheet_rows_read: number
+          valid_rows: number
+          skipped_rows: number
+          inserted_rows: number
+          updated_rows: number
+          unchanged_rows: number
+          soft_deleted_rows: number
+          status_overrides: number
+          default_status_applied: number
+          error_count: number
+          summary: Json | null
+          error_message: string | null
+        }>
+      }
     }   // end Tables
     Views: Record<string, never>
     Functions: {
       repair_production_id_sequence: {
         Args: Record<string, never>
+        Returns: void
+      }
+      rpc_apply_google_sheet_sync: {
+        Args: {
+          p_records: Json
+          p_soft_delete_pcodes: string[]
+          p_source_name: string
+          p_deleted_at: string
+          p_soft_delete_reason: string
+        }
         Returns: void
       }
     }
