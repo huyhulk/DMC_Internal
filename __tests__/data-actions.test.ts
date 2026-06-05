@@ -510,6 +510,49 @@ describe('data actions', () => {
     ])
   })
 
+  it('writes Production.totalem as CONG_TRINH for construction-site submissions', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'CONG_TRINH' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-CONG-TRINH',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Construction Customer',
+        WORKSHOP: 'Hoạt động thi công tại công trình',
+        DESCRIPTION: 'Lắp đặt tại công trình',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await recordProductionAction([
+      {
+        pdate: '2026-05-08',
+        totalem: 'CONG_TRINH',
+        pcode: 'LSX-CONG-TRINH',
+        products: 'Lắp dựng',
+        material: 'Tôn',
+        poutput: 10,
+        eoutput: 0,
+        routput: 0,
+        workforce: 2,
+        starttime: '08:00',
+        endtime: '09:00',
+        realnorm: 5,
+        log: '',
+        save_status: 'draft',
+      },
+    ])
+
+    expect(result.success).toBe(true)
+    expect(mockProductionInsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        pcode: 'LSX-CONG-TRINH',
+        totalem: 'CONG_TRINH',
+      }),
+    ])
+  })
+
   it('queries all production orders up to the Vietnam current day without applying a lower-bound window', async () => {
     await expect(getOpenProductionOrdersAction()).resolves.toEqual({
       success: true,
