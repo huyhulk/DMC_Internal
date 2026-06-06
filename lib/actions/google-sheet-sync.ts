@@ -162,7 +162,7 @@ export async function saveGoogleSheetSyncConfigAction(input: SaveConfigInput): P
 }
 
 export async function getLatestGoogleSheetSyncConfig(): Promise<SyncConfigRow> {
-  const supabase = await createClient()
+  const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('google_sheet_sync_configs')
     .select('*')
