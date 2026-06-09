@@ -262,7 +262,7 @@ export async function executeGoogleSheetSync(
   }
 
   if (mode === 'run') {
-    await applySyncChanges(supabase, diff.inserts.concat(diff.updates, diff.unchanged), softDeletePcodesList, config, seenAt)
+    await applySyncChanges(supabase, diff.inserts.concat(diff.updates), softDeletePcodesList, config, seenAt)
   }
 
   return {

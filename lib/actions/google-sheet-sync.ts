@@ -21,6 +21,7 @@ export type GoogleSheetSyncHistoryPage = {
 }
 
 const GOOGLE_SHEET_SYNC_HISTORY_PAGE_SIZE = 10
+const STALE_RUNNING_SYNC_MINUTES = 15
 
 type ActionResult<T> = {
   data?: T
@@ -175,7 +176,29 @@ export async function getLatestGoogleSheetSyncConfig(): Promise<SyncConfigRow> {
   return data as SyncConfigRow
 }
 
+async function failStaleRunningRuns(configId: string): Promise<void> {
+  const supabase = await createServiceClient()
+  const staleStartedBefore = new Date(Date.now() - STALE_RUNNING_SYNC_MINUTES * 60 * 1000).toISOString()
+  const message = `Auto-mark failed: sync still running after ${STALE_RUNNING_SYNC_MINUTES} minutes`
+  const { error } = await supabase
+    .from('google_sheet_sync_runs')
+    .update({
+      status: 'failed',
+      finished_at: new Date().toISOString(),
+      error_count: 1,
+      error_message: message,
+    })
+    .eq('config_id', configId)
+    .eq('mode', 'run')
+    .eq('status', 'running')
+    .lt('started_at', staleStartedBefore)
+
+  if (error) throw new Error(`Lỗi dọn sync bị treo: ${error.message}`)
+}
+
 async function createRun(mode: 'test' | 'preview' | 'run', userId: string | null, configId: string): Promise<string> {
+  if (mode === 'run') await failStaleRunningRuns(configId)
+
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('google_sheet_sync_runs')
