@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import {
   executeConfiguredGoogleSheetSyncRun,
+  failStaleRunningRuns,
   getLatestGoogleSheetSyncConfig,
 } from '@/lib/actions/google-sheet-sync'
 import { configFromDatabaseRow, normalizeConfigInput } from '@/lib/google-sheets/sync-config'
@@ -41,6 +42,8 @@ export async function GET(request: NextRequest) {
     if (!config.auto_sync_enabled) return json({ ok: true, skipped: true, reason: 'auto_sync_disabled' })
 
     const intervalMinutes = config.auto_sync_interval_minutes
+    await failStaleRunningRuns(row.id)
+
     const sinceIso = new Date(Date.now() - intervalMinutes * 60 * 1000).toISOString()
     if (await hasRecentScheduledRun(row.id, sinceIso)) {
       return json({ ok: true, skipped: true, reason: 'interval_not_elapsed', intervalMinutes })

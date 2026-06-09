@@ -176,7 +176,7 @@ export async function getLatestGoogleSheetSyncConfig(): Promise<SyncConfigRow> {
   return data as SyncConfigRow
 }
 
-async function failStaleRunningRuns(configId: string): Promise<void> {
+export async function failStaleRunningRuns(configId: string): Promise<void> {
   const supabase = await createServiceClient()
   const staleStartedBefore = new Date(Date.now() - STALE_RUNNING_SYNC_MINUTES * 60 * 1000).toISOString()
   const message = `Auto-mark failed: sync still running after ${STALE_RUNNING_SYNC_MINUTES} minutes`
