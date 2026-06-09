@@ -1,10 +1,6 @@
 name: Google Sheet Auto Sync Staging
 
 on:
-  schedule:
-    # Vercel Hobby only supports daily cron, so GitHub Actions triggers
-    # the secured staging cron route every 5 minutes instead.
-    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
