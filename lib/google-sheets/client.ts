@@ -12,6 +12,39 @@ type ServiceAccountTokenResponse = {
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
+const GOOGLE_API_MAX_ATTEMPTS = 3
+const GOOGLE_API_RETRY_BASE_DELAY_MS = 500
+const TRANSIENT_GOOGLE_HTTP_STATUSES = new Set([429, 500, 502, 503, 504])
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isTransientGoogleHttpStatus(status: number): boolean {
+  return TRANSIENT_GOOGLE_HTTP_STATUSES.has(status)
+}
+
+async function fetchGoogleApiWithRetry(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= GOOGLE_API_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(input, init)
+      if (!isTransientGoogleHttpStatus(response.status) || attempt === GOOGLE_API_MAX_ATTEMPTS) {
+        return response
+      }
+
+      await response.text().catch(() => null)
+    } catch (error) {
+      lastError = error
+      if (attempt === GOOGLE_API_MAX_ATTEMPTS) throw error
+    }
+
+    await sleep(GOOGLE_API_RETRY_BASE_DELAY_MS * attempt)
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Google API request failed')
+}
 
 function getServiceAccountEmail(): string {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
@@ -59,7 +92,7 @@ async function getAccessToken(): Promise<string> {
     assertion,
   })
 
-  const response = await fetch(GOOGLE_TOKEN_URL, {
+  const response = await fetchGoogleApiWithRetry(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body,
@@ -80,7 +113,7 @@ export async function readGoogleSheetValues(fileId: string, tabName: string): Pr
   const accessToken = await getAccessToken()
   const range = encodeURIComponent(`'${tabName.replace(/'/g, "''")}'`)
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(fileId)}/values/${range}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`
-  const response = await fetch(url, {
+  const response = await fetchGoogleApiWithRetry(url, {
     headers: { authorization: `Bearer ${accessToken}` },
   })
 
