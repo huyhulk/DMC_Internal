@@ -479,7 +479,7 @@ export function GoogleSheetSyncTab({ initialConfig, history, canEdit }: Props) {
           <label className="flex items-center gap-2"><input type="checkbox" {...register('soft_delete_missing')} disabled={!canEdit} /> Soft-delete PCODE mất khỏi nguồn</label>
         </div>
         <p className="mt-2 text-xs text-dmc-text-muted">
-          Vercel Cron kiểm tra mỗi 5 phút. Khi bật, hệ thống chạy sync nếu lần auto sync gần nhất đã quá khoảng cách cấu hình.
+          Cron bên ngoài kiểm tra mỗi 5 phút. Khi bật, hệ thống chạy sync nếu lần auto sync gần nhất đã quá khoảng cách cấu hình.
         </p>
 
         <div className="mt-5 grid gap-4">
