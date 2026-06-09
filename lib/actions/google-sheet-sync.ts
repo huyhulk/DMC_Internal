@@ -21,7 +21,7 @@ export type GoogleSheetSyncHistoryPage = {
 }
 
 const GOOGLE_SHEET_SYNC_HISTORY_PAGE_SIZE = 10
-const STALE_RUNNING_SYNC_MINUTES = 15
+const STALE_RUNNING_SYNC_MINUTES = 4
 
 type ActionResult<T> = {
   data?: T
