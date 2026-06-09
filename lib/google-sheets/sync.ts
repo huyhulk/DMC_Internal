@@ -25,6 +25,35 @@ type DiffResult = {
   unchanged: ClassifiedRecord[]
 }
 
+export type GoogleSheetSyncPhase =
+  | 'read_sheet_a'
+  | 'read_sheet_c'
+  | 'read_sheet_b'
+  | 'transform'
+  | 'fetch_existing'
+  | 'fetch_active_source'
+  | 'apply_changes'
+
+export type GoogleSheetSyncPhaseTiming = {
+  phase: GoogleSheetSyncPhase
+  durationMs: number
+}
+
+export type GoogleSheetSyncTelemetry = {
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  deadlineAt?: string
+  phases: GoogleSheetSyncPhaseTiming[]
+  slowestPhase?: GoogleSheetSyncPhaseTiming
+}
+
+export type GoogleSheetSyncOptions = {
+  deadlineAt?: number
+  googleRequestTimeoutMs?: number
+  onPhase?: (phase: GoogleSheetSyncPhase) => Promise<void> | void
+}
+
 export type GoogleSheetSyncSummary = {
   mode: RunMode
   sheetRowsRead: number
@@ -43,10 +72,12 @@ export type GoogleSheetSyncSummary = {
     updates: string[]
     softDeletes: string[]
   }
+  telemetry?: GoogleSheetSyncTelemetry
 }
 
 const DATA_COLUMNS = 'id,PCODE,INITIALDATE,CUSTOMER,WORKSHOP,DESCRIPTION,QUANTITY,DEADLINEDATE,STATUS,source_name,source_last_seen_at,source_deleted_at,source_deleted_reason'
 const BATCH_SIZE = 500
+const DEADLINE_SAFETY_BUFFER_MS = 10 * 1000
 
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = []
@@ -98,9 +129,46 @@ function buildDiff(records: ClassifiedRecord[], existingMap: Map<string, Existin
   return { inserts, updates, unchanged }
 }
 
-async function fetchExistingByPcodes(supabase: SupabaseClient, pcodes: string[]): Promise<Map<string, ExistingRow>> {
+function assertWithinDeadline(deadlineAt: number | undefined, phase: string): void {
+  if (!deadlineAt) return
+  if (Date.now() + DEADLINE_SAFETY_BUFFER_MS >= deadlineAt) {
+    throw new Error(`Google Sheet sync quá thời gian trước phase ${phase}`)
+  }
+}
+
+async function runPhase<T>(phase: GoogleSheetSyncPhase, timings: GoogleSheetSyncPhaseTiming[], options: GoogleSheetSyncOptions | undefined, task: () => Promise<T> | T): Promise<T> {
+  assertWithinDeadline(options?.deadlineAt, phase)
+  await options?.onPhase?.(phase)
+  const startedAt = Date.now()
+  try {
+    return await task()
+  } finally {
+    timings.push({ phase, durationMs: Date.now() - startedAt })
+    assertWithinDeadline(options?.deadlineAt, phase)
+  }
+}
+
+function buildTelemetry(startedAtMs: number, deadlineAt: number | undefined, phases: GoogleSheetSyncPhaseTiming[]): GoogleSheetSyncTelemetry {
+  const finishedAtMs = Date.now()
+  const slowestPhase = phases.reduce<GoogleSheetSyncPhaseTiming | undefined>(
+    (slowest, phase) => (!slowest || phase.durationMs > slowest.durationMs ? phase : slowest),
+    undefined
+  )
+
+  return {
+    startedAt: new Date(startedAtMs).toISOString(),
+    finishedAt: new Date(finishedAtMs).toISOString(),
+    durationMs: finishedAtMs - startedAtMs,
+    deadlineAt: deadlineAt ? new Date(deadlineAt).toISOString() : undefined,
+    phases,
+    slowestPhase,
+  }
+}
+
+async function fetchExistingByPcodes(supabase: SupabaseClient, pcodes: string[], options?: GoogleSheetSyncOptions): Promise<Map<string, ExistingRow>> {
   const rows: ExistingRow[] = []
   for (const batch of chunk(pcodes, BATCH_SIZE)) {
+    assertWithinDeadline(options?.deadlineAt, 'fetch_existing')
     const { data, error } = await supabase.from('data').select(DATA_COLUMNS).in('PCODE', batch)
     if (error) throw new Error(`Lỗi đọc data theo PCODE: ${error.message}`)
     rows.push(...((data ?? []) as ExistingRow[]))
@@ -108,11 +176,12 @@ async function fetchExistingByPcodes(supabase: SupabaseClient, pcodes: string[])
   return new Map(rows.map((row) => [String(row.PCODE).trim().toUpperCase(), row]))
 }
 
-async function fetchActiveSourcePcodes(supabase: SupabaseClient, config: GoogleSheetSyncConfig): Promise<string[]> {
+async function fetchActiveSourcePcodes(supabase: SupabaseClient, config: GoogleSheetSyncConfig, options?: GoogleSheetSyncOptions): Promise<string[]> {
   const rows: Array<{ PCODE: string }> = []
   let from = 0
 
   while (true) {
+    assertWithinDeadline(options?.deadlineAt, 'fetch_active_source')
     let query = supabase
       .from('data')
       .select('PCODE')
@@ -138,8 +207,10 @@ async function applySyncChanges(
   records: ClassifiedRecord[],
   softDeletePcodes: string[],
   config: GoogleSheetSyncConfig,
-  deletedAt: string
+  deletedAt: string,
+  options?: GoogleSheetSyncOptions
 ): Promise<void> {
+  assertWithinDeadline(options?.deadlineAt, 'apply_changes')
   const { error } = await supabase.rpc('rpc_apply_google_sheet_sync', {
     p_records: records,
     p_soft_delete_pcodes: softDeletePcodes,
@@ -193,7 +264,7 @@ export async function testConfiguredGoogleSheet(config: GoogleSheetSyncConfig): 
   const sheetC = config.sheet_c_file_id
     ? await testGoogleSheetConnection(config.sheet_c_file_id, config.sheet_c_tab_name)
     : await testGoogleSheetConnection(config.sheet_a_file_id, config.sheet_c_tab_name)
-  const sheetB = config.sheet_b_file_id
+  const sheetB = config.sheet_b_file_id && config.sheet_b_tab_name
     ? await testGoogleSheetConnection(config.sheet_b_file_id, config.sheet_b_tab_name)
     : { rows: 0, columns: 0 }
 
@@ -219,24 +290,42 @@ function summarizeIssues(issues: TransformIssue[]): string {
 export async function executeGoogleSheetSync(
   supabase: SupabaseClient,
   config: GoogleSheetSyncConfig,
-  mode: 'preview' | 'run'
+  mode: 'preview' | 'run',
+  options?: GoogleSheetSyncOptions
 ): Promise<GoogleSheetSyncSummary> {
+  const startedAtMs = Date.now()
+  const phases: GoogleSheetSyncPhaseTiming[] = []
   const seenAt = getSeenAt()
-  const sheetAValues = await readGoogleSheetValues(config.sheet_a_file_id, config.sheet_a_tab_name)
-  const sheetCValues = config.sheet_c_file_id
-    ? await readGoogleSheetValues(config.sheet_c_file_id, config.sheet_c_tab_name)
-    : await readGoogleSheetValues(config.sheet_a_file_id, config.sheet_c_tab_name)
-  const sheetBValues = config.sheet_b_file_id
-    ? await readGoogleSheetValues(config.sheet_b_file_id, config.sheet_b_tab_name)
+  const requestOptions = { requestTimeoutMs: options?.googleRequestTimeoutMs }
+
+  const sheetAValues = await runPhase('read_sheet_a', phases, options, () =>
+    readGoogleSheetValues(config.sheet_a_file_id, config.sheet_a_tab_name, requestOptions)
+  )
+  const sheetCValues = await runPhase('read_sheet_c', phases, options, () =>
+    config.sheet_c_file_id
+      ? readGoogleSheetValues(config.sheet_c_file_id, config.sheet_c_tab_name, requestOptions)
+      : readGoogleSheetValues(config.sheet_a_file_id, config.sheet_c_tab_name, requestOptions)
+  )
+  const sheetBFileId = config.sheet_b_file_id
+  const sheetBTabName = config.sheet_b_tab_name
+  const sheetBValues = sheetBFileId && sheetBTabName
+    ? await runPhase('read_sheet_b', phases, options, () => readGoogleSheetValues(sheetBFileId, sheetBTabName, requestOptions))
     : null
 
-  const aResult = transformSheetValues(sheetAValues, config, config.column_map, 'sheet_a')
-  const cResult = transformSheetValues(sheetCValues, config, config.sheet_c_column_map, 'sheet_c')
-  const sourceRecords = mergeByPcode(
-    aResult.records.concat(cResult.records).map((record) => withSourceMetadata(record, config, seenAt))
-  )
+  const { aResult, cResult, sourceRecords } = await runPhase('transform', phases, options, () => {
+    const transformedA = transformSheetValues(sheetAValues, config, config.column_map, 'sheet_a')
+    const transformedC = transformSheetValues(sheetCValues, config, config.sheet_c_column_map, 'sheet_c')
+    return {
+      aResult: transformedA,
+      cResult: transformedC,
+      sourceRecords: mergeByPcode(
+        transformedA.records.concat(transformedC.records).map((record) => withSourceMetadata(record, config, seenAt))
+      ),
+    }
+  })
+
   const sourcePcodes = sourceRecords.map((record) => record.PCODE)
-  const existingMap = await fetchExistingByPcodes(supabase, sourcePcodes)
+  const existingMap = await runPhase('fetch_existing', phases, options, () => fetchExistingByPcodes(supabase, sourcePcodes, options))
   const { records, statusOverrides, defaultStatusApplied, sheetBIssues } = classifyRecords(
     aResult.records.map((record) => withSourceMetadata(record, config, seenAt)),
     cResult.records.map((record) => withSourceMetadata(record, config, seenAt)),
@@ -246,7 +335,9 @@ export async function executeGoogleSheetSync(
   )
   const diff = buildDiff(records, existingMap)
 
-  const activeSourcePcodes = config.soft_delete_missing ? await fetchActiveSourcePcodes(supabase, config) : []
+  const activeSourcePcodes = config.soft_delete_missing
+    ? await runPhase('fetch_active_source', phases, options, () => fetchActiveSourcePcodes(supabase, config, options))
+    : []
   const sourceSet = new Set(records.map((record) => record.PCODE))
   const softDeletePcodesList = activeSourcePcodes.filter((pcode) => !sourceSet.has(pcode))
   const issues = aResult.issues.concat(cResult.issues, sheetBIssues)
@@ -262,7 +353,9 @@ export async function executeGoogleSheetSync(
   }
 
   if (mode === 'run') {
-    await applySyncChanges(supabase, diff.inserts.concat(diff.updates), softDeletePcodesList, config, seenAt)
+    await runPhase('apply_changes', phases, options, () =>
+      applySyncChanges(supabase, diff.inserts.concat(diff.updates), softDeletePcodesList, config, seenAt, options)
+    )
   }
 
   return {
@@ -283,5 +376,6 @@ export async function executeGoogleSheetSync(
       updates: diff.updates.slice(0, 20).map((record) => record.PCODE),
       softDeletes: softDeletePcodesList.slice(0, 20),
     },
+    telemetry: buildTelemetry(startedAtMs, options?.deadlineAt, phases),
   }
 }

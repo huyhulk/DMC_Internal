@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { executeGoogleSheetSync, testConfiguredGoogleSheet, type GoogleSheetSyncSummary } from '@/lib/google-sheets/sync'
+import { executeGoogleSheetSync, testConfiguredGoogleSheet, type GoogleSheetSyncOptions, type GoogleSheetSyncSummary } from '@/lib/google-sheets/sync'
 import { configFromDatabaseRow, normalizeConfigInput, type GoogleSheetSyncConfigInput } from '@/lib/google-sheets/sync-config'
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
@@ -298,13 +298,18 @@ export async function previewGoogleSheetSyncAction(): Promise<ActionResult<Googl
 type ExecuteConfiguredGoogleSheetSyncRunOptions = {
   initiatedBy: string | null
   requireAutoSyncEnabled?: boolean
+  deadlineAt?: number
+  googleRequestTimeoutMs?: number
 }
 
 export async function executeConfiguredGoogleSheetSyncRun({
   initiatedBy,
   requireAutoSyncEnabled = false,
+  deadlineAt,
+  googleRequestTimeoutMs,
 }: ExecuteConfiguredGoogleSheetSyncRunOptions): Promise<GoogleSheetSyncSummary> {
   let runId: string | null = null
+  const startedAtMs = Date.now()
   try {
     const row = await getLatestGoogleSheetSyncConfig()
     const config = normalizeConfigInput(configFromDatabaseRow(row))
@@ -313,13 +318,25 @@ export async function executeConfiguredGoogleSheetSyncRun({
 
     runId = await createRun('run', initiatedBy, row.id)
     const supabase = await createServiceClient()
-    const summary = await executeGoogleSheetSync(supabase, config, 'run')
+    const syncOptions: GoogleSheetSyncOptions = { deadlineAt, googleRequestTimeoutMs }
+    const summary = await executeGoogleSheetSync(supabase, config, 'run', syncOptions)
     await finishRun(runId, summary)
     revalidatePath('/dashboard/admin/google-sheet-sync')
     return summary
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Lỗi chạy đồng bộ'
-    if (runId) await finishRun(runId, {}, message)
+    const finishedAtMs = Date.now()
+    if (runId) {
+      await finishRun(runId, {
+        telemetry: {
+          startedAt: new Date(startedAtMs).toISOString(),
+          finishedAt: new Date(finishedAtMs).toISOString(),
+          durationMs: finishedAtMs - startedAtMs,
+          deadlineAt: deadlineAt ? new Date(deadlineAt).toISOString() : undefined,
+          phases: [],
+        },
+      }, message)
+    }
     throw new Error(message)
   }
 }

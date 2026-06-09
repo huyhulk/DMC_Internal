@@ -246,8 +246,36 @@ function ColumnMapEditor({
   )
 }
 
+type SyncTelemetry = NonNullable<GoogleSheetSyncSummary['telemetry']>
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function getTelemetry(summary: unknown): SyncTelemetry | null {
+  if (!isRecord(summary) || !isRecord(summary.telemetry)) return null
+  const telemetry = summary.telemetry
+  if (typeof telemetry.durationMs !== 'number') return null
+  return telemetry as SyncTelemetry
+}
+
+function formatDuration(durationMs: number | null | undefined): string {
+  if (!Number.isFinite(durationMs) || durationMs == null || durationMs < 0) return '—'
+  const totalSeconds = Math.round(durationMs / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes <= 0) return `${seconds}s`
+  return `${minutes}m ${String(seconds).padStart(2, '0')}s`
+}
+
+function formatPhase(phase: SyncTelemetry['slowestPhase']): string {
+  if (!phase) return '—'
+  return `${phase.phase} (${formatDuration(phase.durationMs)})`
+}
+
 function SummaryCard({ summary }: { summary: GoogleSheetSyncSummary | null }) {
   if (!summary) return null
+  const telemetry = summary.telemetry ?? null
   return (
     <div className="rounded-2xl border border-dmc-border bg-white p-5 shadow-sm">
       <h2 className="text-base font-semibold text-dmc-text-primary">Kết quả {summary.mode === 'run' ? 'Run' : 'Preview'}</h2>
@@ -268,6 +296,13 @@ function SummaryCard({ summary }: { summary: GoogleSheetSyncSummary | null }) {
           </div>
         ))}
       </div>
+      {telemetry ? (
+        <div className="mt-4 grid gap-3 text-xs text-dmc-text-muted md:grid-cols-3">
+          <div>Thời lượng: {formatDuration(telemetry.durationMs)}</div>
+          <div>Phase chậm nhất: {formatPhase(telemetry.slowestPhase)}</div>
+          <div>Deadline: {telemetry.deadlineAt ? new Date(telemetry.deadlineAt).toLocaleString('vi-VN') : '—'}</div>
+        </div>
+      ) : null}
       <div className="mt-4 grid gap-3 text-xs text-dmc-text-muted md:grid-cols-3">
         <div>Insert mẫu: {summary.samples.inserts.join(', ') || '—'}</div>
         <div>Update mẫu: {summary.samples.updates.join(', ') || '—'}</div>
@@ -328,29 +363,39 @@ function HistoryTable({
               <th className="px-4 py-2 text-right">Insert</th>
               <th className="px-4 py-2 text-right">Update</th>
               <th className="px-4 py-2 text-right">Soft-delete</th>
+              <th className="px-4 py-2 text-left">Thời lượng</th>
+              <th className="px-4 py-2 text-left">Phase chậm</th>
               <th className="px-4 py-2 text-left">Lỗi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-dmc-border">
             {rows.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-6 text-center text-dmc-text-muted">Chưa có lịch sử</td></tr>
-            ) : rows.map((row) => (
-              <tr key={row.id}>
-                <td className="px-4 py-2 text-xs text-dmc-text-muted">{new Date(row.started_at).toLocaleString('vi-VN')}</td>
-                <td className="px-4 py-2">{row.mode}</td>
-                <td className="px-4 py-2">
-                  <span className={cn(
-                    'rounded-full px-2 py-0.5 text-xs font-medium',
-                    row.status === 'success' ? 'bg-emerald-50 text-emerald-700' : row.status === 'failed' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'
-                  )}>{row.status}</span>
-                </td>
-                <td className="px-4 py-2 text-right">{row.valid_rows}</td>
-                <td className="px-4 py-2 text-right">{row.inserted_rows}</td>
-                <td className="px-4 py-2 text-right">{row.updated_rows}</td>
-                <td className="px-4 py-2 text-right">{row.soft_deleted_rows}</td>
-                <td className="max-w-64 truncate px-4 py-2 text-xs text-red-500">{row.error_message ?? ''}</td>
-              </tr>
-            ))}
+              <tr><td colSpan={10} className="px-4 py-6 text-center text-dmc-text-muted">Chưa có lịch sử</td></tr>
+            ) : rows.map((row) => {
+              const telemetry = getTelemetry(row.summary)
+              const runningAgeMs = row.status === 'running' ? Date.now() - new Date(row.started_at).getTime() : null
+              return (
+                <tr key={row.id}>
+                  <td className="px-4 py-2 text-xs text-dmc-text-muted">{new Date(row.started_at).toLocaleString('vi-VN')}</td>
+                  <td className="px-4 py-2">{row.mode}</td>
+                  <td className="px-4 py-2">
+                    <span className={cn(
+                      'rounded-full px-2 py-0.5 text-xs font-medium',
+                      row.status === 'success' ? 'bg-emerald-50 text-emerald-700' : row.status === 'failed' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'
+                    )}>{row.status}</span>
+                  </td>
+                  <td className="px-4 py-2 text-right">{row.valid_rows}</td>
+                  <td className="px-4 py-2 text-right">{row.inserted_rows}</td>
+                  <td className="px-4 py-2 text-right">{row.updated_rows}</td>
+                  <td className="px-4 py-2 text-right">{row.soft_deleted_rows}</td>
+                  <td className="px-4 py-2 text-xs text-dmc-text-muted">
+                    {row.status === 'running' ? `đang chạy ${formatDuration(runningAgeMs)}` : formatDuration(telemetry?.durationMs)}
+                  </td>
+                  <td className="px-4 py-2 text-xs text-dmc-text-muted">{formatPhase(telemetry?.slowestPhase)}</td>
+                  <td className="max-w-80 px-4 py-2 text-xs text-red-500" title={row.error_message ?? undefined}>{row.error_message ?? ''}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

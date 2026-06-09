@@ -157,10 +157,21 @@ describe('google sheet sync', () => {
     expect(summary.samples.inserts).toEqual(['LSX-A-NEW', 'LSX-C-PENDING'])
     expect(summary.samples.updates).toEqual(['LSX-A-EXISTING'])
     expect(summary.samples.softDeletes).toEqual(['LSX-SOFT-DELETE'])
+    expect(summary.telemetry).toEqual(expect.objectContaining({
+      durationMs: expect.any(Number),
+      phases: expect.arrayContaining([
+        expect.objectContaining({ phase: 'read_sheet_a', durationMs: expect.any(Number) }),
+        expect.objectContaining({ phase: 'read_sheet_c', durationMs: expect.any(Number) }),
+        expect.objectContaining({ phase: 'read_sheet_b', durationMs: expect.any(Number) }),
+        expect.objectContaining({ phase: 'transform', durationMs: expect.any(Number) }),
+        expect.objectContaining({ phase: 'fetch_existing', durationMs: expect.any(Number) }),
+        expect.objectContaining({ phase: 'fetch_active_source', durationMs: expect.any(Number) }),
+      ]),
+    }))
     expect(upserts).toEqual([])
   })
 
-  it('runs writes for changed, unchanged and missing source rows', async () => {
+  it('runs writes for changed and missing source rows', async () => {
     const { supabase, upserts } = createSupabaseMock([
       {
         id: 1,
@@ -183,7 +194,7 @@ describe('google sheet sync', () => {
 
     expect(summary.softDeletedRows).toBe(1)
     expect(upserts).toHaveLength(2)
-    expect(upserts[0].payload.map((row) => row.PCODE)).toEqual(['LSX-A-NEW', 'LSX-C-PENDING', 'LSX-A-EXISTING'])
+    expect(upserts[0].payload.map((row) => row.PCODE)).toEqual(['LSX-A-NEW', 'LSX-C-PENDING'])
     expect(upserts[0].options).toMatchObject({
       p_soft_delete_pcodes: ['LSX-SOFT-DELETE'],
       p_source_name: 'google_sheet',
@@ -209,6 +220,24 @@ describe('google sheet sync', () => {
       expect.objectContaining({ rowNumber: 1, reason: 'Thiếu cột Tình trạng', source: 'sheet_b' }),
     ]))
     expect(summary.statusOverrides).toBe(0)
+  })
+
+  it('does not apply changes when the deadline expires before apply', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-04T00:00:00Z'))
+    const { supabase, upserts } = createSupabaseMock([], [])
+
+    try {
+      await expect(executeGoogleSheetSync(supabase as never, config, 'run', {
+        deadlineAt: Date.now() + 60_000,
+        onPhase: (phase) => {
+          if (phase === 'apply_changes') jest.setSystemTime(Date.now() + 70_000)
+        },
+      })).rejects.toThrow('quá thời gian')
+
+      expect(upserts).toEqual([])
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('tests Sheet A, Sheet C and configured Sheet B connections', async () => {

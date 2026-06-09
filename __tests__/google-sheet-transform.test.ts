@@ -92,8 +92,8 @@ describe('google sheet transform', () => {
       QUANTITY: 20,
     })
     expect(result.issues).toEqual([
-      { rowNumber: 2, pcode: '', reason: 'Thiếu dữ liệu bắt buộc' },
-      { rowNumber: 4, pcode: 'LSX-002', reason: 'Trùng PCODE, giữ dòng xuất hiện sau cùng' },
+      { rowNumber: 2, pcode: '', reason: 'Thiếu dữ liệu bắt buộc: PCODE (số YCSX)', source: undefined },
+      { rowNumber: 4, pcode: 'LSX-002', reason: 'Trùng PCODE, giữ dòng xuất hiện sau cùng', source: undefined },
     ])
   })
 
