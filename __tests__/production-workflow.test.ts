@@ -937,6 +937,14 @@ describe('production workflow helpers', () => {
       .toBe('Dòng 1: giờ kết thúc phải lớn hơn giờ bắt đầu.')
     expect(getProductionRowsValidationError([{ ...validRow, poutput: -1 }], nowVN))
       .toBe('Dòng 1: số lượng và nhân sự không được âm.')
+    expect(getProductionRowsValidationError([{ ...validRow, poutput: 0 }], nowVN))
+      .toBe('Dòng 1: sản lượng nhập phải lớn hơn 0.')
+    expect(getProductionRowsValidationError([{ ...validRow, pcode: '5S', products: '', poutput: 0 }], nowVN))
+      .toBeNull()
+    expect(getProductionRowsValidationError([{ ...validRow, pcode: 'Đào tạo', products: '', poutput: 0 }], nowVN))
+      .toBeNull()
+    expect(getProductionRowsValidationError([{ ...validRow, pcode: 'Hỗ trợ PX khác', products: '', poutput: 0 }], nowVN))
+      .toBeNull()
   })
 
   it('rejects production end time after current local time', () => {

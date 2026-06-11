@@ -659,6 +659,9 @@ export function getProductionRowsValidationError(rows: ProductionInputRow[], now
     if (numericValues.some((value) => !Number.isFinite(value) || value < 0)) {
       return `Dòng ${line}: số lượng và nhân sự không được âm.`
     }
+    if (!isOtherProductionEntryTask(row.pcode) && row.poutput <= 0) {
+      return `Dòng ${line}: sản lượng nhập phải lớn hơn 0.`
+    }
   }
 
   return null

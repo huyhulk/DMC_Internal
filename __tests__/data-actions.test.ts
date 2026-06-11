@@ -198,6 +198,77 @@ describe('data actions', () => {
     })
   })
 
+  it('rejects normal production rows with zero output before insert', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-ZERO-OUTPUT',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Tôn cán thường',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await recordProductionAction([
+      {
+        pdate: '2026-05-08',
+        totalem: 'DMC1',
+        pcode: 'LSX-ZERO-OUTPUT',
+        products: 'Product A',
+        material: 'Material A',
+        poutput: 0,
+        eoutput: 0,
+        routput: 0,
+        workforce: 2,
+        starttime: '08:00',
+        endtime: '09:00',
+        realnorm: 0,
+        log: '',
+        save_status: 'draft',
+      },
+    ])
+
+    expect(result.success).toBe(false)
+    expect(result.message).toBe('Dòng 1: sản lượng nhập phải lớn hơn 0.')
+    expect(mockProductionInsert).not.toHaveBeenCalled()
+  })
+
+  it('allows other production-entry tasks with zero output', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1' }
+
+    const result = await recordProductionAction([
+      {
+        pdate: '2026-05-08',
+        totalem: 'DMC1',
+        pcode: '5S',
+        products: '',
+        material: '',
+        poutput: 0,
+        eoutput: 0,
+        routput: 0,
+        workforce: 2,
+        starttime: '08:00',
+        endtime: '09:00',
+        realnorm: 0,
+        log: '',
+        save_status: 'draft',
+      },
+    ])
+
+    expect(result.success).toBe(true)
+    expect(mockProductionInsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        pcode: '5S',
+        totalem: 'DMC1',
+        poutput: 0,
+      }),
+    ])
+  })
+
   it('queries production orders within the open-orders date window using newest orders first', async () => {
     await expect(getOpenProductionOrdersAction()).resolves.toEqual({
       success: true,
