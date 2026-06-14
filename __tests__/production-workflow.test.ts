@@ -96,6 +96,11 @@ describe('production workflow helpers', () => {
     expect(workshopToDataFilters(CONSTRUCTION_WORKSHOP_CODE)).toEqual(['Hoạt động thi công tại công trình%'])
   })
 
+  it('classifies DMC1 TCS phẳng production-entry orders as PK', () => {
+    expect(getProductionEntryWorkshop('DMC1', 'TCS phẳng')).toBe('DMC1-PK')
+    expect(getProductionEntryWorkshop('DMC1', 'TCS Phẳng')).toBe('DMC1-PK')
+  })
+
   it('ranks production statuses in data-entry priority order', () => {
     expect(getProductionOrderStatusRank('Chua san xuat')).toBe(0)
     expect(getProductionOrderStatusRank('Dang san xuat')).toBe(1)
