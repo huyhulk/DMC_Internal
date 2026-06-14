@@ -73,7 +73,11 @@ export function getProductionEntryWorkshop(workshop: string, description: string
 
   const normalizedDescription = (description ?? '').toLocaleLowerCase('vi')
   if (normalizedDescription.includes('pu')) return 'DMC1-PU'
-  if (normalizedDescription.includes('phụ kiện') || normalizedDescription.includes('pk')) return 'DMC1-PK'
+  if (
+    normalizedDescription.includes('phụ kiện') ||
+    normalizedDescription.includes('pk') ||
+    normalizedDescription.includes('tcs phẳng')
+  ) return 'DMC1-PK'
   return 'DMC1-CT'
 }
 
