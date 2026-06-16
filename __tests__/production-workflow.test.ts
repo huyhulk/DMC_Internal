@@ -534,7 +534,7 @@ describe('production workflow helpers', () => {
     const plan = buildDeadlineProductionPlan(orders, norms)
     const summaries = buildWorkshopDeadlineSummaries(plan.rows, today)
 
-    // DMC1-CT (overdue + today) phải đứng trước DMC3 (không khẩn)
+    // Sắp theo số xưởng: DMC1-CT (1) đứng trước DMC3 (3)
     expect(summaries.map((s) => s.workshop)).toEqual(['DMC1-CT', 'DMC3'])
 
     const dmc1 = summaries[0]
@@ -561,6 +561,25 @@ describe('production workflow helpers', () => {
       totalEstimatedHours: 10,
     })
     expect(dmc3.buckets.later).toEqual({ count: 1, quantity: 200, hours: 10 })
+  })
+
+  it('orders workshops by number (DMC1 < DMC3 < DMC4) regardless of urgency', () => {
+    const today = '2026-05-10'
+    const orders: OpenProductionOrder[] = [
+      openOrder({ pcode: 'D4', workshop: 'DMC4', status: 'Chưa SX', remainingQuantity: 10, deadlinedate: '2026-05-09' }), // overdue
+      openOrder({ pcode: 'D3', workshop: 'DMC3', status: 'Chưa SX', remainingQuantity: 10, deadlinedate: '2026-05-10' }), // today
+      openOrder({ pcode: 'D1', workshop: 'DMC1', status: 'Chưa SX', remainingQuantity: 10, deadlinedate: '2026-05-30' }), // later
+    ]
+    const norms: NormItem[] = [
+      norm({ norm: 10, workshop: 'DMC1' }),
+      norm({ norm: 10, workshop: 'DMC3' }),
+      norm({ norm: 10, workshop: 'DMC4' }),
+    ]
+
+    const summaries = buildWorkshopDeadlineSummaries(buildDeadlineProductionPlan(orders, norms).rows, today)
+
+    // Sắp theo số xưởng, không theo độ khẩn: DMC4 quá hạn vẫn xếp sau DMC1/DMC3.
+    expect(summaries.map((s) => s.workshop)).toEqual(['DMC1-CT', 'DMC3', 'DMC4'])
   })
 
   it('matches deadline production norms by description and base workshop', () => {
