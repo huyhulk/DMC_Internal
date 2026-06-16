@@ -47,6 +47,7 @@ jest.mock('@/lib/db/queries', () => ({
   getCachedNorms: mockGetCachedNorms,
   getFreshNorms: mockGetCachedNorms,
   getCachedMaterials: mockGetCachedMaterials,
+  getFreshNormOverrides: () => Promise.resolve([]),
 }))
 
 jest.mock('@/lib/permissions/server', () => ({
@@ -643,6 +644,7 @@ describe('data actions', () => {
       data: {
         orders: [],
         norms: [],
+        normOverrides: [],
         materials: [],
         submittedPcodes: [],
         closedPcodes: [],
