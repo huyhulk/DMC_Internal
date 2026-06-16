@@ -31,7 +31,7 @@ import {
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
-import type { DeadlineProductionPlanRow, WorkshopDeadlineSummary } from '@/lib/production/workflow'
+import type { DeadlineNormMatchSource, DeadlineProductionPlanRow, WorkshopDeadlineSummary } from '@/lib/production/workflow'
 import {
   DEADLINE_METRICS,
   DEADLINE_METRIC_META,
@@ -401,7 +401,8 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
 
   const allOrders = useMemo(() => state.initData?.orders as OpenProductionOrder[] ?? [], [state.initData?.orders])
   const norms = useMemo(() => state.initData?.norms ?? [], [state.initData?.norms])
-  const plan = useMemo(() => buildDeadlineProductionPlan(allOrders, norms), [allOrders, norms])
+  const normOverrides = useMemo(() => state.initData?.normOverrides ?? [], [state.initData?.normOverrides])
+  const plan = useMemo(() => buildDeadlineProductionPlan(allOrders, norms, normOverrides), [allOrders, norms, normOverrides])
   const today = getTodayLocal()
   const summaries = useMemo(() => buildWorkshopDeadlineSummaries(plan.rows, today), [plan.rows, today])
 
@@ -752,9 +753,13 @@ function DeadlineOrderRow({ row }: { row: DeadlineProductionPlanRow }) {
         <div className="min-w-0">
           <MobileLabel>Định mức</MobileLabel>
           {row.norm ? (
-            <p className="text-[12px] font-semibold text-[#1d1d1f] truncate" title={row.norm.products}>
-              {row.norm.norm.toLocaleString('vi-VN')}
-            </p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[12px] font-semibold text-[#1d1d1f]">{row.norm.norm.toLocaleString('vi-VN')}</span>
+                <MatchSourceBadge source={row.matchSource} />
+              </div>
+              <p className="text-[11px] text-[#6e6e73] truncate" title={row.norm.products}>{row.norm.products}</p>
+            </div>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">
               <AlertTriangle size={11} /> Thiếu định mức
@@ -1746,6 +1751,31 @@ function MobileLabel({ children }: { children: React.ReactNode }) {
       {children}
     </p>
   )
+}
+
+// Cờ nguồn khớp định mức: 'override' (admin chỉ định, đáng tin) | 'heuristic' (tự suy luận, nên rà soát).
+function MatchSourceBadge({ source }: { source: DeadlineNormMatchSource | null }) {
+  if (source === 'override') {
+    return (
+      <span
+        title="Định mức do admin chỉ định (override) — khớp chính xác"
+        className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700"
+      >
+        Chỉ định
+      </span>
+    )
+  }
+  if (source === 'heuristic') {
+    return (
+      <span
+        title="Định mức tự suy luận theo diễn giải — có thể chưa chính xác, nên rà soát"
+        className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700"
+      >
+        Tự đoán
+      </span>
+    )
+  }
+  return null
 }
 
 function StatusBadge({ status }: { status: string }) {

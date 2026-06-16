@@ -56,6 +56,16 @@ export interface NormItem {
   pspeed: number
 }
 
+// Ánh xạ thủ công "từ khóa diễn giải → định mức cụ thể" (bảng norm_override).
+// Được matcher tab "Tổng quan LSX" ưu tiên kiểm trước heuristic.
+export interface NormOverride {
+  keyword: string
+  workshop: string | null
+  targetProducts: string
+  requireAny: string[]
+  priority: number
+}
+
 export interface MaterialItem {
   product: string
   material: string
@@ -81,6 +91,7 @@ export interface ProductionRecord {
 export interface InitData {
   orders: Order[]
   norms: NormItem[]
+  normOverrides?: NormOverride[]
   materials: MaterialItem[]
   submittedPcodes: string[]
   closedPcodes: string[]
@@ -96,6 +107,7 @@ export interface OpenProductionOrder extends Order {
 export interface OpenProductionOrdersData {
   orders: OpenProductionOrder[]
   norms: NormItem[]
+  normOverrides: NormOverride[]
   materials: MaterialItem[]
   submittedPcodes: string[]
   closedPcodes: string[]

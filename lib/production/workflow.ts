@@ -1,6 +1,6 @@
 import { normalizeProductionStatus } from '@/lib/production/status'
 import { normalizeWorkshop, parseDecimalInput, workshopCode } from '@/lib/utils'
-import type { NormItem, OpenProductionOrder, Order } from '@/types'
+import type { NormItem, NormOverride, OpenProductionOrder, Order } from '@/types'
 
 export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
 const PRODUCTION_TIMEZONE_OFFSET = '+07:00'
@@ -31,11 +31,15 @@ export interface ProductionCompletionTimeRow {
   poutput: number | null
 }
 
+export type DeadlineNormMatchSource = 'override' | 'heuristic'
+
 export interface DeadlineProductionPlanRow {
   order: OpenProductionOrder
   norm: NormItem | null
   estimatedHours: number | null
   missingNorm: boolean
+  // Nguồn khớp định mức: 'override' (admin chỉ định) | 'heuristic' (đoán theo diễn giải) | null (thiếu).
+  matchSource: DeadlineNormMatchSource | null
 }
 
 export interface DeadlineProductionPlanSummary {
@@ -260,7 +264,54 @@ function pickSecondHighestDeadlineNorm(matches: Array<{ norm: NormItem; score: n
   return (sortedByNorm[1] ?? sortedByNorm[0]).norm
 }
 
-function findDeadlineProductionNorm(order: OpenProductionOrder, norms: NormItem[]): NormItem | null {
+// Override do admin chỉ định: tìm tên Norm đích cho diễn giải này (ưu tiên cao nhất, priority lớn thắng).
+function findDeadlineNormOverrideProduct(order: OpenProductionOrder, overrides: NormOverride[]): string | null {
+  if (overrides.length === 0) return null
+  const description = normalizeDeadlinePlanText(order.description)
+  if (!description) return null
+
+  const orderWorkshop = getDeadlinePlanBaseWorkshop(order.workshop)
+  const matched = overrides
+    .filter((override) => {
+      const keyword = normalizeDeadlinePlanText(override.keyword)
+      if (!keyword || !description.includes(keyword)) return false
+      if (override.workshop && getDeadlinePlanBaseWorkshop(override.workshop) !== orderWorkshop) return false
+      if (override.requireAny.length > 0) {
+        const hasMarker = override.requireAny.some((marker) => {
+          const normalizedMarker = normalizeDeadlinePlanText(marker)
+          return normalizedMarker !== '' && description.includes(normalizedMarker)
+        })
+        if (!hasMarker) return false
+      }
+      return true
+    })
+    .sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority
+      return normalizeDeadlinePlanText(b.keyword).length - normalizeDeadlinePlanText(a.keyword).length
+    })
+
+  return matched[0]?.targetProducts ?? null
+}
+
+function findDeadlineProductionNorm(
+  order: OpenProductionOrder,
+  norms: NormItem[],
+  overrides: NormOverride[] = [],
+): { norm: NormItem | null; source: DeadlineNormMatchSource | null } {
+  // 1) Override do admin chỉ định — ưu tiên tuyệt đối, trỏ thẳng theo tên norm (+ khớp xưởng).
+  const overrideProduct = findDeadlineNormOverrideProduct(order, overrides)
+  if (overrideProduct) {
+    const target = normalizeDeadlinePlanText(overrideProduct)
+    const overrideNorm = norms.find((norm) =>
+      isDeadlinePlanWorkshopMatch(order.workshop, norm.workshop) &&
+      normalizeDeadlinePlanText(norm.products) === target &&
+      Number.isFinite(norm.norm) && norm.norm > 0
+    )
+    if (overrideNorm) return { norm: overrideNorm, source: 'override' }
+    // Override trỏ tới norm không tồn tại/không hợp lệ → rơi xuống heuristic.
+  }
+
+  // 2) Heuristic theo diễn giải (giữ nguyên).
   const matches = norms
     .map((norm) => ({ norm, score: getDeadlinePlanNormMatchScore(order, norm) }))
     .filter((match) => match.score > 0 && Number.isFinite(match.norm.norm) && match.norm.norm > 0)
@@ -272,10 +323,10 @@ function findDeadlineProductionNorm(order: OpenProductionOrder, norms: NormItem[
 
   const topScore = matches[0]?.score ?? 0
   const topMatches = matches.filter((match) => match.score === topScore)
-  if (topMatches.length === 0) return null
-  if (topMatches.length === 1) return topMatches[0].norm
+  if (topMatches.length === 0) return { norm: null, source: null }
+  if (topMatches.length === 1) return { norm: topMatches[0].norm, source: 'heuristic' }
 
-  return pickSecondHighestDeadlineNorm(topMatches)
+  return { norm: pickSecondHighestDeadlineNorm(topMatches), source: 'heuristic' }
 }
 
 function sortDeadlineProductionPlanRows(rows: DeadlineProductionPlanRow[]): DeadlineProductionPlanRow[] {
@@ -291,6 +342,7 @@ function sortDeadlineProductionPlanRows(rows: DeadlineProductionPlanRow[]): Dead
 export function buildDeadlineProductionPlan(
   orders: OpenProductionOrder[],
   norms: NormItem[],
+  overrides: NormOverride[] = [],
 ): { rows: DeadlineProductionPlanRow[]; summary: DeadlineProductionPlanSummary } {
   const eligibleOrders = orders.filter((order) => {
     const rank = getProductionOrderStatusRank(order.status)
@@ -298,7 +350,7 @@ export function buildDeadlineProductionPlan(
   })
 
   const rows = sortDeadlineProductionPlanRows(eligibleOrders.map((order) => {
-    const norm = findDeadlineProductionNorm(order, norms)
+    const { norm, source } = findDeadlineProductionNorm(order, norms, overrides)
     const estimatedHours = norm
       ? Math.round((order.remainingQuantity / norm.norm) * 100) / 100
       : null
@@ -308,6 +360,7 @@ export function buildDeadlineProductionPlan(
       norm,
       estimatedHours,
       missingNorm: norm === null,
+      matchSource: norm === null ? null : source,
     }
   }))
 

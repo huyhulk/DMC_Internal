@@ -1,11 +1,12 @@
 import { unstable_cache } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { normalizeWorkshop, workshopCode } from '@/lib/utils'
-import type { NormItem } from '@/types'
+import type { NormItem, NormOverride } from '@/types'
 import type { Database } from '@/types/database'
 
 type NormRow = Database['public']['Tables']['Norm']['Row']
 type MaterialRow = Database['public']['Tables']['Material']['Row']
+type NormOverrideTableRow = Database['public']['Tables']['norm_override']['Row']
 
 // Direct admin client (no cookies) used only for cached, public read-only data
 function getAdminClient() {
@@ -55,6 +56,30 @@ export const getCachedMaterials = unstable_cache(
   },
   ['materials-v1'],
   { revalidate: 300, tags: ['materials'] }
+)
+
+// Norm override: admin-managed "description keyword → specific Norm" mapping.
+// Shares the 'norms' cache tag so saving an override / norm revalidates both.
+export async function getFreshNormOverrides(): Promise<NormOverride[]> {
+  const supabase = getAdminClient()
+  const { data } = await supabase
+    .from('norm_override')
+    .select('keyword,workshop,target_products,require_any,priority')
+    .order('priority', { ascending: false })
+  const rows = (data ?? []) as Array<Pick<NormOverrideTableRow, 'keyword' | 'workshop' | 'target_products' | 'require_any' | 'priority'>>
+  return rows.map((o) => ({
+    keyword: o.keyword,
+    workshop: o.workshop,
+    targetProducts: o.target_products,
+    requireAny: o.require_any ?? [],
+    priority: o.priority ?? 0,
+  }))
+}
+
+export const getCachedNormOverrides = unstable_cache(
+  getFreshNormOverrides,
+  ['norm-overrides-v1'],
+  { revalidate: 300, tags: ['norms'] }
 )
 
 // Norm lookup map: product+workshop → norm info (derived from cached norms)

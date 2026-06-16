@@ -21,6 +21,7 @@ export type PermissionKey =
   | 'admin.users'
   | 'admin.kpi-settings'
   | 'admin.google-sheet-sync'
+  | 'admin.norm-override'
 
 export type RolePermissionMatrix = Record<PermissionKey, PermissionLevel>
 export type PermissionMatrixByRole = Record<UserRole, RolePermissionMatrix>
@@ -55,6 +56,7 @@ export const PERMISSION_KEYS: PermissionKey[] = [
   'admin.users',
   'admin.kpi-settings',
   'admin.google-sheet-sync',
+  'admin.norm-override',
 ]
 
 export const PERMISSION_LABELS: Record<PermissionKey, { label: string; group: string }> = {
@@ -81,6 +83,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, { label: string; group: st
   'admin.users': { label: 'Quản lý người dùng', group: 'Hệ Thống' },
   'admin.kpi-settings': { label: 'Cài đặt KPI', group: 'Hệ Thống' },
   'admin.google-sheet-sync': { label: 'Đồng bộ Google Sheet', group: 'Hệ Thống' },
+  'admin.norm-override': { label: 'Định mức (override)', group: 'Hệ Thống' },
 }
 
 const invisibleMatrix = Object.fromEntries(PERMISSION_KEYS.map((key) => [key, 'invisible'])) as RolePermissionMatrix

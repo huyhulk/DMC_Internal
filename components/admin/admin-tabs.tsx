@@ -1,13 +1,14 @@
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
-export type AdminTabKey = 'users' | 'permissions' | 'kpi-settings' | 'google-sheet-sync'
+export type AdminTabKey = 'users' | 'permissions' | 'kpi-settings' | 'google-sheet-sync' | 'norm-override'
 
 const ADMIN_TABS: Array<{ key: AdminTabKey; label: string; href: string }> = [
   { key: 'users', label: 'Người dùng', href: '/dashboard/admin' },
   { key: 'permissions', label: 'Phân quyền tab', href: '/dashboard/admin?sub=permissions' },
   { key: 'kpi-settings', label: 'Cài đặt KPI', href: '/dashboard/admin/kpi-settings' },
   { key: 'google-sheet-sync', label: 'Đồng bộ Google Sheet', href: '/dashboard/admin/google-sheet-sync' },
+  { key: 'norm-override', label: 'Định mức (override)', href: '/dashboard/admin/norm-override' },
 ]
 
 export function AdminTabs({ active }: { active: AdminTabKey }) {
