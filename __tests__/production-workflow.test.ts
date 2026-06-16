@@ -15,6 +15,8 @@ import {
 import {
   buildProductionDeadlineCutoff,
   buildDeadlineProductionPlan,
+  buildWorkshopDeadlineSummaries,
+  getDeadlineUrgencyBucket,
   calculateProductionCompletion,
   calculateProductionCompletionTime,
   calculateRemainingProductionOutput,
@@ -578,6 +580,70 @@ describe('production workflow helpers', () => {
       missingNormOrders: 0,
       totalEstimatedHours: 6,
     })
+  })
+
+  it('classifies deadlines into day-based urgency buckets', () => {
+    const today = '2026-05-10'
+    expect(getDeadlineUrgencyBucket('2026-05-09', today)).toBe('overdue')
+    expect(getDeadlineUrgencyBucket('2026-05-10', today)).toBe('today')
+    expect(getDeadlineUrgencyBucket('2026-05-11', today)).toBe('d1_3')
+    expect(getDeadlineUrgencyBucket('2026-05-13', today)).toBe('d1_3')
+    expect(getDeadlineUrgencyBucket('2026-05-14', today)).toBe('d4_7')
+    expect(getDeadlineUrgencyBucket('2026-05-17', today)).toBe('d4_7')
+    expect(getDeadlineUrgencyBucket('2026-05-18', today)).toBe('later')
+  })
+
+  it('treats missing, invalid or time-suffixed deadlines correctly', () => {
+    const today = '2026-05-10'
+    expect(getDeadlineUrgencyBucket('', today)).toBe('later')
+    expect(getDeadlineUrgencyBucket(null, today)).toBe('later')
+    expect(getDeadlineUrgencyBucket(undefined, today)).toBe('later')
+    expect(getDeadlineUrgencyBucket('not-a-date', today)).toBe('later')
+    expect(getDeadlineUrgencyBucket('2026-05-10T23:59:00', today)).toBe('today')
+  })
+
+  it('groups plan rows by entry workshop with urgency breakdown and metrics', () => {
+    const today = '2026-05-10'
+    const orders: OpenProductionOrder[] = [
+      openOrder({ pcode: 'CT-1', workshop: 'DMC1', status: 'Chưa SX', remainingQuantity: 100, deadlinedate: '2026-05-09' }), // overdue
+      openOrder({ pcode: 'CT-2', workshop: 'DMC1', status: 'Đang SX', remainingQuantity: 50, deadlinedate: '2026-05-10' }), // today
+      openOrder({ pcode: 'D3-1', workshop: 'DMC3', status: 'Chưa SX', remainingQuantity: 200, deadlinedate: '2026-05-20' }), // later
+    ]
+    const norms: NormItem[] = [
+      norm({ norm: 25, workshop: 'DMC1' }),
+      norm({ norm: 20, workshop: 'DMC3' }),
+    ]
+
+    const plan = buildDeadlineProductionPlan(orders, norms)
+    const summaries = buildWorkshopDeadlineSummaries(plan.rows, today)
+
+    // DMC1-CT (overdue + today) phải đứng trước DMC3 (không khẩn)
+    expect(summaries.map((s) => s.workshop)).toEqual(['DMC1-CT', 'DMC3'])
+
+    const dmc1 = summaries[0]
+    expect(dmc1).toMatchObject({
+      workshop: 'DMC1-CT',
+      orderCount: 2,
+      notStartedCount: 1,
+      inProgressCount: 1,
+      missingNormCount: 0,
+      totalRemainingQuantity: 150,
+      totalEstimatedHours: 6,
+    })
+    expect(dmc1.buckets.overdue).toEqual({ count: 1, quantity: 100, hours: 4 })
+    expect(dmc1.buckets.today).toEqual({ count: 1, quantity: 50, hours: 2 })
+    expect(dmc1.buckets.later).toEqual({ count: 0, quantity: 0, hours: 0 })
+
+    const dmc3 = summaries[1]
+    expect(dmc3).toMatchObject({
+      workshop: 'DMC3',
+      orderCount: 1,
+      notStartedCount: 1,
+      inProgressCount: 0,
+      totalRemainingQuantity: 200,
+      totalEstimatedHours: 10,
+    })
+    expect(dmc3.buckets.later).toEqual({ count: 1, quantity: 200, hours: 10 })
   })
 
   it('matches deadline production norms by description and base workshop', () => {
