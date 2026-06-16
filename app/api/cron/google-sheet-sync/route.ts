@@ -10,7 +10,8 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 1200
+// Hobby plan caps Serverless Function maxDuration at 300s; raise to ≤800 only on Pro.
+export const maxDuration = 300
 
 const CRON_SYNC_TIMEOUT_MS = 18 * 60 * 1000
 const GOOGLE_REQUEST_TIMEOUT_MS = 45 * 1000

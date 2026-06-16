@@ -3,22 +3,24 @@ const mockGetCachedNorms = jest.fn()
 const mockGetCachedMaterials = jest.fn()
 const mockGetOpenProductionOrdersQueryWindow = jest.fn()
 const mockLoggerError = jest.fn()
+const mockRequireTabEdit = jest.fn()
 const mockRequireTabView = jest.fn()
 
 let mockProfile: { role: string; workspace: string }
-let mockSingle: jest.Mock
-let mockEq: jest.Mock
-let mockLimit: jest.Mock
-let mockIlike: jest.Mock
-let mockIs: jest.Mock
 let mockGte: jest.Mock
+let mockIs: jest.Mock
 let mockLte: jest.Mock
 let mockOr: jest.Mock
+let mockEq: jest.Mock
+let mockIlike: jest.Mock
+let mockLimit: jest.Mock
+let mockSingle: jest.Mock
 let mockDataIn: jest.Mock
 let mockDataOrder: jest.Mock
 let mockDataRange: jest.Mock
 let mockStatusIn: jest.Mock
 let mockProductionIn: jest.Mock
+let mockProductionInsert: jest.Mock
 let mockHistoryGte: jest.Mock
 let mockHistoryLte: jest.Mock
 let mockHistoryOrder: jest.Mock
@@ -48,7 +50,7 @@ jest.mock('@/lib/db/queries', () => ({
 }))
 
 jest.mock('@/lib/permissions/server', () => ({
-  requireTabEdit: jest.fn(),
+  requireTabEdit: mockRequireTabEdit,
   requireTabView: mockRequireTabView,
 }))
 
@@ -69,7 +71,13 @@ jest.mock('@/lib/logger', () => ({
   },
 }))
 
-import { getOpenProductionOrdersAction, listProductionInputHistoryAction } from '@/lib/actions/data'
+import {
+  getInitData,
+  getOpenProductionOrdersAction,
+  listProductionInputHistoryAction,
+  recordProductionAction,
+  searchOrderByPcode,
+} from '@/lib/actions/data'
 
 describe('data actions', () => {
   beforeEach(() => {
@@ -79,7 +87,6 @@ describe('data actions', () => {
     currentStatusRows = []
     currentProductionRows = []
     currentHistoryRows = []
-    mockProfile = { role: 'ADMIN', workspace: 'ALL' }
 
     mockGetCachedNorms.mockResolvedValue([])
     mockGetCachedMaterials.mockResolvedValue([])
@@ -89,15 +96,16 @@ describe('data actions', () => {
       deadlineFrom: '2026-05-07',
     })
     mockRequireTabView.mockResolvedValue({ role: 'admin', workspace: 'ALL' })
-
-    const activeSourceRows = () => currentDataRows.filter((row) => row.source_deleted_at == null)
-    const dataByPcodes = (values: string[]) =>
-      activeSourceRows().filter((row) => values.includes(String(row.PCODE ?? '')))
+    mockRequireTabEdit.mockResolvedValue({ role: 'TEAM_LEADER', workspace: 'DMC1' })
+    mockProfile = { role: 'admin', workspace: 'DMC1' }
 
     mockSingle = jest.fn().mockImplementation(() => {
       const row = activeSourceRows()[0]
       return Promise.resolve({ data: row ?? null, error: row ? null : { message: 'not found' } })
     })
+    const activeSourceRows = () => currentDataRows.filter((row) => row.source_deleted_at == null)
+    const dataByPcodes = (values: string[]) =>
+      activeSourceRows().filter((row) => values.includes(String(row.PCODE ?? '')))
     mockEq = jest.fn().mockImplementation((column: string, value: unknown) => {
       if (column === 'id') return { single: jest.fn().mockResolvedValue({ data: mockProfile }) }
       if (column === 'pdate') return Promise.resolve({ data: currentProductionRows, error: null })
@@ -122,7 +130,7 @@ describe('data actions', () => {
       is: jest.fn().mockResolvedValue({ data: column === 'PCODE' ? dataByPcodes(values) : [], error: null }),
     }))
     mockDataRange = jest.fn().mockImplementation((from: number, to: number) =>
-      Promise.resolve({ data: activeSourceRows().slice(from, to + 1), error: null })
+      Promise.resolve({ data: currentDataRows.slice(from, to + 1), error: null })
     )
     const dataQueryResult = {
       is: (...args: unknown[]) => {
@@ -136,7 +144,7 @@ describe('data actions', () => {
       range: (...args: unknown[]) => mockDataRange(...args),
     }
     mockDataOrder = jest.fn().mockReturnValue(dataQueryResult)
-    mockLte = jest.fn().mockReturnValue(dataQueryResult)
+    mockLte = jest.fn().mockReturnValue({ is: jest.fn().mockReturnValue(dataQueryResult) })
     mockGte = jest.fn().mockReturnValue({ lte: mockLte })
     const mockDataSelect = jest.fn((columns: string) => {
       if (columns === 'PCODE,CUSTOMER,WORKSHOP,DESCRIPTION') {
@@ -156,7 +164,19 @@ describe('data actions', () => {
     mockStatusIn = jest.fn().mockImplementation(() => Promise.resolve({ data: currentStatusRows, error: null }))
     const mockStatusSelect = jest.fn().mockReturnValue({ in: mockStatusIn })
 
-    mockProductionIn = jest.fn().mockImplementation(() => Promise.resolve({ data: currentProductionRows, error: null }))
+    mockProductionIn = jest.fn().mockImplementation((column: string, values: string[]) =>
+      Promise.resolve({
+        data: currentProductionRows.filter((row) => values.includes(String(row[column] ?? ''))),
+        error: null,
+      })
+    )
+    const mockProductionEq = jest.fn().mockImplementation((column: string, value: unknown) =>
+      Promise.resolve({
+        data: currentProductionRows.filter((row) => row[column] === value),
+        error: null,
+      })
+    )
+    mockProductionInsert = jest.fn().mockResolvedValue({ error: null })
     const historyQueryResult = {
       lte: (...args: unknown[]) => {
         mockHistoryLte(...args)
@@ -177,14 +197,14 @@ describe('data actions', () => {
     mockHistoryGte = jest.fn().mockReturnValue(historyQueryResult)
     const mockProductionSelect = jest.fn((columns: string) => {
       if (columns.includes('id,pdate,pcode,products')) return { gte: mockHistoryGte }
-      return { in: mockProductionIn }
+      return { in: mockProductionIn, eq: mockProductionEq }
     })
 
     const mockFrom = jest.fn((table: string) => {
       if (table === 'profiles') return { select: mockProfilesSelect }
       if (table === 'data') return { select: mockDataSelect }
-      if (table === 'production_order_status') return { select: mockStatusSelect }
-      if (table === 'Production') return { select: mockProductionSelect }
+      if (table === 'production_order_status') return { select: mockStatusSelect, upsert: jest.fn().mockResolvedValue({ error: null }) }
+      if (table === 'Production') return { select: mockProductionSelect, insert: mockProductionInsert, update: jest.fn().mockReturnValue({ in: jest.fn().mockResolvedValue({ error: null }) }) }
       throw new Error(`Unexpected table: ${table}`)
     })
 
@@ -195,7 +215,355 @@ describe('data actions', () => {
         }),
       },
       from: mockFrom,
+      rpc: jest.fn().mockResolvedValue({ error: null }),
     })
+  })
+
+  it('scopes getInitData DMC1 entry orders by DESCRIPTION subgroup while using base DMC1 norms', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1-PU' }
+    mockGetCachedNorms.mockResolvedValue([{ products: 'Panel PU', norm: 10, nwforce: 2, workshop: 'DMC1', pspeed: 5 }])
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DMC1-PU',
+        INITIALDATE: '2026-05-09',
+        CUSTOMER: 'PU Customer',
+        WORKSHOP: 'Phân xưởng 2 - Tôn Pu & Phụ kiện',
+        DESCRIPTION: 'Tấm PU cách nhiệt',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+      {
+        PCODE: 'LSX-DMC1-PK',
+        INITIALDATE: '2026-05-09',
+        CUSTOMER: 'PK Customer',
+        WORKSHOP: 'Phân xưởng 1 - Tôn & Phụ kiện',
+        DESCRIPTION: 'Bộ phụ kiện mái',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+      {
+        PCODE: 'LSX-DMC1-CT',
+        INITIALDATE: '2026-05-09',
+        CUSTOMER: 'CT Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Cuộn tôn lạnh',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await getInitData('2026-05-09')
+
+    expect(result.success).toBe(true)
+    expect(result.data?.orders.map((order) => order.pcode)).toEqual(['LSX-DMC1-PU'])
+    expect(result.data?.orders[0].workshop).toBe('DMC1-PU')
+  })
+
+  it('shows all DMC1 subgroups in open production orders for aggregate DMC1 workspace', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DMC1-PU',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PU Customer',
+        WORKSHOP: 'Phân xưởng 2 - Tôn Pu & Phụ kiện',
+        DESCRIPTION: 'Tấm PU cách nhiệt',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+      {
+        PCODE: 'LSX-DMC1-PK',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PK Customer',
+        WORKSHOP: 'Phân xưởng 1 - Tôn & Phụ kiện',
+        DESCRIPTION: 'Bộ phụ kiện mái',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+      {
+        PCODE: 'LSX-DMC1-CT',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'CT Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Cuộn tôn lạnh',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.orders.map((order) => order.workshop)).toEqual(
+      expect.arrayContaining(['DMC1-PU', 'DMC1-PK', 'DMC1-CT'])
+    )
+  })
+
+  it('scopes open production orders to the matching DMC1 DESCRIPTION bucket for sub-workspaces', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1-PK' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DMC1-PK',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PK Customer',
+        WORKSHOP: 'Phân xưởng 1 - Tôn & Phụ kiện',
+        DESCRIPTION: 'Bộ phụ kiện mái',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+      {
+        PCODE: 'LSX-DMC1-TCS-PHANG',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'TCS Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'TCS phẳng',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+      {
+        PCODE: 'LSX-DMC1-PU',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PU Customer',
+        WORKSHOP: 'Phân xưởng 2 - Tôn Pu & Phụ kiện',
+        DESCRIPTION: 'Tấm PU cách nhiệt',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.orders.map((order) => order.pcode)).toEqual(['LSX-DMC1-PK', 'LSX-DMC1-TCS-PHANG'])
+    expect(result.data?.orders.map((order) => order.workshop)).toEqual(['DMC1-PK', 'DMC1-PK'])
+  })
+
+  it('scopes open production orders to the matching DMC1 DESCRIPTION bucket for CT sub-workspaces', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1-CT' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DMC1-CT',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'CT Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Cuộn tôn lạnh',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+      {
+        PCODE: 'LSX-DMC1-PK',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PK Customer',
+        WORKSHOP: 'Phân xưởng 1 - Tôn & Phụ kiện',
+        DESCRIPTION: 'Bộ phụ kiện mái',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.orders.map((order) => order.pcode)).toEqual(['LSX-DMC1-CT'])
+    expect(result.data?.orders[0].workshop).toBe('DMC1-CT')
+  })
+
+  it('rejects search when a DMC1 sub-workspace user searches a different DESCRIPTION bucket', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1-PU' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DMC1-PK',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PK Customer',
+        WORKSHOP: 'Phân xưởng 1 - Tôn & Phụ kiện',
+        DESCRIPTION: 'Bộ phụ kiện mái',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await searchOrderByPcode('LSX-DMC1-PK')
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('Không có quyền truy cập')
+  })
+
+  it('denies blank non-admin workspaces in production-entry order lists', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: '' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DMC1-PU',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PU Customer',
+        WORKSHOP: 'Phân xưởng 2 - Tôn Pu & Phụ kiện',
+        DESCRIPTION: 'Tấm PU cách nhiệt',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.orders).toEqual([])
+  })
+
+  it('allows explicit ALL workspaces in production-entry order lists', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'ALL' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DMC1-PU',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PU Customer',
+        WORKSHOP: 'Phân xưởng 2 - Tôn Pu & Phụ kiện',
+        DESCRIPTION: 'Tấm PU cách nhiệt',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.orders.map((order) => order.pcode)).toEqual(['LSX-DMC1-PU'])
+  })
+
+  it('rejects recordProductionAction when submitted pcode belongs to another DMC1 DESCRIPTION bucket', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1-CT' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DMC1-PU',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PU Customer',
+        WORKSHOP: 'Phân xưởng 2 - Tôn Pu & Phụ kiện',
+        DESCRIPTION: 'Tấm PU cách nhiệt',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await recordProductionAction([
+      {
+        pdate: '2026-05-08',
+        totalem: 'DMC1-CT',
+        pcode: 'LSX-DMC1-PU',
+        products: 'Product A',
+        material: 'Material A',
+        poutput: 10,
+        eoutput: 0,
+        routput: 0,
+        workforce: 2,
+        starttime: '08:00',
+        endtime: '09:00',
+        realnorm: 5,
+        log: '',
+        save_status: 'draft',
+      },
+    ])
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('Không có quyền nhập sản xuất')
+  })
+
+  it('writes Production.totalem using the base DMC1 workshop for DMC1 sub-workspace submissions', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1-PU' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-DMC1-PU',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'PU Customer',
+        WORKSHOP: 'Phân xưởng 2 - Tôn Pu & Phụ kiện',
+        DESCRIPTION: 'Tấm PU cách nhiệt',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await recordProductionAction([
+      {
+        pdate: '2026-05-08',
+        totalem: 'DMC1-PU',
+        pcode: 'LSX-DMC1-PU',
+        products: 'Product A',
+        material: 'Material A',
+        poutput: 10,
+        eoutput: 0,
+        routput: 0,
+        workforce: 2,
+        starttime: '08:00',
+        endtime: '09:00',
+        realnorm: 5,
+        log: '',
+        save_status: 'draft',
+      },
+    ])
+
+    expect(result.success).toBe(true)
+    expect(mockProductionInsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        pcode: 'LSX-DMC1-PU',
+        totalem: 'DMC1',
+      }),
+    ])
+  })
+
+  it('writes Production.totalem as CONG_TRINH for construction-site submissions', async () => {
+    mockProfile = { role: 'TEAM_LEADER', workspace: 'CONG_TRINH' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-CONG-TRINH',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Construction Customer',
+        WORKSHOP: 'Hoạt động thi công tại công trình',
+        DESCRIPTION: 'Lắp đặt tại công trình',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    const result = await recordProductionAction([
+      {
+        pdate: '2026-05-08',
+        totalem: 'CONG_TRINH',
+        pcode: 'LSX-CONG-TRINH',
+        products: 'Lắp dựng',
+        material: 'Tôn',
+        poutput: 10,
+        eoutput: 0,
+        routput: 0,
+        workforce: 2,
+        starttime: '08:00',
+        endtime: '09:00',
+        realnorm: 5,
+        log: '',
+        save_status: 'draft',
+      },
+    ])
+
+    expect(result.success).toBe(true)
+    expect(mockProductionInsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        pcode: 'LSX-CONG-TRINH',
+        totalem: 'CONG_TRINH',
+      }),
+    ])
   })
 
   it('rejects normal production rows with zero output before insert', async () => {
@@ -517,6 +885,60 @@ describe('data actions', () => {
     jest.useRealTimers()
   })
 
+  it('hides production orders completed before today from the open orders list', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-05-09T09:00:00+07:00'))
+
+    currentDataRows = [
+      {
+        PCODE: 'LSX-COMPLETE-YESTERDAY',
+        INITIALDATE: '2026-05-08',
+        CUSTOMER: 'Completed Customer',
+        WORKSHOP: 'DMC1',
+        DESCRIPTION: 'Completed before today',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-09T10:00:00',
+        STATUS: 'Chua san xuat',
+      },
+    ]
+
+    currentStatusRows = [
+      {
+        pcode: 'LSX-COMPLETE-YESTERDAY',
+        status: 'Chua SX',
+        produced_quantity: 0,
+        quantity: 100,
+        completion_pct: 0,
+        updated_at: '2026-05-09T08:30:00+07:00',
+      },
+    ]
+
+    currentProductionRows = [
+      {
+        pcode: 'LSX-COMPLETE-YESTERDAY',
+        pdate: '2026-05-08',
+        endtime: '08:00',
+        poutput: 60,
+        save_status: 'draft',
+      },
+      {
+        pcode: 'LSX-COMPLETE-YESTERDAY',
+        pdate: '2026-05-08',
+        endtime: '08:30',
+        poutput: 40,
+        save_status: 'draft',
+      },
+    ]
+
+    const result = await getOpenProductionOrdersAction()
+
+    expect(result.success).toBe(true)
+    expect(result.data?.submittedPcodes).toEqual(['LSX-COMPLETE-YESTERDAY'])
+    expect(result.data?.closedPcodes).toEqual(['LSX-COMPLETE-YESTERDAY'])
+    expect(result.data?.orders).toHaveLength(0)
+
+    jest.useRealTimers()
+  })
+
   it('chunks production history lookups for large open-order lists', async () => {
     currentDataRows = Array.from({ length: 201 }, (_, index) => ({
       PCODE: `LSX-BULK-${String(index + 1).padStart(3, '0')}`,
@@ -543,6 +965,7 @@ describe('data actions', () => {
   })
 
   it('uses the open-orders date window instead of scanning all historical data', async () => {
+    mockProfile = { role: 'ADMIN', workspace: 'ALL' }
     currentDataRows = [
       {
         PCODE: 'LSX-WINDOW-CURRENT',
@@ -606,5 +1029,67 @@ describe('data actions', () => {
       workshop: 'DMC4',
       customer: 'History Customer',
     })
+  })
+
+  it('scopes production input history to matching DMC1 DESCRIPTION bucket for sub-workspaces', async () => {
+    mockRequireTabView.mockResolvedValue({ role: 'TEAM_LEADER', workspace: 'DMC1-PU' })
+    currentHistoryRows = [
+      {
+        id: 1,
+        pdate: '2026-05-10',
+        pcode: 'LSX-HISTORY-PU',
+        products: 'Product PU',
+        poutput: 12,
+        eoutput: 0,
+        routput: 0,
+        workforce: 3,
+        realnorm: 4,
+        starttime: '08:00',
+        endtime: '09:00',
+        log: '',
+        save_status: 'draft',
+        created_at: '2026-05-10T09:05:00+07:00',
+      },
+      {
+        id: 2,
+        pdate: '2026-05-10',
+        pcode: 'LSX-HISTORY-PK',
+        products: 'Product PK',
+        poutput: 10,
+        eoutput: 0,
+        routput: 0,
+        workforce: 2,
+        realnorm: 5,
+        starttime: '09:00',
+        endtime: '10:00',
+        log: '',
+        save_status: 'draft',
+        created_at: '2026-05-10T10:05:00+07:00',
+      },
+    ]
+    currentDataRows = [
+      {
+        PCODE: 'LSX-HISTORY-PU',
+        CUSTOMER: 'PU Customer',
+        WORKSHOP: 'Phân xưởng 2 - Tôn Pu & Phụ kiện',
+        DESCRIPTION: 'Tấm PU cách nhiệt',
+      },
+      {
+        PCODE: 'LSX-HISTORY-PK',
+        CUSTOMER: 'PK Customer',
+        WORKSHOP: 'Phân xưởng 1 - Tôn & Phụ kiện',
+        DESCRIPTION: 'Bộ phụ kiện mái',
+      },
+    ]
+
+    const result = await listProductionInputHistoryAction({
+      fromDate: '2026-05-10',
+      toDate: '2026-05-10',
+      query: '',
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.data?.map((row) => row.pcode)).toEqual(['LSX-HISTORY-PU'])
+    expect(result.data?.[0].workshop).toBe('DMC1-PU')
   })
 })

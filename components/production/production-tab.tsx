@@ -23,13 +23,25 @@ import { ProductLineCard } from './product-line-card'
 import { UnlockDialog } from './unlock-dialog'
 import {
   buildDeadlineProductionPlan,
+  buildWorkshopDeadlineSummaries,
+  DEADLINE_URGENCY_BUCKETS,
   filterProductionOrdersByPcode,
   getOpenOrdersSearchState,
   getProductionEntryWorkshop,
   getProductionOrderStatusRank,
   sortProductionOrdersForEntry,
 } from '@/lib/production/workflow'
-import type { DeadlineProductionPlanRow } from '@/lib/production/workflow'
+import type { DeadlineProductionPlanRow, WorkshopDeadlineSummary } from '@/lib/production/workflow'
+import {
+  DEADLINE_METRICS,
+  DEADLINE_METRIC_META,
+  DeadlineTimelineChart,
+  URGENCY_META,
+  WorkshopDeadlineDonut,
+  formatMetricValue,
+  type DeadlineMetric,
+} from './deadline-charts'
+import { WORKSHOP_COLORS, type WorkshopCode } from '@/lib/reports/report-types'
 import {
   normalizeProductionStatus,
 } from '@/lib/production/status'
@@ -375,145 +387,287 @@ function OpenOrdersTab({ user, canEdit, refreshSignal }: OpenOrdersTabProps) {
   )
 }
 
+function getWorkshopColor(workshop: string): string {
+  const code = workshopCode(workshop) as WorkshopCode
+  return WORKSHOP_COLORS[code] ?? '#6e6e73'
+}
+
 function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
   const { state, loadOpenOrders } = useProductionData(user)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [workshopFilter, setWorkshopFilter] = useState('ALL')
-  const [deadlineDateFilter, setDeadlineDateFilter] = useState('')
-  const [missingNormOnly, setMissingNormOnly] = useState(false)
+  const [metric, setMetric] = useState<DeadlineMetric>('hours')
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
 
   useEffect(() => { loadOpenOrders() }, [loadOpenOrders, refreshSignal])
 
   const allOrders = useMemo(() => state.initData?.orders as OpenProductionOrder[] ?? [], [state.initData?.orders])
   const norms = useMemo(() => state.initData?.norms ?? [], [state.initData?.norms])
-  const workshopOptions = useMemo(() => [...new Set(allOrders.map((order) => getProductionEntryWorkshop(order.workshop, order.description)).filter(Boolean))].sort(), [allOrders])
   const plan = useMemo(() => buildDeadlineProductionPlan(allOrders, norms), [allOrders, norms])
-  const filteredRows = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    return plan.rows.filter((row) => {
-      const rowWorkshop = getProductionEntryWorkshop(row.order.workshop, row.order.description)
-      const matchesWorkshop = workshopFilter === 'ALL' || rowWorkshop === workshopFilter
-      const matchesDeadlineDate = !deadlineDateFilter || row.order.deadlinedate?.slice(0, 10) === deadlineDateFilter
-      const matchesMissingNorm = !missingNormOnly || row.missingNorm
-      const matchesQuery = !query || row.order.pcode.toLowerCase().includes(query)
-      return matchesWorkshop && matchesDeadlineDate && matchesMissingNorm && matchesQuery
-    })
-  }, [deadlineDateFilter, missingNormOnly, plan.rows, searchQuery, workshopFilter])
-  const filteredSummary = useMemo(() => {
-    const summary = filteredRows.reduce((acc, row) => {
-      const rank = getProductionOrderStatusRank(row.order.status)
-      return {
-        totalOrders: acc.totalOrders + 1,
-        notStartedOrders: acc.notStartedOrders + (rank === 0 ? 1 : 0),
-        inProgressOrders: acc.inProgressOrders + (rank === 1 ? 1 : 0),
-        missingNormOrders: acc.missingNormOrders + (row.missingNorm ? 1 : 0),
-        totalRemainingQuantity: acc.totalRemainingQuantity + row.order.remainingQuantity,
-        totalEstimatedHours: acc.totalEstimatedHours + (row.estimatedHours ?? 0),
-      }
-    }, {
-      totalOrders: 0,
-      notStartedOrders: 0,
-      inProgressOrders: 0,
-      missingNormOrders: 0,
-      totalRemainingQuantity: 0,
-      totalEstimatedHours: 0,
-    })
+  const today = getTodayLocal()
+  const summaries = useMemo(() => buildWorkshopDeadlineSummaries(plan.rows, today), [plan.rows, today])
 
-    return {
-      ...summary,
-      totalEstimatedHours: Math.round(summary.totalEstimatedHours * 100) / 100,
-      totalRemainingQuantity: Math.round(summary.totalRemainingQuantity * 1000) / 1000,
+  const rowsByWorkshop = useMemo(() => {
+    const map = new Map<string, DeadlineProductionPlanRow[]>()
+    for (const row of plan.rows) {
+      const ws = getProductionEntryWorkshop(row.order.workshop, row.order.description) || '—'
+      const list = map.get(ws)
+      if (list) list.push(row)
+      else map.set(ws, [row])
     }
-  }, [filteredRows])
+    return map
+  }, [plan.rows])
 
-  useEffect(() => {
-    if (workshopOptions.length === 1 && workshopFilter !== workshopOptions[0]) {
-      setWorkshopFilter(workshopOptions[0])
-    } else if (workshopOptions.length !== 1 && workshopFilter !== 'ALL' && !workshopOptions.includes(workshopFilter)) {
-      setWorkshopFilter('ALL')
-    }
-  }, [workshopFilter, workshopOptions])
+  const totals = useMemo(() => summaries.reduce((acc, summary) => ({
+    totalOrders: acc.totalOrders + summary.orderCount,
+    overdue: acc.overdue + summary.buckets.overdue.count,
+    today: acc.today + summary.buckets.today.count,
+    totalEstimatedHours: acc.totalEstimatedHours + summary.totalEstimatedHours,
+    missingNorm: acc.missingNorm + summary.missingNormCount,
+  }), { totalOrders: 0, overdue: 0, today: 0, totalEstimatedHours: 0, missingNorm: 0 }), [summaries])
+
+  function toggleWorkshop(ws: string) {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(ws)) next.delete(ws)
+      else next.add(ws)
+      return next
+    })
+  }
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-[#f5f5f7]">
       <div className="shrink-0 px-3 sm:px-4 pt-3 sm:pt-4 pb-3 border-b border-[#d2d2d7]/60 space-y-3 bg-white/85 backdrop-blur-sm">
-        <SectionLabel>
+        <SectionLabel
+          action={
+            <div className="inline-flex p-0.5 rounded-xl bg-[#f2f2f7] border border-[#d2d2d7]/60">
+              {DEADLINE_METRICS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMetric(m)}
+                  className={cn(
+                    'h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-all active:scale-[0.98]',
+                    metric === m
+                      ? 'bg-white text-dmc-primary shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+                      : 'text-[#6e6e73] hover:text-[#1d1d1f]'
+                  )}
+                >
+                  {DEADLINE_METRIC_META[m].short}
+                </button>
+              ))}
+            </div>
+          }
+        >
           Danh sách LSX theo Hạn giao hàng
         </SectionLabel>
 
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
-          <DeadlineKpiCard label="Tổng LSX" value={filteredSummary.totalOrders.toLocaleString('vi-VN')} tone="text-[#1d1d1f]" />
-          <DeadlineKpiCard label="Sản lượng còn lại" value={filteredSummary.totalRemainingQuantity.toLocaleString('vi-VN')} tone="text-[#34c759]" />
-          <DeadlineKpiCard label="Tổng giờ còn lại" value={filteredSummary.totalEstimatedHours.toLocaleString('vi-VN')} tone="text-dmc-primary" />
-          <DeadlineKpiCard label="Chưa SX" value={filteredSummary.notStartedOrders.toLocaleString('vi-VN')} tone="text-[#007aff]" />
-          <DeadlineKpiCard label="Đang SX" value={filteredSummary.inProgressOrders.toLocaleString('vi-VN')} tone="text-[#b37700]" />
-          <DeadlineKpiCard label="Thiếu định mức" value={filteredSummary.missingNormOrders.toLocaleString('vi-VN')} tone="text-red-600" />
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+          <DeadlineKpiCard label="Tổng LSX" value={totals.totalOrders.toLocaleString('vi-VN')} tone="text-[#1d1d1f]" />
+          <DeadlineKpiCard label="Quá hạn" value={totals.overdue.toLocaleString('vi-VN')} tone="text-[#ff3b30]" />
+          <DeadlineKpiCard label="Đến hạn hôm nay" value={totals.today.toLocaleString('vi-VN')} tone="text-[#b37700]" />
+          <DeadlineKpiCard label="Tổng giờ còn lại" value={totals.totalEstimatedHours.toLocaleString('vi-VN')} tone="text-dmc-primary" />
+          <DeadlineKpiCard label="Thiếu định mức" value={totals.missingNorm.toLocaleString('vi-VN')} tone="text-red-600" />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-[minmax(140px,170px)_minmax(170px,220px)_minmax(220px,1fr)_auto] gap-3 sm:items-end">
-          <FieldGroup label="Xưởng">
-            <select
-              value={workshopFilter}
-              onChange={(e) => setWorkshopFilter(e.target.value)}
-              className={inputCls}
-              disabled={workshopOptions.length <= 1}
-            >
-              {workshopOptions.length > 1 && <option value="ALL">Tất cả xưởng</option>}
-              {workshopOptions.map((ws) => (
-                <option key={ws} value={ws}>{ws}</option>
-              ))}
-            </select>
-          </FieldGroup>
-
-          <FieldGroup label="Hạn giao hàng">
-            <div className="flex gap-2">
-              <VietnameseDatePicker
-                value={deadlineDateFilter}
-                onChange={setDeadlineDateFilter}
-                className={cn(inputCls, 'flex-1 min-w-0')}
-              />
-              {deadlineDateFilter && (
-                <button
-                  type="button"
-                  onClick={() => setDeadlineDateFilter('')}
-                  className="h-10 px-3 rounded-xl border border-[#d2d2d7]/70 bg-white text-[12px] font-semibold text-[#6e6e73] hover:bg-[#f2f2f7] active:scale-95 transition-all duration-150"
-                >
-                  Tất cả
-                </button>
-              )}
-            </div>
-          </FieldGroup>
-
-          <FieldGroup label="Tìm mã LSX">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6e6e73]" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Nhập mã LSX..."
-                className={cn(inputCls, 'pl-9')}
-              />
-            </div>
-          </FieldGroup>
-
-          <button
-            type="button"
-            onClick={() => setMissingNormOnly((current) => !current)}
-            className={cn(
-              'h-10 px-3 rounded-xl border text-[12px] font-semibold active:scale-95 transition-all duration-150',
-              missingNormOnly
-                ? 'border-red-200 bg-red-50 text-red-700'
-                : 'border-[#d2d2d7]/70 bg-white text-[#6e6e73] hover:bg-[#f2f2f7]'
-            )}
-          >
-            Chỉ thiếu định mức
-          </button>
-        </div>
+        <UrgencyLegend />
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3">
-        <DeadlineOrdersTable rows={filteredRows} loading={state.loading} />
+        {state.loading ? (
+          <div className="flex justify-center py-16">
+            <div className="w-7 h-7 border-2 border-dmc-primary/30 border-t-dmc-primary rounded-full animate-spin" />
+          </div>
+        ) : summaries.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {summaries.map((summary) => (
+              <WorkshopDeadlineCard
+                key={summary.workshop}
+                summary={summary}
+                metric={metric}
+                rows={rowsByWorkshop.get(summary.workshop) ?? []}
+                today={today}
+                expanded={expanded.has(summary.workshop)}
+                onToggle={() => toggleWorkshop(summary.workshop)}
+              />
+            ))}
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+function UrgencyLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {DEADLINE_URGENCY_BUCKETS.map((bucket) => (
+        <span key={bucket} className="inline-flex items-center gap-1.5 text-[11px] text-[#6e6e73]">
+          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: URGENCY_META[bucket].color }} />
+          {URGENCY_META[bucket].label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function CardTag({ tone, children }: { tone: 'neutral' | 'danger' | 'warning' | 'info'; children: React.ReactNode }) {
+  const cls = {
+    neutral: 'bg-[#f2f2f7] text-[#6e6e73] border-[#d2d2d7]/70',
+    danger:  'bg-[#ff3b30]/10 text-[#ff3b30] border-[#ff3b30]/20',
+    warning: 'bg-[#ff9500]/10 text-[#b37700] border-[#ff9500]/20',
+    info:    'bg-[#3b82f6]/10 text-[#3b5bdb] border-[#3b5bdb]/20',
+  }[tone]
+  return (
+    <span className={cn('inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold', cls)}>
+      {children}
+    </span>
+  )
+}
+
+function WorkshopDeadlineCard({
+  summary,
+  metric,
+  rows,
+  today,
+  expanded,
+  onToggle,
+}: {
+  summary: WorkshopDeadlineSummary
+  metric: DeadlineMetric
+  rows: DeadlineProductionPlanRow[]
+  today: string
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const color = getWorkshopColor(summary.workshop)
+  const mainValue =
+    metric === 'hours' ? summary.totalEstimatedHours
+    : metric === 'count' ? summary.orderCount
+    : summary.totalRemainingQuantity
+
+  return (
+    <div className={cn(
+      'overflow-hidden rounded-2xl border bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-all',
+      expanded
+        ? 'md:col-span-2 xl:col-span-3 border-dmc-primary/40 ring-1 ring-dmc-primary/15'
+        : 'border-[#d2d2d7]/60 hover:border-dmc-primary/40'
+    )}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full text-left p-3 sm:p-4 flex items-center gap-3 border-l-[3px] active:scale-[0.997] transition-transform"
+        style={{ borderLeftColor: color }}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+            <h3 className="text-[15px] font-bold text-[#1d1d1f] truncate">{summary.workshop}</h3>
+            <ChevronRight size={16} className={cn('ml-auto shrink-0 text-[#aeaeb2] transition-transform', expanded && 'rotate-90')} />
+          </div>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-[26px] font-bold leading-none text-[#1d1d1f]">{formatMetricValue(mainValue)}</span>
+            <span className="text-[11px] text-[#6e6e73]">{DEADLINE_METRIC_META[metric].short}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <CardTag tone="neutral">{summary.orderCount} LSX</CardTag>
+            {summary.buckets.overdue.count > 0 && <CardTag tone="danger">{summary.buckets.overdue.count} quá hạn</CardTag>}
+            {summary.buckets.today.count > 0 && <CardTag tone="warning">{summary.buckets.today.count} hôm nay</CardTag>}
+            {summary.inProgressCount > 0 && <CardTag tone="info">{summary.inProgressCount} đang SX</CardTag>}
+            {summary.missingNormCount > 0 && <CardTag tone="danger">{summary.missingNormCount} thiếu ĐM</CardTag>}
+          </div>
+        </div>
+        <WorkshopDeadlineDonut buckets={summary.buckets} metric={metric} />
+      </button>
+
+      {expanded && (
+        <div className="border-t border-[#d2d2d7]/50 p-3 sm:p-4">
+          <WorkshopDeadlineDetail rows={rows} metric={metric} today={today} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function WorkshopDeadlineDetail({
+  rows,
+  metric,
+  today,
+}: {
+  rows: DeadlineProductionPlanRow[]
+  metric: DeadlineMetric
+  today: string
+}) {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [deadlineDateFilter, setDeadlineDateFilter] = useState('')
+  const [missingNormOnly, setMissingNormOnly] = useState(false)
+
+  const filteredRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return rows.filter((row) => {
+      const matchesDeadlineDate = !deadlineDateFilter || row.order.deadlinedate?.slice(0, 10) === deadlineDateFilter
+      const matchesMissingNorm = !missingNormOnly || row.missingNorm
+      const matchesQuery = !query || row.order.pcode.toLowerCase().includes(query)
+      return matchesDeadlineDate && matchesMissingNorm && matchesQuery
+    })
+  }, [rows, searchQuery, deadlineDateFilter, missingNormOnly])
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(170px,220px)_minmax(220px,1fr)_auto] gap-3 sm:items-end">
+        <FieldGroup label="Hạn giao hàng">
+          <div className="flex gap-2">
+            <VietnameseDatePicker
+              value={deadlineDateFilter}
+              onChange={setDeadlineDateFilter}
+              className={cn(inputCls, 'flex-1 min-w-0')}
+            />
+            {deadlineDateFilter && (
+              <button
+                type="button"
+                onClick={() => setDeadlineDateFilter('')}
+                className="h-10 px-3 rounded-xl border border-[#d2d2d7]/70 bg-white text-[12px] font-semibold text-[#6e6e73] hover:bg-[#f2f2f7] active:scale-95 transition-all duration-150"
+              >
+                Tất cả
+              </button>
+            )}
+          </div>
+        </FieldGroup>
+
+        <FieldGroup label="Tìm mã LSX">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6e6e73]" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Nhập mã LSX..."
+              className={cn(inputCls, 'pl-9')}
+            />
+          </div>
+        </FieldGroup>
+
+        <button
+          type="button"
+          onClick={() => setMissingNormOnly((current) => !current)}
+          className={cn(
+            'h-10 px-3 rounded-xl border text-[12px] font-semibold active:scale-95 transition-all duration-150',
+            missingNormOnly
+              ? 'border-red-200 bg-red-50 text-red-700'
+              : 'border-[#d2d2d7]/70 bg-white text-[#6e6e73] hover:bg-[#f2f2f7]'
+          )}
+        >
+          Chỉ thiếu định mức
+        </button>
+      </div>
+
+      <div className="rounded-2xl border border-[#d2d2d7]/60 bg-white p-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6e6e73] mb-1">
+          Khối lượng theo ngày giao · {DEADLINE_METRIC_META[metric].short}
+        </p>
+        <DeadlineTimelineChart rows={filteredRows} metric={metric} todayISO={today} />
+      </div>
+
+      <DeadlineOrdersTable rows={filteredRows} loading={false} />
     </div>
   )
 }
