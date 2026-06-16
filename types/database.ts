@@ -107,6 +107,36 @@ export interface Database {
           material?: string
         }
       }
+      norm_override: {
+        Row: {
+          id: number
+          keyword: string
+          workshop: string | null
+          target_products: string
+          require_any: string[]
+          priority: number
+          note: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          keyword: string
+          workshop?: string | null
+          target_products: string
+          require_any?: string[]
+          priority?: number
+          note?: string | null
+        }
+        Update: {
+          keyword?: string
+          workshop?: string | null
+          target_products?: string
+          require_any?: string[]
+          priority?: number
+          note?: string | null
+          updated_at?: string
+        }
+      }
       production_order_status: {
         Row: {
           pcode: string
