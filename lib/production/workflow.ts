@@ -337,6 +337,141 @@ export function buildDeadlineProductionPlan(
   }
 }
 
+export type DeadlineUrgencyBucket = 'overdue' | 'today' | 'd1_3' | 'd4_7' | 'later'
+
+// Thứ tự khẩn cấp giảm dần — dùng để lặp ổn định trong UI/biểu đồ.
+export const DEADLINE_URGENCY_BUCKETS: DeadlineUrgencyBucket[] = ['overdue', 'today', 'd1_3', 'd4_7', 'later']
+
+export interface WorkshopDeadlineBucketStat {
+  count: number
+  quantity: number
+  hours: number
+}
+
+export interface WorkshopDeadlineSummary {
+  workshop: string
+  orderCount: number
+  notStartedCount: number
+  inProgressCount: number
+  missingNormCount: number
+  totalRemainingQuantity: number
+  totalEstimatedHours: number
+  buckets: Record<DeadlineUrgencyBucket, WorkshopDeadlineBucketStat>
+}
+
+// Quy đổi chuỗi ngày YYYY-MM-DD về số ngày (epoch day) theo UTC để so sánh ổn định,
+// không phụ thuộc timezone runtime. Dùng cho phân nhóm theo NGÀY giao hàng.
+function parseISODateToEpochDay(value: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim())
+  if (!match) return null
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) return null
+
+  return Math.floor(parsed.getTime() / 86_400_000)
+}
+
+// Phân loại độ khẩn của một lệnh theo hạn giao (gom theo ngày, bỏ qua giờ).
+// Không có hạn → 'later'.
+export function getDeadlineUrgencyBucket(
+  deadlinedate: string | null | undefined,
+  todayISO: string,
+): DeadlineUrgencyBucket {
+  if (!deadlinedate) return 'later'
+
+  const deadlineDay = parseISODateToEpochDay(deadlinedate)
+  const todayDay = parseISODateToEpochDay(todayISO)
+  if (deadlineDay === null || todayDay === null) return 'later'
+
+  const diff = deadlineDay - todayDay
+  if (diff < 0) return 'overdue'
+  if (diff === 0) return 'today'
+  if (diff <= 3) return 'd1_3'
+  if (diff <= 7) return 'd4_7'
+  return 'later'
+}
+
+function createEmptyDeadlineBuckets(): Record<DeadlineUrgencyBucket, WorkshopDeadlineBucketStat> {
+  return {
+    overdue: { count: 0, quantity: 0, hours: 0 },
+    today: { count: 0, quantity: 0, hours: 0 },
+    d1_3: { count: 0, quantity: 0, hours: 0 },
+    d4_7: { count: 0, quantity: 0, hours: 0 },
+    later: { count: 0, quantity: 0, hours: 0 },
+  }
+}
+
+// Gom các dòng kế hoạch theo xưởng nhập liệu (getProductionEntryWorkshop) và cộng dồn
+// chỉ số + phân bố theo nhóm độ khẩn. Sắp xếp xưởng khẩn nhất (quá hạn + hôm nay) lên trước.
+// Thứ tự xưởng theo số: DMC1 → DMC3 → DMC4 → DMC5; nhóm không có số (vd Công trình) xếp cuối.
+function getWorkshopSortOrder(workshop: string): number {
+  const match = /(\d+)/.exec(workshopCode(workshop))
+  return match ? Number(match[1]) : 999
+}
+
+export function buildWorkshopDeadlineSummaries(
+  rows: DeadlineProductionPlanRow[],
+  todayISO: string,
+): WorkshopDeadlineSummary[] {
+  const byWorkshop = new Map<string, WorkshopDeadlineSummary>()
+
+  for (const row of rows) {
+    const workshop = getProductionEntryWorkshop(row.order.workshop, row.order.description) || '—'
+    let summary = byWorkshop.get(workshop)
+    if (!summary) {
+      summary = {
+        workshop,
+        orderCount: 0,
+        notStartedCount: 0,
+        inProgressCount: 0,
+        missingNormCount: 0,
+        totalRemainingQuantity: 0,
+        totalEstimatedHours: 0,
+        buckets: createEmptyDeadlineBuckets(),
+      }
+      byWorkshop.set(workshop, summary)
+    }
+
+    const rank = getProductionOrderStatusRank(row.order.status)
+    const quantity = row.order.remainingQuantity
+    const hours = row.estimatedHours ?? 0
+    const stat = summary.buckets[getDeadlineUrgencyBucket(row.order.deadlinedate, todayISO)]
+
+    summary.orderCount += 1
+    summary.notStartedCount += rank === 0 ? 1 : 0
+    summary.inProgressCount += rank === 1 ? 1 : 0
+    summary.missingNormCount += row.missingNorm ? 1 : 0
+    summary.totalRemainingQuantity += quantity
+    summary.totalEstimatedHours += hours
+    stat.count += 1
+    stat.quantity += quantity
+    stat.hours += hours
+  }
+
+  const summaries = [...byWorkshop.values()].map((summary) => ({
+    ...summary,
+    totalRemainingQuantity: Math.round(summary.totalRemainingQuantity * 1000) / 1000,
+    totalEstimatedHours: Math.round(summary.totalEstimatedHours * 100) / 100,
+  }))
+
+  return summaries.sort((a, b) => {
+    const orderA = getWorkshopSortOrder(a.workshop)
+    const orderB = getWorkshopSortOrder(b.workshop)
+    if (orderA !== orderB) return orderA - orderB
+    // Cùng số xưởng (vd các nhóm DMC1-CT/PK/PU) → sắp theo tên tự nhiên.
+    return a.workshop.localeCompare(b.workshop, 'vi', { numeric: true, sensitivity: 'base' })
+  })
+}
+
 function buildProductionTimestamp(pdate: string | null, endtime: string | null): string | null {
   const endDate = buildProductionEndDate(pdate, endtime)
   if (!endDate) return null
