@@ -582,6 +582,43 @@ describe('production workflow helpers', () => {
     })
   })
 
+  it('uses norm_override to map "PKK - cùm" to its specific norm instead of generic accessory', () => {
+    const orders: OpenProductionOrder[] = [
+      openOrder({ pcode: 'CUM-1', workshop: 'DMC1', status: 'Chưa SX', description: 'PKK - cùm 11s - IPC', remainingQuantity: 1300 }),
+    ]
+    const norms: NormItem[] = [
+      norm({ products: 'PKK - cùm', workshop: 'DMC1', norm: 650 }),
+      norm({ products: 'Phụ kiện inox - kẽm', workshop: 'DMC1', norm: 100 }),
+    ]
+
+    // Không có override: heuristic gán nhầm vào "Phụ kiện inox - kẽm" (100).
+    const withoutOverride = buildDeadlineProductionPlan(orders, norms)
+    expect(withoutOverride.rows[0].norm?.products).toBe('Phụ kiện inox - kẽm')
+    expect(withoutOverride.rows[0].matchSource).toBe('heuristic')
+
+    // Có override: khớp đúng "PKK - cùm" (650), nguồn = override.
+    const overrides = [
+      { keyword: 'PKK - cùm', workshop: 'DMC1', targetProducts: 'PKK - cùm', requireAny: [], priority: 100 },
+    ]
+    const withOverride = buildDeadlineProductionPlan(orders, norms, overrides)
+    expect(withOverride.rows[0].norm?.products).toBe('PKK - cùm')
+    expect(withOverride.rows[0].norm?.norm).toBe(650)
+    expect(withOverride.rows[0].matchSource).toBe('override')
+    expect(withOverride.rows[0].estimatedHours).toBe(2) // 1300 / 650
+
+    // require_any: khớp khi có marker 'pkk'…
+    const overridesGated = [
+      { keyword: 'cùm', workshop: 'DMC1', targetProducts: 'PKK - cùm', requireAny: ['pkk'], priority: 100 },
+    ]
+    expect(buildDeadlineProductionPlan(orders, norms, overridesGated).rows[0].norm?.products).toBe('PKK - cùm')
+
+    // …và KHÔNG khớp override khi diễn giải thiếu marker.
+    const ordersNoMarker: OpenProductionOrder[] = [
+      openOrder({ pcode: 'CUM-2', workshop: 'DMC1', status: 'Chưa SX', description: 'cùm lẻ không phụ kiện', remainingQuantity: 100 }),
+    ]
+    expect(buildDeadlineProductionPlan(ordersNoMarker, norms, overridesGated).rows[0].matchSource).not.toBe('override')
+  })
+
   it('classifies deadlines into day-based urgency buckets', () => {
     const today = '2026-05-10'
     expect(getDeadlineUrgencyBucket('2026-05-09', today)).toBe('overdue')
