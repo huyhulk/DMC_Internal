@@ -412,6 +412,12 @@ function createEmptyDeadlineBuckets(): Record<DeadlineUrgencyBucket, WorkshopDea
 
 // Gom các dòng kế hoạch theo xưởng nhập liệu (getProductionEntryWorkshop) và cộng dồn
 // chỉ số + phân bố theo nhóm độ khẩn. Sắp xếp xưởng khẩn nhất (quá hạn + hôm nay) lên trước.
+// Thứ tự xưởng theo số: DMC1 → DMC3 → DMC4 → DMC5; nhóm không có số (vd Công trình) xếp cuối.
+function getWorkshopSortOrder(workshop: string): number {
+  const match = /(\d+)/.exec(workshopCode(workshop))
+  return match ? Number(match[1]) : 999
+}
+
 export function buildWorkshopDeadlineSummaries(
   rows: DeadlineProductionPlanRow[],
   todayISO: string,
@@ -458,10 +464,10 @@ export function buildWorkshopDeadlineSummaries(
   }))
 
   return summaries.sort((a, b) => {
-    const urgencyA = a.buckets.overdue.count + a.buckets.today.count
-    const urgencyB = b.buckets.overdue.count + b.buckets.today.count
-    if (urgencyA !== urgencyB) return urgencyB - urgencyA
-    if (a.totalEstimatedHours !== b.totalEstimatedHours) return b.totalEstimatedHours - a.totalEstimatedHours
+    const orderA = getWorkshopSortOrder(a.workshop)
+    const orderB = getWorkshopSortOrder(b.workshop)
+    if (orderA !== orderB) return orderA - orderB
+    // Cùng số xưởng (vd các nhóm DMC1-CT/PK/PU) → sắp theo tên tự nhiên.
     return a.workshop.localeCompare(b.workshop, 'vi', { numeric: true, sensitivity: 'base' })
   })
 }
