@@ -100,7 +100,7 @@ export function ProductionTab({ user, canEdit }: Props) {
               Danh sách lệnh sản xuất
             </SubTabButton>
             <SubTabButton active={activeSubTab === 'deadline-orders'} onClick={() => setActiveSubTab('deadline-orders')}>
-              Danh sách LSX theo Hạn giao hàng
+              Tổng quan LSX
             </SubTabButton>
             <SubTabButton active={activeSubTab === 'daily-entry'} onClick={() => setActiveSubTab('daily-entry')}>
               Theo dõi lệnh theo ngày tạo
@@ -457,7 +457,7 @@ function DeadlineOrdersTab({ user, refreshSignal }: OpenOrdersTabProps) {
             </div>
           }
         >
-          Danh sách LSX theo Hạn giao hàng
+          Tổng quan LSX
         </SectionLabel>
 
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
