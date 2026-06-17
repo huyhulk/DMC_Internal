@@ -133,6 +133,24 @@ function CellDetailDialog({
                   {order.customer && (
                     <p className="text-[12px] text-[#aeaeb2] truncate">{order.customer}</p>
                   )}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-0.5 text-[11px]">
+                    <span className="text-[#6e6e73]">
+                      SL cần SX:{' '}
+                      <span className="font-semibold text-[#1d1d1f]">
+                        {order.remainingQuantity.toLocaleString('vi-VN')}
+                      </span>
+                    </span>
+                    {order.norm != null ? (
+                      <span className="text-[#6e6e73]">
+                        Định mức:{' '}
+                        <span className="font-semibold text-[#1d1d1f]">
+                          {order.norm.toLocaleString('vi-VN')}/h
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-red-600">Thiếu định mức</span>
+                    )}
+                  </div>
                 </div>
                 <span className="shrink-0 text-[13px] font-medium text-[#1d1d1f] whitespace-nowrap">
                   {order.hours.toFixed(2)} h

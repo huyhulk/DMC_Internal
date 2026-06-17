@@ -17,6 +17,8 @@ export interface CapacitySessionOrder {
   products: string | null
   customer: string
   hours: number // số giờ của đơn này đổ vào ca này
+  remainingQuantity: number // sản lượng còn cần SX của cả đơn
+  norm: number | null // định mức SX (sản lượng/giờ); null = thiếu định mức
   overtime: boolean
 }
 
@@ -140,6 +142,8 @@ function addOrderHours(
     products: row.norm?.products ?? null,
     customer: row.order.customer ?? '',
     hours: Math.round(hours * 100) / 100,
+    remainingQuantity: row.order.remainingQuantity,
+    norm: row.norm?.norm ?? null,
     overtime,
   })
 }
