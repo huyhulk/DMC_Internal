@@ -60,7 +60,7 @@ const PRODUCTION_ENTRY_SPLIT_RULES: Record<string, Array<{ suffix: string; anyTe
     { suffix: 'CT' },
   ],
   DMC3: [
-    { suffix: 'PU', anyText: ['pu'] },
+    { suffix: 'PN', anyText: ['pn', 'panel'] },
     { suffix: 'PK', anyText: ['phụ kiện', 'pk'] },
     { suffix: 'CT' },
   ],
