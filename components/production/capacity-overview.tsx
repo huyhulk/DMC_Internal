@@ -388,17 +388,27 @@ function CapacityGrid({
           </tr>
         </thead>
         <tbody>
-          {timeline.map((row) => {
+          {timeline.map((row, rowIdx) => {
             const workshopColor = getWorkshopColor(row.workshop)
+            const zebra = rowIdx % 2 === 1
             return (
-              <tr key={row.workshop}>
+              <tr
+                key={row.workshop}
+                className={cn('group/row transition-colors', zebra ? 'bg-[#f4f5f9]' : 'bg-white', 'hover:bg-[#e9eefb]')}
+              >
                 {/* Workshop name cell */}
-                <td className="sticky left-0 z-10 bg-white p-1">
+                <td
+                  className={cn(
+                    'sticky left-0 z-10 px-1 py-1.5 transition-colors',
+                    zebra ? 'bg-[#f4f5f9]' : 'bg-white',
+                    'group-hover/row:bg-[#e9eefb]',
+                  )}
+                >
                   <button
                     type="button"
                     onClick={() => onWorkshopClick(row.workshop)}
                     title={`Mở máy tính thời gian SX cho ${row.workshop}`}
-                    className="w-full h-12 flex items-center px-2.5 rounded-lg border-l-[3px] bg-[#f5f5f7] text-[12px] font-bold text-[#1d1d1f] hover:bg-[#ececf0] hover:text-dmc-primary transition-all duration-150"
+                    className="w-full h-12 flex items-center px-2.5 rounded-lg border-l-4 bg-white text-[12px] font-bold text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.06)] hover:text-dmc-primary group-hover/row:text-dmc-primary transition-all duration-150"
                     style={{ borderLeftColor: workshopColor }}
                   >
                     <span className="truncate">{row.workshop}</span>
@@ -414,7 +424,7 @@ function CapacityGrid({
                   const cellCls = CELL_CLS[color]
 
                   return (
-                    <td key={`${session.date}-${session.period}`} className="p-1">
+                    <td key={`${session.date}-${session.period}`} className="px-1 py-1.5">
                       <div className="relative group">
                         <button
                           type="button"
