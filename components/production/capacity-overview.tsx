@@ -217,7 +217,7 @@ function CalculatorDialog({
           )}
         </FieldGroup>
 
-        <FieldGroup label="Số lượng (chiếc / m²)">
+        <FieldGroup label="Số lượng">
           <input
             type="number"
             min={0}
@@ -370,23 +370,27 @@ function CapacityGrid({
                           onClick={() => !isEmpty && onCellClick(row.workshop, session)}
                           title={`${session.orderCount} đơn · ${Math.round(session.pct)}%`}
                           className={cn(
-                            'w-full h-12 rounded-lg relative z-0 transition-all duration-150',
+                            'w-full h-12 rounded-lg relative z-0 text-[13px] font-bold transition-all duration-150',
                             cellCls,
                             isEmpty
                               ? 'cursor-default hover:scale-105 hover:z-10'
                               : 'cursor-pointer hover:scale-110 hover:z-20 hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]'
                           )}
-                        />
+                        >
+                          {isEmpty ? '' : `${Math.round(session.pct)}%`}
+                        </button>
 
-                        {/* Hover tooltip — số liệu chỉ hiện khi rê chuột */}
-                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                          <div className="bg-[#1d1d1f] text-white rounded-lg px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-lg">
-                            <p className="font-semibold">{session.orderCount} đơn</p>
-                            <p>{Math.round(session.pct)}% · {session.filledHours.toFixed(1)}h</p>
+                        {/* Hover tooltip — số đơn & giờ chi tiết */}
+                        {!isEmpty && (
+                          <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                            <div className="bg-[#1d1d1f] text-white rounded-lg px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-lg">
+                              <p className="font-semibold">{session.orderCount} đơn</p>
+                              <p>{Math.round(session.pct)}% · {session.filledHours.toFixed(1)}h</p>
+                            </div>
+                            {/* Tooltip arrow */}
+                            <div className="w-2 h-2 bg-[#1d1d1f] rotate-45 mx-auto -mt-1" />
                           </div>
-                          {/* Tooltip arrow */}
-                          <div className="w-2 h-2 bg-[#1d1d1f] rotate-45 mx-auto -mt-1" />
-                        </div>
+                        )}
                       </div>
                     </td>
                   )
@@ -467,7 +471,7 @@ export function ProductionCapacityOverviewTab({
         <SectionLabel>Tổng quan sản xuất</SectionLabel>
         <CapacityLegend />
         <p className="text-[11px] text-[#aeaeb2]">
-          Màu = mức tải mỗi ca (giờ SX còn lại / 4h). Rê chuột vào ô để xem số đơn &amp; %, bấm ô để xem chi tiết, bấm tên xưởng để mở máy tính thời gian.
+          % = mức tải mỗi ca (giờ SX còn lại / 4h). Rê chuột vào ô để xem số đơn, bấm ô để xem chi tiết, bấm tên xưởng để mở máy tính thời gian.
         </p>
       </div>
 
