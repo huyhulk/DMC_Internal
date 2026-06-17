@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { listProductionInputHistoryAction } from '@/lib/actions/data'
 import { useProductionData } from '@/hooks/use-production-data'
+import { ProductionCapacityOverviewTab } from './capacity-overview'
 import { OrderInfoCard } from './order-info-card'
 import { ProductLineCard } from './product-line-card'
 import { UnlockDialog } from './unlock-dialog'
@@ -77,8 +78,11 @@ const inputCls =
   'disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 ' +
   'shadow-[0_1px_2px_rgba(0,0,0,0.05)]'
 
+// Tab "Tổng quan LSX" tạm ẩn — đã thay bằng "Tổng quan sản xuất". Đặt true để hiện lại (code vẫn giữ nguyên).
+const SHOW_DEADLINE_LSX_TAB = false
+
 export function ProductionTab({ user, canEdit }: Props) {
-  const [activeSubTab, setActiveSubTab] = useState<'open-orders' | 'deadline-orders' | 'daily-entry'>('open-orders')
+  const [activeSubTab, setActiveSubTab] = useState<'open-orders' | 'deadline-orders' | 'daily-entry' | 'capacity-overview'>('open-orders')
   const [showHistory, setShowHistory] = useState(false)
   const [refreshSignal, setRefreshSignal] = useState(0)
 
@@ -99,8 +103,13 @@ export function ProductionTab({ user, canEdit }: Props) {
             <SubTabButton active={activeSubTab === 'open-orders'} onClick={() => setActiveSubTab('open-orders')}>
               Danh sách lệnh sản xuất
             </SubTabButton>
-            <SubTabButton active={activeSubTab === 'deadline-orders'} onClick={() => setActiveSubTab('deadline-orders')}>
-              Tổng quan LSX
+            {SHOW_DEADLINE_LSX_TAB && (
+              <SubTabButton active={activeSubTab === 'deadline-orders'} onClick={() => setActiveSubTab('deadline-orders')}>
+                Tổng quan LSX
+              </SubTabButton>
+            )}
+            <SubTabButton active={activeSubTab === 'capacity-overview'} onClick={() => setActiveSubTab('capacity-overview')}>
+              Tổng quan sản xuất
             </SubTabButton>
             <SubTabButton active={activeSubTab === 'daily-entry'} onClick={() => setActiveSubTab('daily-entry')}>
               Theo dõi lệnh theo ngày tạo
@@ -132,7 +141,9 @@ export function ProductionTab({ user, canEdit }: Props) {
         ? <OpenOrdersTab user={user} canEdit={canEdit} refreshSignal={refreshSignal} />
         : activeSubTab === 'deadline-orders'
           ? <DeadlineOrdersTab user={user} canEdit={canEdit} refreshSignal={refreshSignal} />
-          : <DailyEntryTab user={user} canEdit={canEdit} />}
+          : activeSubTab === 'capacity-overview'
+            ? <ProductionCapacityOverviewTab user={user} canEdit={canEdit} refreshSignal={refreshSignal} />
+            : <DailyEntryTab user={user} canEdit={canEdit} />}
     </div>
   )
 }
