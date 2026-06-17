@@ -5,6 +5,7 @@ import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { useProductionData } from '@/hooks/use-production-data'
 import {
   buildDeadlineProductionPlan,
+  PRODUCTION_OVERVIEW_WORKSHOPS,
 } from '@/lib/production/workflow'
 import {
   buildProductionCapacityTimeline,
@@ -72,6 +73,11 @@ const inputCls =
 function getWorkshopColor(workshop: string): string {
   const code = workshopCode(workshop) as WorkshopCode
   return WORKSHOP_COLORS[code] ?? '#6e6e73'
+}
+
+// Nhãn hiển thị cho mã xưởng (giữ mã làm khóa gom, chỉ làm đẹp khi hiện).
+function workshopLabel(workshop: string): string {
+  return workshop === 'CONG_TRINH' ? 'Công trình' : workshop
 }
 
 // ─── Color mapping for capacity cells ────────────────────────────────────────
@@ -146,7 +152,7 @@ function CellDetailDialog({
   onClose: () => void
 }) {
   const periodLabel = session.period === 'sang' ? 'sáng' : 'chiều'
-  const title = `${workshop} · ${session.label} · Ca ${periodLabel}`
+  const title = `${workshopLabel(workshop)} · ${session.label} · Ca ${periodLabel}`
 
   return (
     <Dialog open onClose={onClose} title={title} size="md">
@@ -243,7 +249,7 @@ function CalculatorDialog({
   const canCalc = selectedProducts !== '' && parseFloat(quantity) > 0
 
   return (
-    <Dialog open onClose={onClose} title={`Tính thời gian SX · ${workshop}`} size="md">
+    <Dialog open onClose={onClose} title={`Tính thời gian SX · ${workshopLabel(workshop)}`} size="md">
       <div className="space-y-4">
         <FieldGroup label="Dòng sản phẩm">
           <select
@@ -407,11 +413,11 @@ function CapacityGrid({
                   <button
                     type="button"
                     onClick={() => onWorkshopClick(row.workshop)}
-                    title={`Mở máy tính thời gian SX cho ${row.workshop}`}
+                    title={`Mở máy tính thời gian SX cho ${workshopLabel(row.workshop)}`}
                     className="w-full h-12 flex items-center px-2.5 rounded-lg border-l-4 bg-white text-[12px] font-bold text-[#1d1d1f] shadow-[0_1px_2px_rgba(0,0,0,0.06)] hover:text-dmc-primary group-hover/row:text-dmc-primary transition-all duration-150"
                     style={{ borderLeftColor: workshopColor }}
                   >
-                    <span className="truncate">{row.workshop}</span>
+                    <span className="truncate">{workshopLabel(row.workshop)}</span>
                   </button>
                 </td>
 
@@ -541,7 +547,7 @@ export function ProductionCapacityOverviewTab({
   )
 
   const timeline = useMemo(
-    () => buildProductionCapacityTimeline(plan.rows, new Date()),
+    () => buildProductionCapacityTimeline(plan.rows, new Date(), PRODUCTION_OVERVIEW_WORKSHOPS),
     [plan.rows]
   )
 

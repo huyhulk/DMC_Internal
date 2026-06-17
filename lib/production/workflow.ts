@@ -1,5 +1,5 @@
 import { normalizeProductionStatus } from '@/lib/production/status'
-import { normalizeWorkshop, parseDecimalInput, workshopCode } from '@/lib/utils'
+import { CONSTRUCTION_WORKSHOP_CODE, normalizeWorkshop, parseDecimalInput, workshopCode } from '@/lib/utils'
 import type { NormItem, NormOverride, OpenProductionOrder, Order } from '@/types'
 
 export const PRODUCTION_DEADLINE_CUTOFF_TIME = '16:30:00'
@@ -109,6 +109,34 @@ export function getProductionEntryWorkshop(workshop: string, description: string
     }
   }
   return normalizedWorkshop
+}
+
+// Danh sách xưởng nhỏ hiển thị CỐ ĐỊNH cho tab "Tổng quan sản xuất" — luôn hiện đủ, kể cả khi
+// không có LSX mở. Thứ tự: sub-shop DMC1/3/4 (theo split rules) → DMC5 → Công trình.
+function buildProductionOverviewWorkshops(): string[] {
+  const seen = new Set<string>()
+  const list: string[] = []
+  for (const base of PRODUCTION_ENTRY_SPLIT_BASES) {
+    for (const rule of PRODUCTION_ENTRY_SPLIT_RULES[base]) {
+      const code = `${base}-${rule.suffix}`
+      if (!seen.has(code)) {
+        seen.add(code)
+        list.push(code)
+      }
+    }
+  }
+  list.push('DMC5', CONSTRUCTION_WORKSHOP_CODE)
+  return list
+}
+
+export const PRODUCTION_OVERVIEW_WORKSHOPS: string[] = buildProductionOverviewWorkshops()
+
+// Gom xưởng cho "Tổng quan sản xuất": DMC1/3/4 → sub-shop (DMCx-suffix theo diễn giải);
+// DMC5 / Công trình (không tách) → mã gọn, bỏ phần đuôi diễn giải để không vỡ thành nhiều hàng.
+export function getProductionOverviewWorkshop(workshop: string, description: string | null | undefined): string {
+  const entry = getProductionEntryWorkshop(workshop, description)
+  const base = workshopCode(entry)
+  return PRODUCTION_ENTRY_SPLIT_BASES.includes(base) ? entry : base
 }
 
 export function getProductionEntryBaseWorkshop(workshop: string): string {

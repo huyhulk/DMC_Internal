@@ -237,6 +237,40 @@ describe('buildProductionCapacityTimeline — tăng ca Chủ nhật', () => {
   })
 })
 
+describe('buildProductionCapacityTimeline — danh sách xưởng cố định', () => {
+  const FIXED = [
+    'DMC1-PU', 'DMC1-PK', 'DMC1-CT',
+    'DMC3-PN', 'DMC3-PK', 'DMC3-CT',
+    'DMC4-XG', 'DMC4-PK',
+    'DMC5', 'CONG_TRINH',
+  ]
+
+  it('always lists every fixed workshop (even idle ones) in the given order', () => {
+    const timeline = buildProductionCapacityTimeline(
+      [planRow({ workshop: 'DMC1', description: 'CT tôn sóng', estimatedHours: 2 })],
+      NOW,
+      FIXED,
+    )
+    expect(timeline.map((r) => r.workshop)).toEqual(FIXED)
+    // Hàng có đơn được đổ giờ; hàng không có đơn vẫn xuất hiện nhưng trống.
+    expect(timeline.find((r) => r.workshop === 'DMC1-CT')!.sessions.some((s) => s.filledHours > 0)).toBe(true)
+    expect(timeline.find((r) => r.workshop === 'DMC1-PU')!.sessions.every((s) => s.filledHours === 0)).toBe(true)
+    expect(timeline.find((r) => r.workshop === 'DMC5')!.sessions.every((s) => s.filledHours === 0)).toBe(true)
+  })
+
+  it('collapses DMC5 variants (description suffix) into a single DMC5 row', () => {
+    const timeline = buildProductionCapacityTimeline(
+      [
+        planRow({ workshop: 'Phân xưởng 5 - Tôn', description: 'abc', estimatedHours: 2 }),
+        planRow({ workshop: 'Phân xưởng 5 - Phụ kiện', description: 'xyz', estimatedHours: 2 }),
+      ],
+      NOW,
+      ['DMC5'],
+    )
+    expect(timeline.map((r) => r.workshop)).toEqual(['DMC5'])
+  })
+})
+
 describe('capacityColor', () => {
   it('maps percentage to status color thresholds', () => {
     expect(capacityColor(0)).toBe('empty')
