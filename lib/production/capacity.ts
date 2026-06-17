@@ -1,4 +1,4 @@
-import { getProductionEntryWorkshop } from '@/lib/production/workflow'
+import { getProductionOverviewWorkshop } from '@/lib/production/workflow'
 import type { DeadlineProductionPlanRow } from '@/lib/production/workflow'
 
 // Tổng quan sản xuất: timeline sức chứa theo từng phân xưởng nhỏ.
@@ -299,10 +299,17 @@ function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanR
 export function buildProductionCapacityTimeline(
   rows: DeadlineProductionPlanRow[],
   now: Date,
+  includeWorkshops?: string[],
 ): WorkshopCapacityRow[] {
   const byWorkshop = new Map<string, DeadlineProductionPlanRow[]>()
+  // Seed các xưởng cố định (nếu có) để LUÔN hiện đủ hàng, kể cả khi không có LSX mở.
+  if (includeWorkshops) {
+    for (const ws of includeWorkshops) {
+      if (!byWorkshop.has(ws)) byWorkshop.set(ws, [])
+    }
+  }
   for (const row of rows) {
-    const workshop = getProductionEntryWorkshop(row.order.workshop, row.order.description) || '—'
+    const workshop = getProductionOverviewWorkshop(row.order.workshop, row.order.description) || '—'
     const list = byWorkshop.get(workshop)
     if (list) list.push(row)
     else byWorkshop.set(workshop, [row])
@@ -316,7 +323,14 @@ export function buildProductionCapacityTimeline(
     result.push({ workshop, sessions })
   }
 
-  return result.sort((a, b) => a.workshop.localeCompare(b.workshop, 'vi', { numeric: true, sensitivity: 'base' }))
+  // Thứ tự: theo includeWorkshops trước (giữ thứ tự cố định), phần còn lại sắp theo tên.
+  const order = new Map<string, number>((includeWorkshops ?? []).map((ws, i) => [ws, i]))
+  return result.sort((a, b) => {
+    const ia = order.has(a.workshop) ? order.get(a.workshop)! : Number.MAX_SAFE_INTEGER
+    const ib = order.has(b.workshop) ? order.get(b.workshop)! : Number.MAX_SAFE_INTEGER
+    if (ia !== ib) return ia - ib
+    return a.workshop.localeCompare(b.workshop, 'vi', { numeric: true, sensitivity: 'base' })
+  })
 }
 
 // Màu trạng thái theo % (dùng chung UI): <50 xanh, 50-75 vàng, 75-100 đỏ, >100 tím.
