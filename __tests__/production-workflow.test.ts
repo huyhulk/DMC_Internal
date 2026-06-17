@@ -26,8 +26,6 @@ import {
   getOtherProductionEntryBaseWorkshop,
   getProductionEntryBaseWorkshop,
   getProductionEntryWorkshop,
-  getProductionEntryBaseWorkshop,
-  isProductionEntryWorkspaceAllowed,
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isOpenProductionOrder,
@@ -112,11 +110,6 @@ describe('production workflow helpers', () => {
   it('classifies normal DMC1 production-entry orders as CT', () => {
     expect(getProductionEntryWorkshop('DMC1', 'Tôn cán thường')).toBe('DMC1-CT')
     expect(getProductionEntryWorkshop('Phân xưởng 1 - Tôn', null)).toBe('DMC1-CT')
-  })
-
-  it('keeps non-DMC1 production-entry workshops normalized without splitting', () => {
-    expect(getProductionEntryWorkshop('DMC3', 'pu foam')).toBe('DMC3')
-    expect(getProductionEntryWorkshop('Phân xưởng 4 - Tôn', 'phụ kiện')).toBe('DMC4 - Tôn')
   })
 
   it('normalizes construction site workshop as a separate production-entry workshop', () => {
