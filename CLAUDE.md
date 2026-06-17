@@ -1,7 +1,7 @@
 # Claude Context Entry Point — DMC Production Manager
 
-**Cập nhật lần cuối:** 2026-04-23
-**Phiên bản context:** 1.0.0
+**Cập nhật lần cuối:** 2026-06-17
+**Phiên bản context:** 1.1.0
 
 ---
 
@@ -66,6 +66,22 @@ Bạn muốn làm gì hôm nay?
 6. **Hỏi trước khi push GitHub**: sau khi local pass, báo kết quả và hỏi user có muốn commit/push/tạo PR không. Không tự push khi chưa được phép.
 
 **Branch mặc định:** toàn bộ dự án hiện làm trên `staging`. Khi tạo branch mới, tạo từ `staging` trừ khi user chỉ định khác. Không push/merge vào `main` khi chưa có yêu cầu rõ ràng.
+
+---
+
+## 🤝 Phân vai Opus ↔ Sonnet (từ 2026-06-17)
+
+**Opus** lo phần "đầu não", luôn chạy ở effort **high**:
+- Lập **plan**, chia **task**, dựng **bức tranh tổng thể** (kiến trúc, luồng dữ liệu, phạm vi file/thay đổi).
+- **Tìm / điều tra bug**, phân tích root cause.
+- Tự **code phần khó, logic phức tạp** — KHÔNG giao cho Sonnet.
+
+**Sonnet** lo phần **viết code** (lớn hay nhỏ đều được), chạy ở effort **high**:
+- Chỉ code khi Opus đã dựng **đủ bức tranh** (plan rõ ràng: file nào, sửa gì, test gì).
+- Opus **chỉ định** Sonnet thực thi qua Agent/subagent (`model: sonnet`, `effort: high`) theo đúng plan.
+- Code xong, Sonnet **báo cáo lại Opus** (tóm tắt việc đã làm, file đã sửa, kết quả type-check/lint/test) để Opus rà soát & tích hợp.
+
+Quy tắc luồng: **Opus quyết định "làm gì & làm thế nào" → Sonnet code theo plan → báo cáo về Opus → Opus rà soát**. Việc khó/logic khó thì Opus tự code. Mọi guardrail và "Quy trình bắt buộc khi sửa bug / sửa tính năng" ở trên vẫn áp dụng cho cả hai.
 
 ---
 
