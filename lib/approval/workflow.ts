@@ -10,7 +10,7 @@ export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'ALL'
 
 export const FACTORY_WORKSPACES = [
   'DMC1', 'DMC1-CT', 'DMC1-PK', 'DMC1-PU',
-  'DMC3', 'DMC3-CT', 'DMC3-PK', 'DMC3-PU',
+  'DMC3', 'DMC3-CT', 'DMC3-PK', 'DMC3-PN',
   'DMC4', 'DMC4-XG', 'DMC4-PK',
   'DMC5', 'CONG_TRINH',
 ] as const
