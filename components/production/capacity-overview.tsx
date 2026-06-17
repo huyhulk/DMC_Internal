@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { useProductionData } from '@/hooks/use-production-data'
 import {
   buildDeadlineProductionPlan,
@@ -124,6 +124,12 @@ function CellDetailDialog({
                     {order.overtime && (
                       <span className="inline-flex items-center rounded-md border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
                         Tăng ca
+                      </span>
+                    )}
+                    {order.overloaded && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                        <AlertTriangle size={11} strokeWidth={2.5} className="fill-[#facc15] text-red-600" />
+                        Không kịp deadline
                       </span>
                     )}
                   </div>
@@ -397,6 +403,20 @@ function CapacityGrid({
                         >
                           {isEmpty ? '' : `${Math.round(session.pct)}%`}
                         </button>
+
+                        {/* Cảnh báo: ô deadline của đơn không kịp dù đã tăng ca */}
+                        {session.deadlineOverflow && (
+                          <span
+                            className="pointer-events-none absolute -top-1.5 -right-1.5 z-30 animate-pulse"
+                            title="Có LSX không kịp deadline dù đã tăng ca tối đa"
+                          >
+                            <AlertTriangle
+                              size={16}
+                              strokeWidth={2.5}
+                              className="fill-[#facc15] text-red-600 drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]"
+                            />
+                          </span>
+                        )}
 
                         {/* Hover tooltip — số đơn & giờ chi tiết */}
                         {!isEmpty && (

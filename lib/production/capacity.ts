@@ -8,6 +8,8 @@ import type { DeadlineProductionPlanRow } from '@/lib/production/workflow'
 export type SessionPeriod = 'sang' | 'chieu'
 
 export const SESSION_HOURS = 4
+export const OVERTIME_HOURS = 4 // tăng ca tối đa thêm 4h mỗi ca
+export const MAX_SESSION_HOURS = SESSION_HOURS + OVERTIME_HOURS // tổng tối đa 8h/ca
 export const WORKING_DAYS = 6
 const MORNING_END_MIN = 11 * 60 + 30 // 11:30 — hết ca sáng
 const AFTERNOON_END_MIN = 16 * 60 + 30 // 16:30 — hết ca chiều / hết ngày
@@ -20,6 +22,7 @@ export interface CapacitySessionOrder {
   remainingQuantity: number // sản lượng còn cần SX của cả đơn
   norm: number | null // định mức SX (sản lượng/giờ); null = thiếu định mức
   overtime: boolean
+  overloaded: boolean // tăng ca vẫn không đủ → không kịp deadline
 }
 
 export interface CapacitySession {
@@ -30,6 +33,7 @@ export interface CapacitySession {
   pct: number // filledHours / 4 * 100 (làm tròn)
   orderCount: number
   orders: CapacitySessionOrder[]
+  deadlineOverflow: boolean // ca này là deadline của ≥1 đơn không kịp dù đã tăng ca
 }
 
 export interface WorkshopCapacityRow {
@@ -59,8 +63,8 @@ function buildSessions(now: Date): CapacitySession[] {
     if (cursor.getDay() !== 0) {
       const iso = toISODate(cursor)
       const label = toDayMonthLabel(iso)
-      sessions.push({ date: iso, label, period: 'sang', filledHours: 0, pct: 0, orderCount: 0, orders: [] })
-      sessions.push({ date: iso, label, period: 'chieu', filledHours: 0, pct: 0, orderCount: 0, orders: [] })
+      sessions.push({ date: iso, label, period: 'sang', filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false })
+      sessions.push({ date: iso, label, period: 'chieu', filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false })
       workingDays += 1
     }
     cursor.setDate(cursor.getDate() + 1)
@@ -134,6 +138,7 @@ function addOrderHours(
   row: DeadlineProductionPlanRow,
   hours: number,
   overtime: boolean,
+  overloaded: boolean,
 ): void {
   if (hours <= 0) return
   session.filledHours += hours
@@ -145,10 +150,42 @@ function addOrderHours(
     remainingQuantity: row.order.remainingQuantity,
     norm: row.norm?.norm ?? null,
     overtime,
+    overloaded,
   })
 }
 
-// Xếp 1 phân xưởng: đổ lùi từ ca deadline về now; phần dư → tăng ca chia đều ca chiều (now..deadline).
+// Chia đều `hours` vào các ca tăng ca (chiều), cap tổng mỗi ca ở MAX_SESSION_HOURS (8h).
+// Trả về phân bổ theo chỉ số ca + phần dư không nhét được (đã hết chỗ kể cả tăng ca).
+function distributeOvertimeEven(
+  sessions: CapacitySession[],
+  targetIdxs: number[],
+  hours: number,
+): { alloc: Map<number, number>; leftover: number } {
+  const alloc = new Map<number, number>()
+  const room = new Map<number, number>()
+  for (const s of targetIdxs) room.set(s, Math.max(0, MAX_SESSION_HOURS - sessions[s].filledHours))
+
+  let pool = hours
+  let active = targetIdxs.filter((s) => (room.get(s) ?? 0) > 1e-6)
+  while (pool > 1e-6 && active.length > 0) {
+    const share = pool / active.length
+    let distributed = 0
+    for (const s of active) {
+      const r = room.get(s) ?? 0
+      const add = Math.min(share, r)
+      alloc.set(s, (alloc.get(s) ?? 0) + add)
+      room.set(s, r - add)
+      distributed += add
+    }
+    pool -= distributed
+    active = active.filter((s) => (room.get(s) ?? 0) > 1e-6)
+    if (distributed < 1e-9) break
+  }
+  return { alloc, leftover: pool }
+}
+
+// Xếp 1 phân xưởng: đổ lùi từ ca deadline về now (cap 4h/ca); phần dư → tăng ca chia đều ca chiều
+// (cap +4h/ca, tổng 8h/ca). Nếu kể cả tăng ca vẫn không đủ → đánh dấu ô deadline để cảnh báo.
 function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanRow[], nowIdx: number): void {
   // Đơn deadline sớm xếp trước (ưu tiên chiếm khung giờ).
   const ordered = [...rows].sort((a, b) => {
@@ -158,32 +195,42 @@ function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanR
   })
 
   for (const row of ordered) {
-    let hours = row.estimatedHours ?? 0
-    if (hours <= 0) continue
+    const estimated = row.estimatedHours ?? 0
+    if (estimated <= 0) continue
 
     const deadlineIdx = findDeadlineIndex(sessions, row.order.deadlinedate, row.order.deadlinetime, nowIdx)
     if (deadlineIdx < nowIdx) continue
 
-    // Đổ lùi vào sức chứa còn trống (tối đa 4h/ca).
+    // Sức chứa còn lại cho đơn này trong [nowIdx..deadlineIdx]: ca sáng tối đa 4h, ca chiều tối đa 8h.
+    let totalAvail = 0
+    for (let s = nowIdx; s <= deadlineIdx; s += 1) {
+      const cap = sessions[s].period === 'chieu' ? MAX_SESSION_HOURS : SESSION_HOURS
+      totalAvail += Math.max(0, cap - sessions[s].filledHours)
+    }
+    const overloaded = estimated > totalAvail + 1e-6
+
+    // 1. Đổ lùi giờ thường (cap 4h/ca) từ deadline về now.
+    let hours = estimated
     for (let s = deadlineIdx; s >= nowIdx && hours > 0; s -= 1) {
-      const avail = Math.max(0, SESSION_HOURS - sessions[s].filledHours)
-      const put = Math.min(hours, avail)
+      const put = Math.min(hours, Math.max(0, SESSION_HOURS - sessions[s].filledHours))
       if (put > 0) {
-        addOrderHours(sessions[s], row, put, false)
+        addOrderHours(sessions[s], row, put, false, overloaded)
         hours -= put
       }
     }
 
-    // Dư → tăng ca: chia đều vào các ca CHIỀU trong [nowIdx..deadlineIdx].
+    // 2. Phần dư → tăng ca: chia đều vào các ca CHIỀU [now..deadline], cap +4h/ca (tổng 8h).
     if (hours > 0.0001) {
       const chieuIdx: number[] = []
       for (let s = nowIdx; s <= deadlineIdx; s += 1) {
         if (sessions[s].period === 'chieu') chieuIdx.push(s)
       }
-      const targets = chieuIdx.length > 0 ? chieuIdx : [deadlineIdx]
-      const per = hours / targets.length
-      for (const s of targets) addOrderHours(sessions[s], row, per, true)
+      const { alloc } = distributeOvertimeEven(sessions, chieuIdx, hours)
+      for (const [s, h] of alloc) addOrderHours(sessions[s], row, h, true, overloaded)
     }
+
+    // 3. Tăng ca vẫn không đủ → đánh dấu ô deadline để cảnh báo "không kịp".
+    if (overloaded) sessions[deadlineIdx].deadlineOverflow = true
   }
 
   for (const s of sessions) recalc(s)

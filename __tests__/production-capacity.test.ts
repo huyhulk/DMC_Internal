@@ -129,6 +129,35 @@ describe('buildProductionCapacityTimeline', () => {
     expect(row.sessions[1].pct).toBe(150)
   })
 
+  it('caps overtime at +4h/session (max 8h) and flags overloaded when even OT is not enough', () => {
+    // deadline hôm nay (15-06) chiều idx1. Phạm vi [0..1]: idx0 sáng (cap 4h), idx1 chiều (cap 8h).
+    // Sức chứa tối đa = 12h; estimatedHours 14 → kể cả tăng ca vẫn thiếu 2h → "không kịp".
+    const [row] = buildProductionCapacityTimeline(
+      [planRow({ deadlinedate: '2026-06-15', deadlinetime: '16:00', estimatedHours: 14 })],
+      NOW,
+    )
+    // idx1 đầy đến trần 8h (4 thường + 4 tăng ca), idx0 đầy 4h.
+    expect(row.sessions[1].filledHours).toBeCloseTo(8)
+    expect(row.sessions[1].pct).toBe(200)
+    expect(row.sessions[0].filledHours).toBe(4)
+    // ô deadline được đánh dấu cảnh báo; ô khác thì không.
+    expect(row.sessions[1].deadlineOverflow).toBe(true)
+    expect(row.sessions[0].deadlineOverflow).toBe(false)
+    // đơn trong ô deadline mang cờ overloaded.
+    expect(row.sessions[1].orders.every((o) => o.overloaded)).toBe(true)
+  })
+
+  it('does not flag overloaded when work fits exactly within overtime capacity', () => {
+    // estimatedHours 12 = đúng sức chứa (4h sáng + 8h chiều) → vừa đủ, không cảnh báo.
+    const [row] = buildProductionCapacityTimeline(
+      [planRow({ deadlinedate: '2026-06-15', deadlinetime: '16:00', estimatedHours: 12 })],
+      NOW,
+    )
+    expect(row.sessions[1].filledHours).toBeCloseTo(8)
+    expect(row.sessions[1].deadlineOverflow).toBe(false)
+    expect(row.sessions[1].orders.every((o) => !o.overloaded)).toBe(true)
+  })
+
   it('ignores rows with no remaining production hours', () => {
     const rows = buildProductionCapacityTimeline(
       [planRow({ estimatedHours: 0 }), planRow({ estimatedHours: null })],
