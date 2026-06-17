@@ -10,7 +10,7 @@ import {
   buildProductionCapacityTimeline,
   capacityColor,
 } from '@/lib/production/capacity'
-import type { CapacitySession, WorkshopCapacityRow } from '@/lib/production/capacity'
+import type { CapacitySession, CapacitySessionOrder, WorkshopCapacityRow } from '@/lib/production/capacity'
 import { WORKSHOP_COLORS, type WorkshopCode } from '@/lib/reports/report-types'
 import { cn, workshopCode } from '@/lib/utils'
 import { Dialog } from '@/components/ui/dialog'
@@ -86,6 +86,56 @@ const CELL_CLS: Record<string, string> = {
 
 // ─── Cell detail dialog ───────────────────────────────────────────────────────
 
+function OrderDetailRow({ order }: { order: CapacitySessionOrder }) {
+  return (
+    <div className="py-2.5 flex items-start gap-3">
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[13px] font-semibold text-[#1d1d1f]">{order.pcode}</span>
+          {order.overtime && (
+            <span className="inline-flex items-center rounded-md border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
+              Tăng ca
+            </span>
+          )}
+          {order.overloaded && (
+            <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+              <AlertTriangle size={11} strokeWidth={2.5} className="fill-[#facc15] text-red-600" />
+              Không kịp deadline
+            </span>
+          )}
+        </div>
+        {order.products && (
+          <p className="text-[12px] text-[#6e6e73] truncate">{order.products}</p>
+        )}
+        {order.customer && (
+          <p className="text-[12px] text-[#aeaeb2] truncate">{order.customer}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-0.5 text-[11px]">
+          <span className="text-[#6e6e73]">
+            SL cần SX:{' '}
+            <span className="font-semibold text-[#1d1d1f]">
+              {order.remainingQuantity.toLocaleString('vi-VN')}
+            </span>
+          </span>
+          {order.norm != null ? (
+            <span className="text-[#6e6e73]">
+              Định mức:{' '}
+              <span className="font-semibold text-[#1d1d1f]">
+                {order.norm.toLocaleString('vi-VN')}/h
+              </span>
+            </span>
+          ) : (
+            <span className="font-semibold text-red-600">Thiếu định mức</span>
+          )}
+        </div>
+      </div>
+      <span className="shrink-0 text-[13px] font-medium text-[#1d1d1f] whitespace-nowrap">
+        {order.hours.toFixed(2)} h
+      </span>
+    </div>
+  )
+}
+
 function CellDetailDialog({
   workshop,
   session,
@@ -113,56 +163,31 @@ function CellDetailDialog({
 
         {/* Order list */}
         {session.orders.length === 0 ? (
-          <p className="text-[13px] text-[#aeaeb2] text-center py-4">Không có đơn</p>
+          <p className="text-[13px] text-[#aeaeb2] text-center py-4">Không có đơn trong ca này</p>
         ) : (
           <div className="divide-y divide-[#d2d2d7]/50">
             {session.orders.map((order, idx) => (
-              <div key={`${order.pcode}-${idx}`} className="py-2.5 flex items-start gap-3">
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[13px] font-semibold text-[#1d1d1f]">{order.pcode}</span>
-                    {order.overtime && (
-                      <span className="inline-flex items-center rounded-md border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
-                        Tăng ca
-                      </span>
-                    )}
-                    {order.overloaded && (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
-                        <AlertTriangle size={11} strokeWidth={2.5} className="fill-[#facc15] text-red-600" />
-                        Không kịp deadline
-                      </span>
-                    )}
-                  </div>
-                  {order.products && (
-                    <p className="text-[12px] text-[#6e6e73] truncate">{order.products}</p>
-                  )}
-                  {order.customer && (
-                    <p className="text-[12px] text-[#aeaeb2] truncate">{order.customer}</p>
-                  )}
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-0.5 text-[11px]">
-                    <span className="text-[#6e6e73]">
-                      SL cần SX:{' '}
-                      <span className="font-semibold text-[#1d1d1f]">
-                        {order.remainingQuantity.toLocaleString('vi-VN')}
-                      </span>
-                    </span>
-                    {order.norm != null ? (
-                      <span className="text-[#6e6e73]">
-                        Định mức:{' '}
-                        <span className="font-semibold text-[#1d1d1f]">
-                          {order.norm.toLocaleString('vi-VN')}/h
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="font-semibold text-red-600">Thiếu định mức</span>
-                    )}
-                  </div>
-                </div>
-                <span className="shrink-0 text-[13px] font-medium text-[#1d1d1f] whitespace-nowrap">
-                  {order.hours.toFixed(2)} h
-                </span>
-              </div>
+              <OrderDetailRow key={`${order.pcode}-${idx}`} order={order} />
             ))}
+          </div>
+        )}
+
+        {/* Tăng ca Chủ nhật (chỉ ô chiều Thứ 7) */}
+        {session.sundayOrders.length > 0 && (
+          <div className="space-y-1.5 rounded-xl border border-indigo-200 bg-indigo-50/50 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center rounded-md bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                CN
+              </span>
+              <span className="text-[12px] font-semibold text-[#1d1d1f]">
+                Tăng ca Chủ nhật · +{session.sundayOvertimeHours.toFixed(1)}h
+              </span>
+            </div>
+            <div className="divide-y divide-indigo-200/60">
+              {session.sundayOrders.map((order, idx) => (
+                <OrderDetailRow key={`sun-${order.pcode}-${idx}`} order={order} />
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -384,6 +409,8 @@ function CapacityGrid({
                 {row.sessions.map((session) => {
                   const color = capacityColor(session.pct)
                   const isEmpty = session.orderCount === 0
+                  const hasSunday = session.sundayOvertimeHours > 0
+                  const clickable = !isEmpty || hasSunday
                   const cellCls = CELL_CLS[color]
 
                   return (
@@ -391,18 +418,28 @@ function CapacityGrid({
                       <div className="relative group">
                         <button
                           type="button"
-                          onClick={() => !isEmpty && onCellClick(row.workshop, session)}
+                          onClick={() => clickable && onCellClick(row.workshop, session)}
                           title={`${session.orderCount} đơn · ${Math.round(session.pct)}%`}
                           className={cn(
                             'w-full h-12 rounded-lg relative z-0 text-[13px] font-bold transition-all duration-150',
                             cellCls,
-                            isEmpty
-                              ? 'cursor-default hover:scale-105 hover:z-10'
-                              : 'cursor-pointer hover:scale-110 hover:z-20 hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]'
+                            clickable
+                              ? 'cursor-pointer hover:scale-110 hover:z-20 hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]'
+                              : 'cursor-default hover:scale-105 hover:z-10'
                           )}
                         >
                           {isEmpty ? '' : `${Math.round(session.pct)}%`}
                         </button>
+
+                        {/* Bong bóng tăng ca Chủ nhật trên ô chiều Thứ 7 */}
+                        {hasSunday && (
+                          <span
+                            className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 z-20 whitespace-nowrap rounded-full bg-indigo-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-[0_2px_6px_rgba(0,0,0,0.3)]"
+                            title={`Tăng ca Chủ nhật: ${session.sundayOvertimeHours.toFixed(1)}h`}
+                          >
+                            CN +{session.sundayOvertimeHours.toFixed(session.sundayOvertimeHours % 1 ? 1 : 0)}h
+                          </span>
+                        )}
 
                         {/* Cảnh báo: ô deadline của đơn không kịp dù đã tăng ca */}
                         {session.deadlineOverflow && (
@@ -509,7 +546,7 @@ export function ProductionCapacityOverviewTab({
         <SectionLabel>Tổng quan sản xuất</SectionLabel>
         <CapacityLegend />
         <p className="text-[11px] text-[#aeaeb2]">
-          % = mức tải mỗi ca (giờ SX còn lại / 4h). Rê chuột vào ô để xem số đơn, bấm ô để xem chi tiết, bấm tên xưởng để mở máy tính thời gian.
+          % = mức tải mỗi ca (giờ SX còn lại / 4h). Rê chuột vào ô để xem số đơn, bấm ô để xem chi tiết, bấm tên xưởng để mở máy tính thời gian. Bong bóng &quot;CN +Xh&quot; trên ô chiều Thứ 7 = giờ tăng ca Chủ nhật.
         </p>
       </div>
 

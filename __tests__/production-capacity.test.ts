@@ -186,6 +186,57 @@ describe('buildProductionCapacityTimeline', () => {
   })
 })
 
+describe('buildProductionCapacityTimeline — tăng ca Chủ nhật', () => {
+  // now = Thứ Bảy 20-06-2026, 08:00. Cửa sổ: T7 20, [bỏ CN 21], T2 22, T3 23, T4 24, T5 25, T6 26.
+  //  idx: 0=20 sáng 1=20 chiều | 2=22 sáng 3=22 chiều | 4=23 sáng 5=23 chiều | ...
+  // Khe Chủ nhật: ô chiều Thứ 7 = idx1; Thứ 2 bắt đầu = idx2.
+  const NOW_SAT = new Date(2026, 5, 20, 8, 0, 0)
+
+  function planRowSat(estimatedHours: number, deadlinedate: string, deadlinetime = '16:00'): DeadlineProductionPlanRow {
+    return planRow({ deadlinedate, deadlinetime, estimatedHours })
+  }
+
+  it('uses Sunday overtime (max 8h) only after weekday OT is exhausted, shown as a bubble on Sat afternoon', () => {
+    // deadline T2 22 chiều (idx3). Phạm vi [0..3]: sức chứa T7+T2 = 4+8+4+8 = 24h.
+    // estimatedHours 28 → dư 4h sau khi đầy T7/T2 → CN gánh 4h (≤8). Không "không kịp".
+    const [row] = buildProductionCapacityTimeline([planRowSat(28, '2026-06-22')], NOW_SAT)
+    // T7 sáng/chiều và T2 sáng/chiều đầy trần.
+    expect(row.sessions[0].filledHours).toBe(4)
+    expect(row.sessions[1].filledHours).toBeCloseTo(8)
+    expect(row.sessions[2].filledHours).toBe(4)
+    expect(row.sessions[3].filledHours).toBeCloseTo(8)
+    // 4h tăng ca Chủ nhật gắn ở ô chiều Thứ 7 (bong bóng), không cộng vào filledHours.
+    expect(row.sessions[1].sundayOvertimeHours).toBeCloseTo(4)
+    expect(row.sessions[1].sundayOrders).toHaveLength(1)
+    expect(row.sessions[1].sundayOrders[0].hours).toBeCloseTo(4)
+    expect(row.sessions[1].sundayOrders[0].overtime).toBe(true)
+    // Không quá tải.
+    expect(row.sessions[3].deadlineOverflow).toBe(false)
+  })
+
+  it('flags overloaded only when even full 8h Sunday overtime is not enough', () => {
+    // estimatedHours 37 > 24 (T7+T2) + 8 (CN) = 32 → vẫn thiếu 5h → "không kịp".
+    const [row] = buildProductionCapacityTimeline([planRowSat(37, '2026-06-22')], NOW_SAT)
+    expect(row.sessions[1].sundayOvertimeHours).toBeCloseTo(8) // CN dùng hết 8h
+    expect(row.sessions[3].deadlineOverflow).toBe(true)
+    expect(row.sessions[3].orders.every((o) => o.overloaded)).toBe(true)
+  })
+
+  it('does not touch Sunday when weekday overtime still has room', () => {
+    // estimatedHours 20 < 24 → đủ chỗ trong T7/T2 (thường + tăng ca chiều), không đụng CN.
+    const [row] = buildProductionCapacityTimeline([planRowSat(20, '2026-06-22')], NOW_SAT)
+    expect(row.sessions[1].sundayOvertimeHours).toBe(0)
+    expect(row.sessions[1].sundayOrders).toHaveLength(0)
+  })
+
+  it('ignores Sunday for orders whose deadline does not cross the Sunday', () => {
+    // deadline ngay T7 20 chiều (idx1) → không bắc qua CN. est 14 > 12 (4+8) → không kịp, CN không dùng.
+    const [row] = buildProductionCapacityTimeline([planRowSat(14, '2026-06-20')], NOW_SAT)
+    expect(row.sessions[1].sundayOvertimeHours).toBe(0)
+    expect(row.sessions[1].deadlineOverflow).toBe(true)
+  })
+})
+
 describe('capacityColor', () => {
   it('maps percentage to status color thresholds', () => {
     expect(capacityColor(0)).toBe('empty')

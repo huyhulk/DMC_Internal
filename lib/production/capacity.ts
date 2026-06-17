@@ -34,6 +34,10 @@ export interface CapacitySession {
   orderCount: number
   orders: CapacitySessionOrder[]
   deadlineOverflow: boolean // ca này là deadline của ≥1 đơn không kịp dù đã tăng ca
+  // Chỉ ca CHIỀU THỨ 7 (trước 1 Chủ nhật bị bắc qua) dùng: tăng ca Chủ nhật gắn vào đây dạng bong bóng.
+  // Giờ CN KHÔNG cộng vào filledHours/pct của ca này (CN là ngày khác).
+  sundayOvertimeHours: number
+  sundayOrders: CapacitySessionOrder[]
 }
 
 export interface WorkshopCapacityRow {
@@ -63,8 +67,8 @@ function buildSessions(now: Date): CapacitySession[] {
     if (cursor.getDay() !== 0) {
       const iso = toISODate(cursor)
       const label = toDayMonthLabel(iso)
-      sessions.push({ date: iso, label, period: 'sang', filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false })
-      sessions.push({ date: iso, label, period: 'chieu', filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false })
+      sessions.push({ date: iso, label, period: 'sang', filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false, sundayOvertimeHours: 0, sundayOrders: [] })
+      sessions.push({ date: iso, label, period: 'chieu', filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false, sundayOvertimeHours: 0, sundayOrders: [] })
       workingDays += 1
     }
     cursor.setDate(cursor.getDate() + 1)
@@ -184,8 +188,25 @@ function distributeOvertimeEven(
   return { alloc, leftover: pool }
 }
 
+// Tìm "khe Chủ nhật" trong cửa sổ: ca chiều Thứ 7 ngay trước 1 Chủ nhật bị bỏ qua (kế đó là Thứ 2).
+// Cửa sổ tối đa chỉ có 1 khe như vậy. Trả về null nếu không có (vd cửa sổ kết thúc đúng Thứ 7).
+function findSundayGap(sessions: CapacitySession[]): { satChieuIdx: number; mondayFirstIdx: number } | null {
+  const dayCount = Math.floor(sessions.length / 2)
+  for (let j = 0; j + 1 < dayCount; j += 1) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(sessions[2 * j].date)
+    if (!m) continue
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    if (d.getDay() === 6) {
+      // Thứ 7 có ngày làm việc kế tiếp (Thứ 2) → tồn tại 1 Chủ nhật bị bắc qua.
+      return { satChieuIdx: 2 * j + 1, mondayFirstIdx: 2 * (j + 1) }
+    }
+  }
+  return null
+}
+
 // Xếp 1 phân xưởng: đổ lùi từ ca deadline về now (cap 4h/ca); phần dư → tăng ca chia đều ca chiều
-// (cap +4h/ca, tổng 8h/ca). Nếu kể cả tăng ca vẫn không đủ → đánh dấu ô deadline để cảnh báo.
+// (cap +4h/ca, tổng 8h/ca). Nếu lịch bắc qua Chủ nhật và T2–T7 đã hết tăng ca thì dùng tiếp Chủ nhật
+// (tối đa 8h, chung cho ngày CN). Kể cả vậy vẫn không đủ → đánh dấu ô deadline để cảnh báo.
 function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanRow[], nowIdx: number): void {
   // Đơn deadline sớm xếp trước (ưu tiên chiếm khung giờ).
   const ordered = [...rows].sort((a, b) => {
@@ -194,6 +215,10 @@ function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanR
     return da.localeCompare(db)
   })
 
+  const sundayGap = findSundayGap(sessions)
+  let sundayRemaining = sundayGap ? MAX_SESSION_HOURS : 0 // 8h tăng ca CN, chung cho cả ngày CN
+  const sundayOrders: CapacitySessionOrder[] = []
+
   for (const row of ordered) {
     const estimated = row.estimatedHours ?? 0
     if (estimated <= 0) continue
@@ -201,12 +226,17 @@ function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanR
     const deadlineIdx = findDeadlineIndex(sessions, row.order.deadlinedate, row.order.deadlinetime, nowIdx)
     if (deadlineIdx < nowIdx) continue
 
+    // Lịch đơn có bắc qua Chủ nhật không? (khe CN nằm trong [nowIdx..deadlineIdx]).
+    const spansSunday =
+      !!sundayGap && nowIdx <= sundayGap.satChieuIdx && deadlineIdx >= sundayGap.mondayFirstIdx
+
     // Sức chứa còn lại cho đơn này trong [nowIdx..deadlineIdx]: ca sáng tối đa 4h, ca chiều tối đa 8h.
     let totalAvail = 0
     for (let s = nowIdx; s <= deadlineIdx; s += 1) {
       const cap = sessions[s].period === 'chieu' ? MAX_SESSION_HOURS : SESSION_HOURS
       totalAvail += Math.max(0, cap - sessions[s].filledHours)
     }
+    if (spansSunday) totalAvail += sundayRemaining
     const overloaded = estimated > totalAvail + 1e-6
 
     // 1. Đổ lùi giờ thường (cap 4h/ca) từ deadline về now.
@@ -225,12 +255,37 @@ function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanR
       for (let s = nowIdx; s <= deadlineIdx; s += 1) {
         if (sessions[s].period === 'chieu') chieuIdx.push(s)
       }
-      const { alloc } = distributeOvertimeEven(sessions, chieuIdx, hours)
+      const { alloc, leftover } = distributeOvertimeEven(sessions, chieuIdx, hours)
       for (const [s, h] of alloc) addOrderHours(sessions[s], row, h, true, overloaded)
+      hours = leftover
     }
 
-    // 3. Tăng ca vẫn không đủ → đánh dấu ô deadline để cảnh báo "không kịp".
+    // 3. Vẫn dư & lịch bắc qua CN & T2–T7 đã hết tăng ca → dùng tăng ca Chủ nhật (tối đa 8h, chung).
+    if (hours > 0.0001 && spansSunday && sundayRemaining > 1e-6) {
+      const put = Math.min(hours, sundayRemaining)
+      sundayRemaining -= put
+      hours -= put
+      sundayOrders.push({
+        pcode: row.order.pcode,
+        products: row.norm?.products ?? null,
+        customer: row.order.customer ?? '',
+        hours: Math.round(put * 100) / 100,
+        remainingQuantity: row.order.remainingQuantity,
+        norm: row.norm?.norm ?? null,
+        overtime: true,
+        overloaded,
+      })
+    }
+
+    // 4. Kể cả tăng ca (và CN) vẫn không đủ → đánh dấu ô deadline để cảnh báo "không kịp".
     if (overloaded) sessions[deadlineIdx].deadlineOverflow = true
+  }
+
+  // Gắn tăng ca Chủ nhật vào ô chiều Thứ 7 (bong bóng), không cộng vào filledHours của ca.
+  if (sundayGap && sundayOrders.length > 0) {
+    const sat = sessions[sundayGap.satChieuIdx]
+    sat.sundayOrders = sundayOrders
+    sat.sundayOvertimeHours = Math.round(sundayOrders.reduce((acc, o) => acc + o.hours, 0) * 100) / 100
   }
 
   for (const s of sessions) recalc(s)
