@@ -181,8 +181,9 @@ describe('production workflow helpers', () => {
     expect(getProductionEntryWorkshop('DMC1', 'TCS Phẳng')).toBe('DMC1-PK')
   })
 
-  it('splits DMC3 production-entry orders by description (PU/PK/CT)', () => {
-    expect(getProductionEntryWorkshop('DMC3', 'PU foam')).toBe('DMC3-PU')
+  it('splits DMC3 production-entry orders by description (PN/PK/CT)', () => {
+    expect(getProductionEntryWorkshop('DMC3', 'Panel xốp')).toBe('DMC3-PN')
+    expect(getProductionEntryWorkshop('DMC3', 'PN vách')).toBe('DMC3-PN')
     expect(getProductionEntryWorkshop('DMC3', 'Tôn phụ kiện')).toBe('DMC3-PK')
     expect(getProductionEntryWorkshop('DMC3', 'Tôn PK')).toBe('DMC3-PK')
     expect(getProductionEntryWorkshop('DMC3', 'Tôn sóng vuông')).toBe('DMC3-CT')
@@ -209,7 +210,7 @@ describe('production workflow helpers', () => {
   it('maps DMC3/DMC4 production-entry subgroups back to base', () => {
     expect(getProductionEntryBaseWorkshop('DMC3-PK')).toBe('DMC3')
     expect(getProductionEntryBaseWorkshop('DMC3-CT')).toBe('DMC3')
-    expect(getProductionEntryBaseWorkshop('DMC3-PU')).toBe('DMC3')
+    expect(getProductionEntryBaseWorkshop('DMC3-PN')).toBe('DMC3')
     expect(getProductionEntryBaseWorkshop('DMC4-XG')).toBe('DMC4')
     expect(getProductionEntryBaseWorkshop('DMC4-PK')).toBe('DMC4')
   })
@@ -220,7 +221,7 @@ describe('production workflow helpers', () => {
     expect(isProductionEntryWorkspaceAllowed('DMC4-XG', 'USER', ['DMC4'])).toBe(true)
     // workspace sub-shop → chỉ đúng sub-shop đó
     expect(isProductionEntryWorkspaceAllowed('DMC3-PK', 'USER', ['DMC3-PK'])).toBe(true)
-    expect(isProductionEntryWorkspaceAllowed('DMC3-PU', 'USER', ['DMC3-PK'])).toBe(false)
+    expect(isProductionEntryWorkspaceAllowed('DMC3-PN', 'USER', ['DMC3-PK'])).toBe(false)
     expect(isProductionEntryWorkspaceAllowed('DMC4-PK', 'USER', ['DMC4-XG'])).toBe(false)
     // không chéo base
     expect(isProductionEntryWorkspaceAllowed('DMC3-PK', 'USER', ['DMC4'])).toBe(false)
