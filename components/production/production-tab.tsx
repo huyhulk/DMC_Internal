@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { listProductionInputHistoryAction } from '@/lib/actions/data'
 import { useProductionData } from '@/hooks/use-production-data'
+import { ProductionCapacityOverviewTab } from './capacity-overview'
 import { OrderInfoCard } from './order-info-card'
 import { ProductLineCard } from './product-line-card'
 import { UnlockDialog } from './unlock-dialog'
@@ -78,7 +79,7 @@ const inputCls =
   'shadow-[0_1px_2px_rgba(0,0,0,0.05)]'
 
 export function ProductionTab({ user, canEdit }: Props) {
-  const [activeSubTab, setActiveSubTab] = useState<'open-orders' | 'deadline-orders' | 'daily-entry'>('open-orders')
+  const [activeSubTab, setActiveSubTab] = useState<'open-orders' | 'deadline-orders' | 'daily-entry' | 'capacity-overview'>('open-orders')
   const [showHistory, setShowHistory] = useState(false)
   const [refreshSignal, setRefreshSignal] = useState(0)
 
@@ -104,6 +105,9 @@ export function ProductionTab({ user, canEdit }: Props) {
             </SubTabButton>
             <SubTabButton active={activeSubTab === 'daily-entry'} onClick={() => setActiveSubTab('daily-entry')}>
               Theo dõi lệnh theo ngày tạo
+            </SubTabButton>
+            <SubTabButton active={activeSubTab === 'capacity-overview'} onClick={() => setActiveSubTab('capacity-overview')}>
+              Tổng quan sản xuất
             </SubTabButton>
           </div>
           <div className="flex items-center gap-2 sm:ml-auto">
@@ -132,7 +136,9 @@ export function ProductionTab({ user, canEdit }: Props) {
         ? <OpenOrdersTab user={user} canEdit={canEdit} refreshSignal={refreshSignal} />
         : activeSubTab === 'deadline-orders'
           ? <DeadlineOrdersTab user={user} canEdit={canEdit} refreshSignal={refreshSignal} />
-          : <DailyEntryTab user={user} canEdit={canEdit} />}
+          : activeSubTab === 'capacity-overview'
+            ? <ProductionCapacityOverviewTab user={user} canEdit={canEdit} refreshSignal={refreshSignal} />
+            : <DailyEntryTab user={user} canEdit={canEdit} />}
     </div>
   )
 }
