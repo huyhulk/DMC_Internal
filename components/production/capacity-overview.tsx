@@ -294,14 +294,20 @@ function CapacityGrid({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="border-separate border-spacing-0" style={{ minWidth: 640 }}>
+    <div className="overflow-x-auto px-2 py-3">
+      <table className="w-full min-w-[760px] table-fixed border-separate border-spacing-0">
+        <colgroup>
+          <col className="w-[120px]" />
+          {sessions.map((session) => (
+            <col key={`col-${session.date}-${session.period}`} />
+          ))}
+        </colgroup>
         <thead>
           {/* Tier 1: day labels — each spans 2 session columns */}
           <tr>
             {/* Sticky workshop-name column header */}
             <th
-              className="sticky left-0 z-20 bg-white border-b border-r border-[#d2d2d7]/60 px-3 py-1.5 text-left text-[11px] font-semibold text-[#aeaeb2] uppercase tracking-[0.07em] min-w-[110px]"
+              className="sticky left-0 z-20 bg-white border-b border-r border-[#d2d2d7]/60 px-3 py-2 text-left text-[11px] font-semibold text-[#aeaeb2] uppercase tracking-[0.07em]"
             >
               Xưởng
             </th>
@@ -309,7 +315,7 @@ function CapacityGrid({
               <th
                 key={day.date}
                 colSpan={2}
-                className="border-b border-r border-[#d2d2d7]/60 px-2 py-1.5 text-center text-[12px] font-bold text-[#1d1d1f] last:border-r-0"
+                className="border-b border-r border-[#d2d2d7]/60 px-2 py-2 text-center text-[13px] font-bold text-[#1d1d1f] last:border-r-0"
               >
                 {day.label}
               </th>
@@ -322,12 +328,12 @@ function CapacityGrid({
               <th
                 key={`${session.date}-${session.period}`}
                 className={cn(
-                  'border-b border-[#d2d2d7]/60 px-1 py-1 text-center text-[10px] font-medium text-[#6e6e73] w-10',
+                  'border-b border-[#d2d2d7]/60 px-1 py-1.5 text-center text-[11px] font-medium text-[#6e6e73]',
                   idx % 2 === 0 ? 'border-r-0' : 'border-r border-[#d2d2d7]/60',
                   idx === sessions.length - 1 && 'border-r-0'
                 )}
               >
-                {session.period === 'sang' ? 'S' : 'C'}
+                {session.period === 'sang' ? 'Sáng' : 'Chiều'}
               </th>
             ))}
           </tr>
@@ -336,64 +342,51 @@ function CapacityGrid({
           {timeline.map((row) => {
             const workshopColor = getWorkshopColor(row.workshop)
             return (
-              <tr key={row.workshop} className="group/row hover:bg-[#f5f5f7]/50">
+              <tr key={row.workshop}>
                 {/* Workshop name cell */}
-                <td
-                  className="sticky left-0 z-10 bg-white border-b border-r border-[#d2d2d7]/60 border-l-[3px] min-w-[110px]"
-                  style={{ borderLeftColor: workshopColor }}
-                >
+                <td className="sticky left-0 z-10 bg-white p-1">
                   <button
                     type="button"
                     onClick={() => onWorkshopClick(row.workshop)}
                     title={`Mở máy tính thời gian SX cho ${row.workshop}`}
-                    className="w-full text-left px-2 py-2 text-[12px] font-bold text-[#1d1d1f] hover:text-dmc-primary transition-colors duration-150 truncate block"
+                    className="w-full h-12 flex items-center px-2.5 rounded-lg border-l-[3px] bg-[#f5f5f7] text-[12px] font-bold text-[#1d1d1f] hover:bg-[#ececf0] hover:text-dmc-primary transition-all duration-150"
+                    style={{ borderLeftColor: workshopColor }}
                   >
-                    {row.workshop}
+                    <span className="truncate">{row.workshop}</span>
                   </button>
                 </td>
 
                 {/* Session cells */}
-                {row.sessions.map((session, idx) => {
+                {row.sessions.map((session) => {
                   const color = capacityColor(session.pct)
                   const isEmpty = session.orderCount === 0
                   const cellCls = CELL_CLS[color]
 
                   return (
-                    <td
-                      key={`${session.date}-${session.period}`}
-                      className={cn(
-                        'border-b border-[#d2d2d7]/60 p-0.5',
-                        idx % 2 === 0 ? 'border-r-0' : 'border-r border-[#d2d2d7]/60',
-                        idx === row.sessions.length - 1 && 'border-r-0'
-                      )}
-                    >
+                    <td key={`${session.date}-${session.period}`} className="p-1">
                       <div className="relative group">
                         <button
                           type="button"
-                          disabled={isEmpty}
                           onClick={() => !isEmpty && onCellClick(row.workshop, session)}
                           title={`${session.orderCount} đơn · ${Math.round(session.pct)}%`}
                           className={cn(
-                            'w-full h-8 rounded-lg text-[11px] font-semibold transition-all duration-150',
+                            'w-full h-12 rounded-lg relative z-0 transition-all duration-150',
                             cellCls,
-                            !isEmpty && 'hover:opacity-85 active:scale-[0.95] cursor-pointer',
-                            isEmpty && 'cursor-default'
+                            isEmpty
+                              ? 'cursor-default hover:scale-105 hover:z-10'
+                              : 'cursor-pointer hover:scale-110 hover:z-20 hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]'
                           )}
-                        >
-                          {isEmpty ? '' : `${Math.round(session.pct)}%`}
-                        </button>
+                        />
 
-                        {/* Custom hover tooltip (only when there are orders) */}
-                        {!isEmpty && (
-                          <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                            <div className="bg-[#1d1d1f] text-white rounded-lg px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-lg">
-                              <p className="font-semibold">{session.orderCount} đơn</p>
-                              <p>{Math.round(session.pct)}% · {session.filledHours.toFixed(1)}h</p>
-                            </div>
-                            {/* Tooltip arrow */}
-                            <div className="w-2 h-2 bg-[#1d1d1f] rotate-45 mx-auto -mt-1" />
+                        {/* Hover tooltip — số liệu chỉ hiện khi rê chuột */}
+                        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                          <div className="bg-[#1d1d1f] text-white rounded-lg px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-lg">
+                            <p className="font-semibold">{session.orderCount} đơn</p>
+                            <p>{Math.round(session.pct)}% · {session.filledHours.toFixed(1)}h</p>
                           </div>
-                        )}
+                          {/* Tooltip arrow */}
+                          <div className="w-2 h-2 bg-[#1d1d1f] rotate-45 mx-auto -mt-1" />
+                        </div>
                       </div>
                     </td>
                   )
@@ -474,7 +467,7 @@ export function ProductionCapacityOverviewTab({
         <SectionLabel>Tổng quan sản xuất</SectionLabel>
         <CapacityLegend />
         <p className="text-[11px] text-[#aeaeb2]">
-          % = giờ SX còn lại đổ vào ca / 4h. Bấm ô để xem đơn, bấm tên xưởng để mở máy tính thời gian.
+          Màu = mức tải mỗi ca (giờ SX còn lại / 4h). Rê chuột vào ô để xem số đơn &amp; %, bấm ô để xem chi tiết, bấm tên xưởng để mở máy tính thời gian.
         </p>
       </div>
 
