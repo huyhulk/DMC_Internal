@@ -902,7 +902,7 @@ describe('data actions', () => {
     expect(mockDataIn).toHaveBeenCalledWith('PCODE', ['LSX-HISTORY-OUTSIDE-FIRST-PAGE'])
     expect(result.data?.[0]).toMatchObject({
       pcode: 'LSX-HISTORY-OUTSIDE-FIRST-PAGE',
-      workshop: 'DMC4',
+      workshop: 'DMC4-XG',
       customer: 'History Customer',
     })
   })
