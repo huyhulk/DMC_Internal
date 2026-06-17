@@ -51,13 +51,39 @@ export interface DeadlineProductionPlanSummary {
 }
 
 const PRODUCTION_APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
-const DMC1_PRODUCTION_ENTRY_WORKSHOPS = new Set(['DMC1', 'DMC1-CT', 'DMC1-PK', 'DMC1-PU'])
+// Tách workshop ở production-entry theo diễn giải: base → các sub-shop (rule đầu khớp thắng;
+// rule không có anyText = mặc định). DMC1 giữ nguyên; thêm DMC3 (PU/PK/CT), DMC4 (XG/PK, mặc định XG).
+const PRODUCTION_ENTRY_SPLIT_RULES: Record<string, Array<{ suffix: string; anyText?: string[] }>> = {
+  DMC1: [
+    { suffix: 'PU', anyText: ['pu'] },
+    { suffix: 'PK', anyText: ['phụ kiện', 'pk', 'tcs phẳng'] },
+    { suffix: 'CT' },
+  ],
+  DMC3: [
+    { suffix: 'PU', anyText: ['pu'] },
+    { suffix: 'PK', anyText: ['phụ kiện', 'pk'] },
+    { suffix: 'CT' },
+  ],
+  DMC4: [
+    { suffix: 'XG', anyText: ['xà gồ', 'xg'] },
+    { suffix: 'PK', anyText: ['phụ kiện', 'pk'] },
+    { suffix: 'XG' },
+  ],
+}
+const PRODUCTION_ENTRY_SPLIT_BASES = Object.keys(PRODUCTION_ENTRY_SPLIT_RULES)
+// Tất cả mã production-entry hợp lệ: base + base-suffix (vd DMC1, DMC1-CT, DMC3-PK, DMC4-XG...).
+const PRODUCTION_ENTRY_WORKSHOPS = new Set<string>(
+  PRODUCTION_ENTRY_SPLIT_BASES.flatMap((base) => [
+    base,
+    ...PRODUCTION_ENTRY_SPLIT_RULES[base].map((rule) => `${base}-${rule.suffix}`),
+  ]),
+)
 const OTHER_PRODUCTION_ENTRY_TASKS = new Set(['5S', 'Đào tạo', 'Hỗ trợ PX khác'])
 
 function getProductionEntryWorkshopCode(workshop: string): string {
   const normalizedWorkshop = normalizeWorkshop(workshop)
   const directCode = normalizedWorkshop.trim().toUpperCase()
-  if (DMC1_PRODUCTION_ENTRY_WORKSHOPS.has(directCode)) return directCode
+  if (PRODUCTION_ENTRY_WORKSHOPS.has(directCode)) return directCode
   return workshopCode(normalizedWorkshop)
 }
 
@@ -73,22 +99,23 @@ export function getOtherProductionEntryBaseWorkshop(workshop: string): string {
 export function getProductionEntryWorkshop(workshop: string, description: string | null | undefined): string {
   const normalizedWorkshop = normalizeWorkshop(workshop)
   const baseCode = workshopCode(normalizedWorkshop)
-  if (baseCode !== 'DMC1') return normalizedWorkshop
+  const rules = PRODUCTION_ENTRY_SPLIT_RULES[baseCode]
+  if (!rules) return normalizedWorkshop
 
   const normalizedDescription = (description ?? '').toLocaleLowerCase('vi')
-  if (normalizedDescription.includes('pu')) return 'DMC1-PU'
-  if (
-    normalizedDescription.includes('phụ kiện') ||
-    normalizedDescription.includes('pk') ||
-    normalizedDescription.includes('tcs phẳng')
-  ) return 'DMC1-PK'
-  return 'DMC1-CT'
+  for (const rule of rules) {
+    if (!rule.anyText || rule.anyText.some((keyword) => normalizedDescription.includes(keyword))) {
+      return `${baseCode}-${rule.suffix}`
+    }
+  }
+  return normalizedWorkshop
 }
 
 export function getProductionEntryBaseWorkshop(workshop: string): string {
   const normalizedWorkshop = normalizeWorkshop(workshop)
   const code = getProductionEntryWorkshopCode(normalizedWorkshop)
-  if (DMC1_PRODUCTION_ENTRY_WORKSHOPS.has(code)) return 'DMC1'
+  const base = PRODUCTION_ENTRY_SPLIT_BASES.find((b) => code === b || code.startsWith(`${b}-`))
+  if (base) return base
   return code || normalizedWorkshop
 }
 
@@ -105,8 +132,12 @@ export function isProductionEntryWorkspaceAllowed(
   const entryCode = getProductionEntryWorkshopCode(entryWorkshop)
   return userWorkspaces.some((workspace) => {
     const workspaceCode = getProductionEntryWorkshopCode(workspace)
-    if (workspaceCode === 'DMC1') return DMC1_PRODUCTION_ENTRY_WORKSHOPS.has(entryCode)
-    if (DMC1_PRODUCTION_ENTRY_WORKSHOPS.has(workspaceCode)) return entryCode === workspaceCode
+    // Workspace là base (DMC1/DMC3/DMC4) → truy cập mọi sub-shop cùng base.
+    if (PRODUCTION_ENTRY_SPLIT_BASES.includes(workspaceCode)) {
+      return getProductionEntryBaseWorkshop(entryCode) === workspaceCode
+    }
+    // Workspace là sub-shop (vd DMC1-PK) → chỉ đúng sub-shop đó.
+    if (PRODUCTION_ENTRY_WORKSHOPS.has(workspaceCode)) return entryCode === workspaceCode
     return getProductionEntryBaseWorkshop(entryCode) === workspaceCode
   })
 }
