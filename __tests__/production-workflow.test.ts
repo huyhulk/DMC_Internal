@@ -24,6 +24,8 @@ import {
   getOpenOrdersSearchState,
   getOpenProductionOrdersQueryWindow,
   getProductionEntryWorkshop,
+  getProductionEntryBaseWorkshop,
+  isProductionEntryWorkspaceAllowed,
   getProductionOrderStatusRank,
   getProductionRowsValidationError,
   isOpenProductionOrder,
@@ -101,6 +103,51 @@ describe('production workflow helpers', () => {
   it('classifies DMC1 TCS phẳng production-entry orders as PK', () => {
     expect(getProductionEntryWorkshop('DMC1', 'TCS phẳng')).toBe('DMC1-PK')
     expect(getProductionEntryWorkshop('DMC1', 'TCS Phẳng')).toBe('DMC1-PK')
+  })
+
+  it('splits DMC3 production-entry orders by description (PU/PK/CT)', () => {
+    expect(getProductionEntryWorkshop('DMC3', 'PU foam')).toBe('DMC3-PU')
+    expect(getProductionEntryWorkshop('DMC3', 'Tôn phụ kiện')).toBe('DMC3-PK')
+    expect(getProductionEntryWorkshop('DMC3', 'Tôn PK')).toBe('DMC3-PK')
+    expect(getProductionEntryWorkshop('DMC3', 'Tôn sóng vuông')).toBe('DMC3-CT')
+    expect(getProductionEntryWorkshop('Phân xưởng 3 - Tôn', null)).toBe('DMC3-CT')
+    // DMC3 KHÔNG tính 'tcs phẳng' như DMC1
+    expect(getProductionEntryWorkshop('DMC3', 'TCS phẳng')).toBe('DMC3-CT')
+  })
+
+  it('splits DMC4 production-entry orders by description (XG/PK, default XG)', () => {
+    expect(getProductionEntryWorkshop('DMC4', 'Xà gồ C')).toBe('DMC4-XG')
+    expect(getProductionEntryWorkshop('DMC4', 'XG mạ kẽm')).toBe('DMC4-XG')
+    expect(getProductionEntryWorkshop('DMC4', 'Tôn phụ kiện')).toBe('DMC4-PK')
+    expect(getProductionEntryWorkshop('DMC4', 'Pk kẽm')).toBe('DMC4-PK')
+    expect(getProductionEntryWorkshop('DMC4', 'Tôn cuộn')).toBe('DMC4-XG')
+    // Ưu tiên XG khi có cả 'xà gồ' và 'phụ kiện'
+    expect(getProductionEntryWorkshop('DMC4', 'Xà gồ kèm phụ kiện')).toBe('DMC4-XG')
+  })
+
+  it('keeps DMC5 production-entry workshop un-split', () => {
+    expect(getProductionEntryWorkshop('DMC5', 'PU foam')).toBe('DMC5')
+    expect(getProductionEntryWorkshop('DMC5', 'Tôn phụ kiện')).toBe('DMC5')
+  })
+
+  it('maps DMC3/DMC4 production-entry subgroups back to base', () => {
+    expect(getProductionEntryBaseWorkshop('DMC3-PK')).toBe('DMC3')
+    expect(getProductionEntryBaseWorkshop('DMC3-CT')).toBe('DMC3')
+    expect(getProductionEntryBaseWorkshop('DMC3-PU')).toBe('DMC3')
+    expect(getProductionEntryBaseWorkshop('DMC4-XG')).toBe('DMC4')
+    expect(getProductionEntryBaseWorkshop('DMC4-PK')).toBe('DMC4')
+  })
+
+  it('scopes DMC3/DMC4 production-entry workspaces like DMC1', () => {
+    // workspace base → mọi sub-shop cùng base
+    expect(isProductionEntryWorkspaceAllowed('DMC3-PK', 'USER', ['DMC3'])).toBe(true)
+    expect(isProductionEntryWorkspaceAllowed('DMC4-XG', 'USER', ['DMC4'])).toBe(true)
+    // workspace sub-shop → chỉ đúng sub-shop đó
+    expect(isProductionEntryWorkspaceAllowed('DMC3-PK', 'USER', ['DMC3-PK'])).toBe(true)
+    expect(isProductionEntryWorkspaceAllowed('DMC3-PU', 'USER', ['DMC3-PK'])).toBe(false)
+    expect(isProductionEntryWorkspaceAllowed('DMC4-PK', 'USER', ['DMC4-XG'])).toBe(false)
+    // không chéo base
+    expect(isProductionEntryWorkspaceAllowed('DMC3-PK', 'USER', ['DMC4'])).toBe(false)
   })
 
   it('ranks production statuses in data-entry priority order', () => {
@@ -571,8 +618,8 @@ describe('production workflow helpers', () => {
     const plan = buildDeadlineProductionPlan(orders, norms)
     const summaries = buildWorkshopDeadlineSummaries(plan.rows, today)
 
-    // Sắp theo số xưởng: DMC1-CT (1) đứng trước DMC3 (3)
-    expect(summaries.map((s) => s.workshop)).toEqual(['DMC1-CT', 'DMC3'])
+    // DMC3 tách theo diễn giải mặc định → DMC3-CT; sắp theo số: DMC1-CT (1) trước DMC3-CT (3)
+    expect(summaries.map((s) => s.workshop)).toEqual(['DMC1-CT', 'DMC3-CT'])
 
     const dmc1 = summaries[0]
     expect(dmc1).toMatchObject({
@@ -590,7 +637,7 @@ describe('production workflow helpers', () => {
 
     const dmc3 = summaries[1]
     expect(dmc3).toMatchObject({
-      workshop: 'DMC3',
+      workshop: 'DMC3-CT',
       orderCount: 1,
       notStartedCount: 1,
       inProgressCount: 0,
@@ -615,8 +662,8 @@ describe('production workflow helpers', () => {
 
     const summaries = buildWorkshopDeadlineSummaries(buildDeadlineProductionPlan(orders, norms).rows, today)
 
-    // Sắp theo số xưởng, không theo độ khẩn: DMC4 quá hạn vẫn xếp sau DMC1/DMC3.
-    expect(summaries.map((s) => s.workshop)).toEqual(['DMC1-CT', 'DMC3', 'DMC4'])
+    // Sắp theo số xưởng, không theo độ khẩn (DMC3/DMC4 tách mặc định → CT/XG).
+    expect(summaries.map((s) => s.workshop)).toEqual(['DMC1-CT', 'DMC3-CT', 'DMC4-XG'])
   })
 
   it('matches deadline production norms by description and base workshop', () => {
