@@ -243,6 +243,57 @@ describe('data actions', () => {
     expect(result.data?.orders[0].workshop).toBe('DMC1-PU')
   })
 
+  it('attaches produced/remaining quantity to getInitData orders so re-entry prefills the remainder', async () => {
+    mockProfile = { role: 'admin', workspace: 'ALL' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-REMAIN',
+        INITIALDATE: '2026-05-09',
+        CUSTOMER: 'Customer',
+        WORKSHOP: 'DMC3',
+        DESCRIPTION: 'Tôn cán sóng',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Dang san xuat',
+      },
+    ]
+    currentProductionRows = [
+      { pcode: 'LSX-REMAIN', poutput: 40, save_status: 'draft', pdate: '2026-05-09' },
+    ]
+
+    const result = await getInitData('2026-05-09')
+
+    expect(result.success).toBe(true)
+    const order = result.data?.orders.find((o) => o.pcode === 'LSX-REMAIN')
+    expect(order?.producedQuantity).toBe(40)
+    expect(order?.remainingQuantity).toBe(60)
+  })
+
+  it('attaches produced/remaining quantity to searchOrderByPcode result', async () => {
+    mockProfile = { role: 'admin', workspace: 'ALL' }
+    currentDataRows = [
+      {
+        PCODE: 'LSX-SEARCH',
+        INITIALDATE: '2026-05-09',
+        CUSTOMER: 'Customer',
+        WORKSHOP: 'DMC3',
+        DESCRIPTION: 'Tôn cán sóng',
+        QUANTITY: 100,
+        DEADLINEDATE: '2026-05-12T10:00:00',
+        STATUS: 'Dang san xuat',
+      },
+    ]
+    currentProductionRows = [
+      { pcode: 'LSX-SEARCH', poutput: 30, save_status: 'draft', pdate: '2026-05-09' },
+    ]
+
+    const result = await searchOrderByPcode('LSX-SEARCH')
+
+    expect(result.success).toBe(true)
+    expect(result.order?.producedQuantity).toBe(30)
+    expect(result.order?.remainingQuantity).toBe(70)
+  })
+
   it('shows all DMC1 subgroups in open production orders for aggregate DMC1 workspace', async () => {
     mockProfile = { role: 'TEAM_LEADER', workspace: 'DMC1' }
     currentDataRows = [

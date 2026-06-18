@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { getInitData, getOpenProductionOrdersAction, searchOrderByPcode, recordProductionAction, revalidateNormsAction } from '@/lib/actions/data'
 import { calculateRemainingProductionOutput, getOtherProductionEntryBaseWorkshop, getProductionEntryBaseWorkshop, getProductionRowsValidationError } from '@/lib/production/workflow'
 import { calcRealNorm, getUserWorkspaces, getTodayLocal, workshopCode } from '@/lib/utils'
-import type { InitData, Order, NormItem, ProductionSaveStatus, SessionUser, ProductLine, PcodeStatus } from '@/types'
+import type { InitData, Order, OpenProductionOrder, NormItem, ProductionSaveStatus, SessionUser, ProductLine, PcodeStatus } from '@/types'
 
 export interface ProductionState {
   loading: boolean
@@ -256,7 +256,12 @@ export function useProductionData(user: SessionUser) {
         const lines = [...s.lines]
         lines[idx] = { ...lines[idx], [field]: value }
 
-        const orderQuantity = s.orderInfo?.quantity ?? 0
+        // Base prefill = SL còn lại của lệnh (đã trừ phần đã SX ở các lần lưu trước),
+        // KHÔNG dùng tổng SL lệnh — nếu không, lần nhập thứ 2 trở lên sẽ điền dư.
+        const openOrder = s.orderInfo as OpenProductionOrder | null
+        const orderQuantity: string | number = openOrder && typeof openOrder.remainingQuantity === 'number'
+          ? openOrder.remainingQuantity
+          : (s.orderInfo?.quantity ?? 0)
 
         if (field === 'product' && value && !String(value).startsWith('--')) {
           const ws = getProductionEntryBaseWorkshop(s.selectedWorkshop)
