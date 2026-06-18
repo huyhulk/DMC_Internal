@@ -89,7 +89,7 @@ export interface ProductionRecord {
 }
 
 export interface InitData {
-  orders: Order[]
+  orders: OpenProductionOrder[]
   norms: NormItem[]
   normOverrides?: NormOverride[]
   materials: MaterialItem[]
