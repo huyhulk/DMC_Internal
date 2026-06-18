@@ -10,6 +10,7 @@ import { getUserWorkspaces } from '@/lib/utils'
 import { getHRGroup, HR_GROUPS, isProductionSubshop } from '@/lib/hr/groups'
 import {
   buildHRSubshopBoard,
+  getProductionLaborHoursByWorkshop,
   type HRDailyGroupState,
   type HRSubshopGroup,
   type HRSubshopTransfer,
@@ -97,6 +98,46 @@ export async function getHRSubshopBoard(date: string): Promise<HRSubshopBoardRes
   const editableGroups = canEditStatus ? board.filter((g) => canEditGroup(g.group, user)).map((g) => g.group) : []
 
   return { board, editableGroups, canEditStatus }
+}
+
+export interface WorkshopLaborCapacityInput {
+  planHeadcount: number
+  todayMorning: number
+  todayAfternoon: number
+}
+
+// Giờ nhân công theo xưởng sản xuất (cho tab Tổng quan sản xuất) ở ngày `date`.
+// Gate bằng quyền XEM tab Sản Xuất (không cần quyền HR). Trả về {} nếu không có quyền → tab dùng mặc định 4h/ca.
+export async function getProductionCapacityInput(
+  date: string,
+): Promise<Record<string, WorkshopLaborCapacityInput>> {
+  const user = await requireTabView('production')
+  if (!user) return {}
+
+  const db = getDb()
+  const [empRes, dailyRes] = await Promise.all([
+    db.from('human_resource').select('id,name,factory,subshop,machine,position,phone').order('name', { ascending: true }),
+    db.from('hr_daily').select('factory,absent_ids,transfer_records').eq('pdate', date).in('factory', [...HR_GROUPS]),
+  ])
+  if (empRes.error) logger.error({ err: empRes.error.message }, 'getProductionCapacityInput: employees query failed')
+
+  const employees = mapEmployees(empRes.data ?? [])
+  const states: HRDailyGroupState[] = (dailyRes.data ?? []).map((raw) => {
+    const row = raw as Record<string, unknown>
+    return {
+      group: row.factory as string,
+      absentIds: (row.absent_ids as number[] | null) ?? [],
+      transferRecords: (row.transfer_records as HRSubshopTransfer[] | null) ?? [],
+    }
+  })
+
+  const board = buildHRSubshopBoard(employees, states)
+  const map = getProductionLaborHoursByWorkshop(board)
+  const out: Record<string, WorkshopLaborCapacityInput> = {}
+  for (const [group, v] of map) {
+    out[group] = { planHeadcount: v.planHeadcount, todayMorning: v.morning, todayAfternoon: v.afternoon }
+  }
+  return out
 }
 
 const setStatusSchema = z

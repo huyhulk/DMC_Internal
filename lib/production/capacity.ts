@@ -29,8 +29,9 @@ export interface CapacitySession {
   date: string // YYYY-MM-DD
   label: string // dd-mm
   period: SessionPeriod
-  filledHours: number // có thể > 4 (tăng ca)
-  pct: number // filledHours / 4 * 100 (làm tròn)
+  capacity: number // sức chứa ca = giờ nhân công của xưởng trong ca (headcount × 4h). Mặc định 4 (1 line).
+  filledHours: number // giờ nhân công kế hoạch đã đổ vào ca (có thể > capacity = tăng ca)
+  pct: number // filledHours / capacity * 100 (làm tròn)
   orderCount: number
   orders: CapacitySessionOrder[]
   deadlineOverflow: boolean // ca này là deadline của ≥1 đơn không kịp dù đã tăng ca
@@ -67,8 +68,8 @@ function buildSessions(now: Date): CapacitySession[] {
     if (cursor.getDay() !== 0) {
       const iso = toISODate(cursor)
       const label = toDayMonthLabel(iso)
-      sessions.push({ date: iso, label, period: 'sang', filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false, sundayOvertimeHours: 0, sundayOrders: [] })
-      sessions.push({ date: iso, label, period: 'chieu', filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false, sundayOvertimeHours: 0, sundayOrders: [] })
+      sessions.push({ date: iso, label, period: 'sang', capacity: SESSION_HOURS, filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false, sundayOvertimeHours: 0, sundayOrders: [] })
+      sessions.push({ date: iso, label, period: 'chieu', capacity: SESSION_HOURS, filledHours: 0, pct: 0, orderCount: 0, orders: [], deadlineOverflow: false, sundayOvertimeHours: 0, sundayOrders: [] })
       workingDays += 1
     }
     cursor.setDate(cursor.getDate() + 1)
@@ -133,8 +134,15 @@ function findDeadlineIndex(
 }
 
 function recalc(session: CapacitySession): void {
-  session.pct = Math.round((session.filledHours / SESSION_HOURS) * 100)
+  session.pct = session.capacity > 0 ? Math.round((session.filledHours / session.capacity) * 100) : 0
   session.orderCount = new Set(session.orders.map((o) => o.pcode)).size
+}
+
+// Giờ nhân công kế hoạch của 1 đơn = giờ SX dự kiến × số nhân sự định mức (nwforce, mặc định 1 nếu thiếu).
+function orderLaborHours(row: DeadlineProductionPlanRow): number {
+  const estimated = row.estimatedHours ?? 0
+  const workers = row.norm?.nwforce && row.norm.nwforce > 0 ? row.norm.nwforce : 1
+  return estimated * workers
 }
 
 function addOrderHours(
@@ -167,7 +175,8 @@ function distributeOvertimeEven(
 ): { alloc: Map<number, number>; leftover: number } {
   const alloc = new Map<number, number>()
   const room = new Map<number, number>()
-  for (const s of targetIdxs) room.set(s, Math.max(0, MAX_SESSION_HOURS - sessions[s].filledHours))
+  // Tăng ca tối đa +1 lần sức chứa ca (tổng 2× capacity).
+  for (const s of targetIdxs) room.set(s, Math.max(0, 2 * sessions[s].capacity - sessions[s].filledHours))
 
   let pool = hours
   let active = targetIdxs.filter((s) => (room.get(s) ?? 0) > 1e-6)
@@ -207,7 +216,12 @@ function findSundayGap(sessions: CapacitySession[]): { satChieuIdx: number; mond
 // Xếp 1 phân xưởng: đổ lùi từ ca deadline về now (cap 4h/ca); phần dư → tăng ca chia đều ca chiều
 // (cap +4h/ca, tổng 8h/ca). Nếu lịch bắc qua Chủ nhật và T2–T7 đã hết tăng ca thì dùng tiếp Chủ nhật
 // (tối đa 8h, chung cho ngày CN). Kể cả vậy vẫn không đủ → đánh dấu ô deadline để cảnh báo.
-function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanRow[], nowIdx: number): void {
+function fillWorkshop(
+  sessions: CapacitySession[],
+  rows: DeadlineProductionPlanRow[],
+  nowIdx: number,
+  sundayCapacity: number,
+): void {
   // Đơn deadline sớm xếp trước (ưu tiên chiếm khung giờ).
   const ordered = [...rows].sort((a, b) => {
     const da = `${a.order.deadlinedate || '9999-99-99'}T${a.order.deadlinetime || '99:99'}`
@@ -216,11 +230,11 @@ function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanR
   })
 
   const sundayGap = findSundayGap(sessions)
-  let sundayRemaining = sundayGap ? MAX_SESSION_HOURS : 0 // 8h tăng ca CN, chung cho cả ngày CN
+  let sundayRemaining = sundayGap ? sundayCapacity : 0 // giờ nhân công tăng ca CN, chung cho cả ngày CN
   const sundayOrders: CapacitySessionOrder[] = []
 
   for (const row of ordered) {
-    const estimated = row.estimatedHours ?? 0
+    const estimated = orderLaborHours(row) // giờ nhân công kế hoạch của đơn
     if (estimated <= 0) continue
 
     const deadlineIdx = findDeadlineIndex(sessions, row.order.deadlinedate, row.order.deadlinetime, nowIdx)
@@ -230,19 +244,19 @@ function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanR
     const spansSunday =
       !!sundayGap && nowIdx <= sundayGap.satChieuIdx && deadlineIdx >= sundayGap.mondayFirstIdx
 
-    // Sức chứa còn lại cho đơn này trong [nowIdx..deadlineIdx]: ca sáng tối đa 4h, ca chiều tối đa 8h.
+    // Sức chứa giờ nhân công còn lại trong [nowIdx..deadlineIdx]: ca sáng = capacity, ca chiều = 2×capacity (có tăng ca).
     let totalAvail = 0
     for (let s = nowIdx; s <= deadlineIdx; s += 1) {
-      const cap = sessions[s].period === 'chieu' ? MAX_SESSION_HOURS : SESSION_HOURS
+      const cap = sessions[s].period === 'chieu' ? 2 * sessions[s].capacity : sessions[s].capacity
       totalAvail += Math.max(0, cap - sessions[s].filledHours)
     }
     if (spansSunday) totalAvail += sundayRemaining
     const overloaded = estimated > totalAvail + 1e-6
 
-    // 1. Đổ lùi giờ thường (cap 4h/ca) từ deadline về now.
+    // 1. Đổ lùi giờ thường (cap = capacity/ca) từ deadline về now.
     let hours = estimated
     for (let s = deadlineIdx; s >= nowIdx && hours > 0; s -= 1) {
-      const put = Math.min(hours, Math.max(0, SESSION_HOURS - sessions[s].filledHours))
+      const put = Math.min(hours, Math.max(0, sessions[s].capacity - sessions[s].filledHours))
       if (put > 0) {
         addOrderHours(sessions[s], row, put, false, overloaded)
         hours -= put
@@ -291,16 +305,27 @@ function fillWorkshop(sessions: CapacitySession[], rows: DeadlineProductionPlanR
   for (const s of sessions) recalc(s)
 }
 
+// Sức chứa giờ nhân công theo xưởng (từ tab Nhân sự). Hôm nay dùng giờ thực; ngày sau dùng định biên.
+export interface WorkshopLaborCapacity {
+  planHeadcount: number // định biên — ngày tương lai: × SESSION_HOURS (4) mỗi ca
+  todayMorning: number // giờ nhân công ca sáng HÔM NAY (thực tế, gồm điều chuyển)
+  todayAfternoon: number // giờ nhân công ca chiều HÔM NAY (thực tế)
+}
+
 /**
  * Dựng timeline sức chứa cho từng phân xưởng nhỏ từ các dòng kế hoạch deadline.
- * @param rows  plan.rows từ buildDeadlineProductionPlan (đã gồm remainingQuantity, estimatedHours, deadline).
+ * @param rows  plan.rows từ buildDeadlineProductionPlan (đã gồm remainingQuantity, estimatedHours, deadline, nwforce).
  * @param now   thời điểm hiện tại (client truyền new Date(); test truyền Date cố định).
+ * @param includeWorkshops  bộ xưởng luôn hiện (kể cả không có LSX).
+ * @param capacityByWorkshop  sức chứa giờ nhân công theo xưởng (Nhân sự). Không truyền → mặc định 4h/ca (1 line).
  */
 export function buildProductionCapacityTimeline(
   rows: DeadlineProductionPlanRow[],
   now: Date,
   includeWorkshops?: string[],
+  capacityByWorkshop?: Map<string, WorkshopLaborCapacity>,
 ): WorkshopCapacityRow[] {
+  const todayISO = toISODate(now)
   const byWorkshop = new Map<string, DeadlineProductionPlanRow[]>()
   // Seed các xưởng cố định (nếu có) để LUÔN hiện đủ hàng, kể cả khi không có LSX mở.
   if (includeWorkshops) {
@@ -318,8 +343,17 @@ export function buildProductionCapacityTimeline(
   const result: WorkshopCapacityRow[] = []
   for (const [workshop, wsRows] of byWorkshop) {
     const sessions = buildSessions(now)
+    const cap = capacityByWorkshop?.get(workshop)
+    if (cap) {
+      for (const s of sessions) {
+        s.capacity = s.date === todayISO
+          ? (s.period === 'sang' ? cap.todayMorning : cap.todayAfternoon)
+          : cap.planHeadcount * SESSION_HOURS
+      }
+    }
+    const sundayCapacity = cap ? cap.planHeadcount * MAX_SESSION_HOURS : MAX_SESSION_HOURS
     const nowIdx = findNowIndex(sessions, now)
-    fillWorkshop(sessions, wsRows, nowIdx)
+    fillWorkshop(sessions, wsRows, nowIdx, sundayCapacity)
     result.push({ workshop, sessions })
   }
 
