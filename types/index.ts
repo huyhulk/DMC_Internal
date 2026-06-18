@@ -175,7 +175,7 @@ export interface PcodeStatus {
 
 export const FACTORIES = ['DMC1', 'DMC3', 'DMC4', 'DMC5'] as const
 export type FactoryKey = typeof FACTORIES[number]
-export const HUMAN_RESOURCE_FACTORIES = [...FACTORIES, 'PKT-SX', 'DIEU-PHOI', 'Khác'] as const
+export const HUMAN_RESOURCE_FACTORIES = [...FACTORIES, 'CONG_TRINH', 'PKT-SX', 'DIEU-PHOI', 'Khác'] as const
 export type HumanResourceFactoryKey = typeof HUMAN_RESOURCE_FACTORIES[number]
 export const HR_DAILY_GROUPS = [...FACTORIES, 'PKT-SX', 'DIEU-PHOI'] as const
 export type HRDailyGroupKey = typeof HR_DAILY_GROUPS[number]
@@ -198,6 +198,7 @@ export interface HumanResource {
   id: number
   name: string
   factory: string | null
+  subshop: string | null // xưởng nhỏ (production-entry sub-shop); null = dùng factory làm nhóm
   machine: string | null
   position: string | null
   phone: string | null
