@@ -91,6 +91,7 @@ const saveHRDailySchema = z.object({
 const humanResourceSchema = z.object({
   name: z.string().min(1, 'Họ tên không được để trống'),
   factory: z.enum(HUMAN_RESOURCE_FACTORIES, { required_error: 'Nhà máy không được để trống' }),
+  subshop: z.string().nullable().optional(),
   machine: z.string().nullable().optional(),
   position: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
@@ -203,7 +204,7 @@ export async function getHRData(
   const [empRes, dailyRes] = await Promise.all([
     supabase
       .from('human_resource')
-      .select('id,name,factory,machine,position,phone')
+      .select('id,name,factory,subshop,machine,position,phone')
       .in('factory', [...factories])
       .order('name', { ascending: true }),
     supabase
@@ -224,6 +225,7 @@ export async function getHRData(
     id: row.id as number,
     name: row.name as string,
     factory: row.factory as string | null,
+    subshop: row.subshop as string | null,
     machine: row.machine as string | null,
     position: row.position as string | null,
     phone: row.phone as string | null,
@@ -336,7 +338,7 @@ export async function ensureDefaultHRDailyRows(date: string, scopeUser?: HRProfi
   const [empRes, dailyRes] = await Promise.all([
     supabase
       .from('human_resource')
-      .select('id,name,factory,machine,position,phone')
+      .select('id,name,factory,subshop,machine,position,phone')
       .in('factory', [...groups]),
     supabase
       .from('hr_daily')
@@ -354,6 +356,7 @@ export async function ensureDefaultHRDailyRows(date: string, scopeUser?: HRProfi
     id: row.id as number,
     name: row.name as string,
     factory: row.factory as string | null,
+    subshop: row.subshop as string | null,
     machine: row.machine as string | null,
     position: row.position as string | null,
     phone: row.phone as string | null,
@@ -485,6 +488,7 @@ export async function createHumanResource(
   const raw = {
     name: formData.get('name') as string,
     factory: formData.get('factory') as string,
+    subshop: (formData.get('subshop') as string) || null,
     machine: (formData.get('machine') as string) || null,
     position: (formData.get('position') as string) || null,
     phone: (formData.get('phone') as string) || null,
@@ -506,11 +510,12 @@ export async function createHumanResource(
     .insert({
       name: parsed.data.name,
       factory: parsed.data.factory,
+      subshop: parsed.data.subshop ?? null,
       machine: parsed.data.machine ?? null,
       position: parsed.data.position ?? null,
       phone: parsed.data.phone ?? null,
     })
-    .select('id,name,factory,machine,position,phone')
+    .select('id,name,factory,subshop,machine,position,phone')
     .single()
 
   if (error || !data) {
@@ -518,7 +523,7 @@ export async function createHumanResource(
     return { success: false, error: error?.message ?? 'Insert failed' }
   }
 
-  const row = data as { id: number; name: string; factory: string | null; machine: string | null; position: string | null; phone: string | null }
+  const row = data as { id: number; name: string; factory: string | null; subshop: string | null; machine: string | null; position: string | null; phone: string | null }
   logger.info({ id: row.id, name: row.name }, 'createHumanResource success')
   return {
     success: true,
@@ -526,6 +531,7 @@ export async function createHumanResource(
       id: row.id,
       name: row.name,
       factory: row.factory,
+      subshop: row.subshop,
       machine: row.machine,
       position: row.position,
       phone: row.phone,
@@ -542,6 +548,7 @@ export async function updateHumanResource(
   const raw = {
     name: formData.get('name') as string,
     factory: formData.get('factory') as string,
+    subshop: (formData.get('subshop') as string) || null,
     machine: (formData.get('machine') as string) || null,
     position: (formData.get('position') as string) || null,
     phone: (formData.get('phone') as string) || null,
@@ -572,6 +579,7 @@ export async function updateHumanResource(
     .update({
       name: parsed.data.name,
       factory: parsed.data.factory,
+      subshop: parsed.data.subshop ?? null,
       machine: parsed.data.machine ?? null,
       position: parsed.data.position ?? null,
       phone: parsed.data.phone ?? null,

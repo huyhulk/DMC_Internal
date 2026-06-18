@@ -11,19 +11,36 @@ import {
 } from '@/lib/actions/hr'
 import { getTodayLocal } from '@/lib/utils'
 import { HUMAN_RESOURCE_FACTORIES, type HumanResource } from '@/types'
+import { HR_PRODUCTION_SUBSHOPS, getHRGroupLabel } from '@/lib/hr/groups'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+// Nhà máy có sub-shop: DMC1/DMC3/DMC4 → hiện select xưởng nhỏ.
+const SUBSHOP_FACTORIES = new Set(['DMC1', 'DMC3', 'DMC4'])
+
+// Nhãn hiển thị cho từng factory trong dropdown (bổ sung CONG_TRINH + phòng ban).
+const FACTORY_LABELS: Record<string, string> = {
+  DMC1: 'DMC1',
+  DMC3: 'DMC3',
+  DMC4: 'DMC4',
+  DMC5: 'DMC5',
+  CONG_TRINH: 'Công trình',
+  'PKT-SX': 'PKT-SX',
+  'DIEU-PHOI': 'Điều phối',
+  Khác: 'Khác',
+}
 
 interface FormData {
   name: string
   factory: string
+  subshop: string
   machine: string
   position: string
   phone: string
 }
 
 function emptyForm(): FormData {
-  return { name: '', factory: 'DMC1', machine: '', position: '', phone: '' }
+  return { name: '', factory: 'DMC1', subshop: '', machine: '', position: '', phone: '' }
 }
 
 interface Props {
@@ -77,6 +94,7 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
     setFormData({
       name: emp.name,
       factory: emp.factory ?? 'DMC1',
+      subshop: emp.subshop ?? '',
       machine: emp.machine ?? '',
       position: emp.position ?? '',
       phone: emp.phone ?? '',
@@ -92,7 +110,12 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
 
   // ── Form field updater ──
   function setField(field: keyof FormData, value: string) {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+      // Reset subshop whenever factory changes (sub-shops are factory-specific).
+      ...(field === 'factory' ? { subshop: '' } : {}),
+    }))
     if (field === 'name' && value.trim()) setNameError('')
   }
 
@@ -112,6 +135,7 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
       const fd = new window.FormData()
       fd.set('name',     formData.name.trim())
       fd.set('factory',  formData.factory)
+      fd.set('subshop',  formData.subshop.trim())
       fd.set('machine',  formData.machine.trim())
       fd.set('position', formData.position.trim())
       fd.set('phone',    formData.phone.trim())
@@ -324,10 +348,30 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
                   className={cn(inputCls, 'cursor-pointer')}
                 >
                   {HUMAN_RESOURCE_FACTORIES.map((f) => (
-                    <option key={f} value={f}>{f}</option>
+                    <option key={f} value={f}>{FACTORY_LABELS[f] ?? f}</option>
                   ))}
                 </select>
               </FormField>
+
+              {/* Subshop — only shown for DMC1/DMC3/DMC4 */}
+              {SUBSHOP_FACTORIES.has(formData.factory) && (
+                <FormField label="Xưởng nhỏ">
+                  <select
+                    value={formData.subshop}
+                    onChange={(e) => setField('subshop', e.target.value)}
+                    disabled={!canEdit}
+                    className={cn(inputCls, 'cursor-pointer')}
+                  >
+                    <option value="">— Chưa gán —</option>
+                    {HR_PRODUCTION_SUBSHOPS
+                      .filter((s) => s.startsWith(formData.factory + '-'))
+                      .map((s) => (
+                        <option key={s} value={s}>{getHRGroupLabel(s)}</option>
+                      ))
+                    }
+                  </select>
+                </FormField>
+              )}
 
               {/* Machine */}
               <FormField label="Máy / Thiết bị">
