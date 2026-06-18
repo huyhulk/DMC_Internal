@@ -24,8 +24,19 @@ function getDb() {
   )
 }
 
-const HR_TRANSFER_START = '07:30'
-const HR_TRANSFER_END = '16:30'
+const HR_DAY_START = '07:30'
+const HR_DAY_END = '16:30'
+
+// Kẹp mốc giờ điều chuyển vào khung hành chính [07:30, 16:30].
+function clampTransferStart(value: string | undefined): string {
+  const match = /^(\d{1,2}):(\d{2})$/.exec((value ?? '').trim())
+  if (!match) return HR_DAY_START
+  const minutes = Number(match[1]) * 60 + Number(match[2])
+  const clamped = Math.max(7 * 60 + 30, Math.min(16 * 60 + 30, minutes))
+  const h = Math.floor(clamped / 60)
+  const m = clamped % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
 
 // Trưởng xưởng chỉ sửa xưởng trong workspace của họ; base (DMC1) bao mọi sub-shop; ADMIN/ALL bao tất cả.
 function canEditGroup(group: string, profile: Pick<SessionUser, 'role' | 'workspace'>): boolean {
@@ -94,6 +105,7 @@ const setStatusSchema = z
     employeeId: z.number().int().positive(),
     status: z.enum(['working', 'transferred', 'absent']),
     toGroup: z.string().optional(),
+    startTime: z.string().regex(/^\d{1,2}:\d{2}$/, 'Giờ điều chuyển không hợp lệ').optional(),
   })
   .refine((v) => v.status !== 'transferred' || (!!v.toGroup && HR_GROUPS.includes(v.toGroup)), {
     message: 'Điều chuyển phải chọn xưởng đến hợp lệ.',
@@ -107,12 +119,13 @@ export async function setHREmployeeStatus(input: {
   employeeId: number
   status: 'working' | 'transferred' | 'absent'
   toGroup?: string
+  startTime?: string
 }): Promise<{ success: boolean; error?: string }> {
   const parsed = setStatusSchema.safeParse(input)
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ.' }
   }
-  const { date, employeeId, status, toGroup } = parsed.data
+  const { date, employeeId, status, toGroup, startTime } = parsed.data
 
   const user = await requireTabEdit('administration.hr-status')
   if (!user) return { success: false, error: 'Bạn không có quyền đổi trạng thái nhân sự.' }
@@ -155,8 +168,8 @@ export async function setHREmployeeStatus(input: {
       employeeId,
       fromGroup: homeGroup,
       toGroup,
-      startTime: HR_TRANSFER_START,
-      endTime: HR_TRANSFER_END,
+      startTime: clampTransferStart(startTime),
+      endTime: HR_DAY_END,
     })
   }
 
