@@ -30,7 +30,7 @@ import {
 import { requireTabEdit, requireTabView } from '@/lib/permissions/server'
 import { isWorkspaceAllowed, getUserWorkspaces, normalizeWorkshop, parseDecimalInput, workshopCode } from '@/lib/utils'
 import logger from '@/lib/logger'
-import type { InitData, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
+import type { InitData, OpenProductionOrder, OpenProductionOrdersData, Order, ProductionInputHistoryRow, ProductionReportRow } from '@/types'
 import type { Database } from '@/types/database'
 
 // Bust the unstable_cache for Norm + Material tables.
@@ -166,7 +166,13 @@ export async function getInitData(
       productionRows: cumulativeRows,
       quantityByPcode,
     })
-    const effectiveOrders = applyEffectiveStatusToOrders(orders, statusMap)
+    // Gắn SL đã SX / còn lại để form nhập prefill đúng phần còn lại (đã trừ các lần lưu trước),
+    // tránh lần nhập thứ 2 trở lên điền dư theo tổng SL lệnh.
+    const effectiveOrders: OpenProductionOrder[] = applyEffectiveStatusToOrders(orders, statusMap).map((order) => {
+      const info = statusMap.get(order.pcode)
+      const completion = calculateProductionCompletion(Number(order.quantity) || 0, info?.producedQuantity ?? 0)
+      return { ...order, ...completion }
+    })
 
     const submittedPcodes = [
       ...new Set(prodRows.map((p) => p.pcode).filter(Boolean) as string[]),
@@ -201,7 +207,7 @@ export async function getInitData(
 
 export async function searchOrderByPcode(
   pcode: string
-): Promise<{ success: boolean; order?: Order; message?: string }> {
+): Promise<{ success: boolean; order?: OpenProductionOrder; message?: string }> {
   try {
     const supabase = await createClient()
     const { data, error } = await supabase
@@ -229,7 +235,9 @@ export async function searchOrderByPcode(
       productionRows: (productionRows ?? []) as ProductionSourceRow[],
       quantityByPcode,
     })
-    const effectiveOrder = applyEffectiveStatusToOrder(order, statusMap)
+    const info = statusMap.get(order.pcode)
+    const completion = calculateProductionCompletion(Number(order.quantity) || 0, info?.producedQuantity ?? 0)
+    const effectiveOrder: OpenProductionOrder = { ...applyEffectiveStatusToOrder(order, statusMap), ...completion }
 
     // Verify the current user has access to this order's workshop
     const { data: { user } } = await supabase.auth.getUser()
