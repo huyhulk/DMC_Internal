@@ -7,7 +7,7 @@ import { canEdit, requireTabEdit, requireTabView } from '@/lib/permissions/serve
 import { canAccessWorkspace } from '@/lib/approval/workflow'
 import { isProductionEntryWorkspaceAllowed } from '@/lib/production/workflow'
 import { getUserWorkspaces } from '@/lib/utils'
-import { getHRGroup, HR_GROUPS, isProductionSubshop } from '@/lib/hr/groups'
+import { getHRGroup, HR_GROUPS, isProductionGroup } from '@/lib/hr/groups'
 import {
   buildHRSubshopBoard,
   getProductionLaborHoursByWorkshop,
@@ -41,7 +41,7 @@ function clampTransferStart(value: string | undefined): string {
 
 // Trưởng xưởng chỉ sửa xưởng trong workspace của họ; base (DMC1) bao mọi sub-shop; ADMIN/ALL bao tất cả.
 function canEditGroup(group: string, profile: Pick<SessionUser, 'role' | 'workspace'>): boolean {
-  if (isProductionSubshop(group)) {
+  if (isProductionGroup(group)) {
     return isProductionEntryWorkspaceAllowed(group, profile.role, getUserWorkspaces(profile.workspace), profile.workspace)
   }
   return canAccessWorkspace(profile.role, profile.workspace, group)
