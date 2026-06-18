@@ -431,7 +431,7 @@ export function HRSubshopTab({ user, canEdit }: Props) {
       <div className="shrink-0 px-4 pt-4 pb-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-[#aeaeb2] uppercase tracking-[0.07em]">
-            Nhân sự theo xưởng nhỏ
+            Nhân sự theo xưởng (kho chung)
           </span>
           <div className="flex-1 h-px bg-[#d2d2d7]/50" />
           {!canEditStatus && (
