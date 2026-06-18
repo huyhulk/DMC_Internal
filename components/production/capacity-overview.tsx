@@ -11,7 +11,7 @@ import {
   buildProductionCapacityTimeline,
   capacityColor,
 } from '@/lib/production/capacity'
-import type { CapacitySession, CapacitySessionOrder, WorkshopCapacityRow, WorkshopLaborCapacity } from '@/lib/production/capacity'
+import type { CapacitySession, CapacitySessionOrder, WorkshopCapacityRow, WorkshopPeoplePool } from '@/lib/production/capacity'
 import { getProductionCapacityInput } from '@/lib/actions/hr-subshop'
 import { WORKSHOP_COLORS, type WorkshopCode } from '@/lib/reports/report-types'
 import { cn, getTodayLocal, workshopCode } from '@/lib/utils'
@@ -529,7 +529,7 @@ export function ProductionCapacityOverviewTab({
   refreshSignal: number
 }) {
   const { state, loadOpenOrders } = useProductionData(user)
-  const [capInput, setCapInput] = useState<Record<string, WorkshopLaborCapacity>>({})
+  const [capInput, setCapInput] = useState<Record<string, WorkshopPeoplePool>>({})
 
   useEffect(() => { loadOpenOrders() }, [loadOpenOrders, refreshSignal])
 

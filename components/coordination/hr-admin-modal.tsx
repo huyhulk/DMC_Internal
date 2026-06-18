@@ -11,12 +11,8 @@ import {
 } from '@/lib/actions/hr'
 import { getTodayLocal } from '@/lib/utils'
 import { HUMAN_RESOURCE_FACTORIES, type HumanResource } from '@/types'
-import { HR_PRODUCTION_SUBSHOPS, getHRGroupLabel } from '@/lib/hr/groups'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-// Nhà máy có sub-shop: DMC1/DMC3/DMC4 → hiện select xưởng nhỏ.
-const SUBSHOP_FACTORIES = new Set(['DMC1', 'DMC3', 'DMC4'])
 
 // Nhãn hiển thị cho từng factory trong dropdown (bổ sung CONG_TRINH + phòng ban).
 const FACTORY_LABELS: Record<string, string> = {
@@ -352,26 +348,6 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
                   ))}
                 </select>
               </FormField>
-
-              {/* Subshop — only shown for DMC1/DMC3/DMC4 */}
-              {SUBSHOP_FACTORIES.has(formData.factory) && (
-                <FormField label="Xưởng nhỏ">
-                  <select
-                    value={formData.subshop}
-                    onChange={(e) => setField('subshop', e.target.value)}
-                    disabled={!canEdit}
-                    className={cn(inputCls, 'cursor-pointer')}
-                  >
-                    <option value="">— Chưa gán —</option>
-                    {HR_PRODUCTION_SUBSHOPS
-                      .filter((s) => s.startsWith(formData.factory + '-'))
-                      .map((s) => (
-                        <option key={s} value={s}>{getHRGroupLabel(s)}</option>
-                      ))
-                    }
-                  </select>
-                </FormField>
-              )}
 
               {/* Machine */}
               <FormField label="Máy / Thiết bị">

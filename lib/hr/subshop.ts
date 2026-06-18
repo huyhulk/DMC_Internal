@@ -1,5 +1,5 @@
 import type { HumanResource } from '@/types'
-import { getHRGroup, getHRGroupLabel, HR_GROUPS, isProductionSubshop } from '@/lib/hr/groups'
+import { getHRGroup, getHRGroupLabel, HR_GROUPS, isProductionGroup } from '@/lib/hr/groups'
 
 // Khung giờ hành chính: ca sáng 07:30–11:30 (4h), ca chiều 12:30–16:30 (4h). Tăng ca 16:30–20:30 xử lý ở capacity.
 export const HR_SESSION_HOURS = 4
@@ -181,7 +181,7 @@ export function buildHRSubshopBoard(
     result.push({
       group,
       label: getHRGroupLabel(group),
-      isProduction: isProductionSubshop(group),
+      isProduction: isProductionGroup(group),
       members,
       transferredIn,
       planHeadcount: members.length,
