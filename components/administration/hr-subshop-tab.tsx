@@ -56,7 +56,7 @@ function GroupCard({ group, editable, onMemberClick }: GroupCardProps) {
           <div className="w-px h-3 bg-[#d2d2d7]/60" />
           <MiniStat label="Thực tế" value={group.actualHeadcount} accent />
           <div className="w-px h-3 bg-[#d2d2d7]/60" />
-          <MiniStat label="Giờ NC/ca" value={`${group.sessionLaborHours}h`} />
+          <MiniStat label="Giờ NC (S/C)" value={`${group.laborHoursMorning}/${group.laborHoursAfternoon}h`} />
         </div>
       </div>
 
@@ -88,7 +88,7 @@ function GroupCard({ group, editable, onMemberClick }: GroupCardProps) {
                     />
                     <span className="text-[13px] font-medium text-[#1d1d1f] truncate">{member.name}</span>
                     <span className="shrink-0 text-[11px] text-[#6366f1] ml-auto whitespace-nowrap">
-                      từ {getHRGroupLabel(member.homeGroup)}
+                      {member.transferStart ? `${member.transferStart} · ` : ''}{member.morningHours + member.afternoonHours}h · từ {getHRGroupLabel(member.homeGroup)}
                     </span>
                   </div>
                 ))}
@@ -158,10 +158,10 @@ function MemberRow({ member, editable, onClick }: MemberRowProps) {
         )}
       </div>
 
-      {/* Transfer destination */}
+      {/* Transfer destination + mốc giờ */}
       {isTransferred && member.transferToLabel && (
         <span className="shrink-0 text-[11px] font-medium text-amber-600 whitespace-nowrap">
-          → {member.transferToLabel}
+          → {member.transferToLabel}{member.transferStart ? ` · ${member.transferStart}` : ''}
         </span>
       )}
     </button>
@@ -178,15 +178,29 @@ interface StatusPopupProps {
   onSuccess: () => void
 }
 
+function vnNowHHMM(): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date())
+  const hh = parts.find((p) => p.type === 'hour')?.value ?? '07'
+  const mm = parts.find((p) => p.type === 'minute')?.value ?? '30'
+  return `${hh}:${mm}`
+}
+
 function StatusPopup({ open, member, date, onClose, onSuccess }: StatusPopupProps) {
   const [status, setStatus] = useState<HRStatus>(member.status)
   const [toGroup, setToGroup] = useState<string>(member.transferTo ?? '')
+  const [fromTime, setFromTime] = useState<string>(member.transferStart ?? vnNowHHMM())
   const [saving, setSaving] = useState(false)
 
   // Sync state when member changes
   useEffect(() => {
     setStatus(member.status)
     setToGroup(member.transferTo ?? '')
+    setFromTime(member.transferStart ?? vnNowHHMM())
   }, [member])
 
   const destGroups = HR_GROUPS.filter((g) => g !== member.homeGroup)
@@ -203,6 +217,7 @@ function StatusPopup({ open, member, date, onClose, onSuccess }: StatusPopupProp
         employeeId: member.id,
         status,
         toGroup: status === 'transferred' ? toGroup : undefined,
+        startTime: status === 'transferred' ? fromTime : undefined,
       })
       if (result.success) {
         toast.success('Đã cập nhật trạng thái nhân sự')
@@ -283,6 +298,24 @@ function StatusPopup({ open, member, date, onClose, onSuccess }: StatusPopupProp
                 <option key={g} value={g}>{getHRGroupLabel(g)}</option>
               ))}
             </select>
+
+            <label className="block text-[11px] font-medium text-[#6e6e73] tracking-[0.02em] pt-1">
+              Điều chuyển từ giờ
+            </label>
+            <input
+              type="time"
+              value={fromTime}
+              min="07:30"
+              max="16:30"
+              onChange={(e) => setFromTime(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl bg-[#f2f2f7] border border-[#d2d2d7]/70
+                         text-[13px] text-[#1d1d1f]
+                         focus:outline-none focus:ring-1 focus:ring-[#3b5bdb]/40
+                         transition-all duration-150"
+            />
+            <p className="text-[11px] text-[#aeaeb2]">
+              Tính giờ nhân công cho xưởng đến từ mốc này đến hết ngày (16:30, trừ nghỉ trưa).
+            </p>
           </div>
         )}
 
