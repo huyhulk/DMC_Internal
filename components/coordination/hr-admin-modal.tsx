@@ -14,16 +14,29 @@ import { HUMAN_RESOURCE_FACTORIES, type HumanResource } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Nhãn hiển thị cho từng factory trong dropdown (bổ sung CONG_TRINH + phòng ban).
+const FACTORY_LABELS: Record<string, string> = {
+  DMC1: 'DMC1',
+  DMC3: 'DMC3',
+  DMC4: 'DMC4',
+  DMC5: 'DMC5',
+  CONG_TRINH: 'Công trình',
+  'PKT-SX': 'PKT-SX',
+  'DIEU-PHOI': 'Điều phối',
+  Khác: 'Khác',
+}
+
 interface FormData {
   name: string
   factory: string
+  subshop: string
   machine: string
   position: string
   phone: string
 }
 
 function emptyForm(): FormData {
-  return { name: '', factory: 'DMC1', machine: '', position: '', phone: '' }
+  return { name: '', factory: 'DMC1', subshop: '', machine: '', position: '', phone: '' }
 }
 
 interface Props {
@@ -77,6 +90,7 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
     setFormData({
       name: emp.name,
       factory: emp.factory ?? 'DMC1',
+      subshop: emp.subshop ?? '',
       machine: emp.machine ?? '',
       position: emp.position ?? '',
       phone: emp.phone ?? '',
@@ -92,7 +106,12 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
 
   // ── Form field updater ──
   function setField(field: keyof FormData, value: string) {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+      // Reset subshop whenever factory changes (sub-shops are factory-specific).
+      ...(field === 'factory' ? { subshop: '' } : {}),
+    }))
     if (field === 'name' && value.trim()) setNameError('')
   }
 
@@ -112,6 +131,7 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
       const fd = new window.FormData()
       fd.set('name',     formData.name.trim())
       fd.set('factory',  formData.factory)
+      fd.set('subshop',  formData.subshop.trim())
       fd.set('machine',  formData.machine.trim())
       fd.set('position', formData.position.trim())
       fd.set('phone',    formData.phone.trim())
@@ -324,7 +344,7 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
                   className={cn(inputCls, 'cursor-pointer')}
                 >
                   {HUMAN_RESOURCE_FACTORIES.map((f) => (
-                    <option key={f} value={f}>{f}</option>
+                    <option key={f} value={f}>{FACTORY_LABELS[f] ?? f}</option>
                   ))}
                 </select>
               </FormField>

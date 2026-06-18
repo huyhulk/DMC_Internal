@@ -4,6 +4,7 @@ import {
   buildProductionCapacityTimeline,
   capacityColor,
   SESSION_HOURS,
+  type WorkshopPeoplePool,
 } from '@/lib/production/capacity'
 
 // now cố định: Thứ Hai 15-06-2026, 08:00 local.
@@ -21,6 +22,7 @@ function planRow(overrides: {
   deadlinetime?: string
   estimatedHours?: number | null
   products?: string
+  nwforce?: number
 }): DeadlineProductionPlanRow {
   const order = {
     pcode: overrides.pcode ?? 'LSX-1',
@@ -40,7 +42,7 @@ function planRow(overrides: {
   const norm: NormItem = {
     products: overrides.products ?? 'Tôn sóng',
     norm: 10,
-    nwforce: 1,
+    nwforce: overrides.nwforce ?? 1,
     workshop: 'DMC1',
     pspeed: 0,
   }
@@ -268,6 +270,53 @@ describe('buildProductionCapacityTimeline — danh sách xưởng cố định',
       ['DMC5'],
     )
     expect(timeline.map((r) => r.workshop)).toEqual(['DMC5'])
+  })
+})
+
+describe('buildProductionCapacityTimeline — máy nền + ràng buộc người (kho chung xưởng chính)', () => {
+  // Đơn PU + PK của DMC1, cùng deadline 17-06 chiều (idx5, ngày tương lai). Mỗi đơn 4h máy × nwforce 3 → cần 12 giờ-người/ca.
+  function dmc1Orders() {
+    return [
+      planRow({ pcode: 'PU1', workshop: 'DMC1', description: 'PU cánh cửa', deadlinedate: '2026-06-17', deadlinetime: '16:00', estimatedHours: 4, nwforce: 3 }),
+      planRow({ pcode: 'PK1', workshop: 'DMC1', description: 'phụ kiện inox', deadlinedate: '2026-06-17', deadlinetime: '16:00', estimatedHours: 4, nwforce: 3 }),
+    ]
+  }
+
+  it('without pool data → machine governs (% theo máy, nwforce không ảnh hưởng)', () => {
+    const timeline = buildProductionCapacityTimeline(dmc1Orders(), NOW)
+    const pu = timeline.find((r) => r.workshop === 'DMC1-PU')!
+    const pk = timeline.find((r) => r.workshop === 'DMC1-PK')!
+    expect(pu.sessions[5].pct).toBe(100) // 4h máy / 4h
+    expect(pk.sessions[5].pct).toBe(100)
+  })
+
+  it('enough people → machine governs (người dư không kéo % xuống)', () => {
+    // DMC1 định biên 6 → chiều tương lai = 6×4×2 = 48 giờ-người ≥ 24 cần → đủ.
+    const pool = new Map<string, WorkshopPeoplePool>([['DMC1', { planHeadcount: 6, todayMorning: 48, todayAfternoon: 48 }]])
+    const timeline = buildProductionCapacityTimeline(dmc1Orders(), NOW, undefined, pool)
+    expect(timeline.find((r) => r.workshop === 'DMC1-PU')!.sessions[5].pct).toBe(100)
+    expect(timeline.find((r) => r.workshop === 'DMC1-PK')!.sessions[5].pct).toBe(100)
+  })
+
+  it('short people → priority PU > PK: PU full, PK starved → % pushed up', () => {
+    // DMC1 định biên 2 → chiều = 2×4×2 = 16 giờ-người < 24 cần. PU (ưu tiên) lấy 12, PK còn 4 → factor 1/3.
+    const pool = new Map<string, WorkshopPeoplePool>([['DMC1', { planHeadcount: 2, todayMorning: 16, todayAfternoon: 16 }]])
+    const timeline = buildProductionCapacityTimeline(dmc1Orders(), NOW, undefined, pool)
+    const pu = timeline.find((r) => r.workshop === 'DMC1-PU')!
+    const pk = timeline.find((r) => r.workshop === 'DMC1-PK')!
+    expect(pu.sessions[5].pct).toBe(100) // đủ người → máy
+    expect(pk.sessions[5].capacity).toBeCloseTo(4 / 3) // 4h × (4/12)
+    expect(pk.sessions[5].pct).toBe(300) // 4h máy / (4/3)
+  })
+
+  it("uses today's actual people-hours for the current day", () => {
+    // Đơn PU deadline HÔM NAY chiều (idx1). DMC1 hôm nay chiều chỉ 2 giờ-người thực tế → thiếu.
+    const orders = [planRow({ pcode: 'PU1', workshop: 'DMC1', description: 'PU cánh', deadlinedate: '2026-06-15', deadlinetime: '16:00', estimatedHours: 4, nwforce: 1 })]
+    const pool = new Map<string, WorkshopPeoplePool>([['DMC1', { planHeadcount: 5, todayMorning: 2, todayAfternoon: 2 }]])
+    const timeline = buildProductionCapacityTimeline(orders, NOW, undefined, pool)
+    const pu = timeline.find((r) => r.workshop === 'DMC1-PU')!
+    // chiều hôm nay: available = todayAfternoon×2 = 4 giờ-người; cần = 4×1 = 4 → vừa đủ → máy (100%).
+    expect(pu.sessions[1].pct).toBe(100)
   })
 })
 

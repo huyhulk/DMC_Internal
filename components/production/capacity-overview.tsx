@@ -11,9 +11,10 @@ import {
   buildProductionCapacityTimeline,
   capacityColor,
 } from '@/lib/production/capacity'
-import type { CapacitySession, CapacitySessionOrder, WorkshopCapacityRow } from '@/lib/production/capacity'
+import type { CapacitySession, CapacitySessionOrder, WorkshopCapacityRow, WorkshopPeoplePool } from '@/lib/production/capacity'
+import { getProductionCapacityInput } from '@/lib/actions/hr-subshop'
 import { WORKSHOP_COLORS, type WorkshopCode } from '@/lib/reports/report-types'
-import { cn, workshopCode } from '@/lib/utils'
+import { cn, getTodayLocal, workshopCode } from '@/lib/utils'
 import { Dialog } from '@/components/ui/dialog'
 import type { NormItem, SessionUser } from '@/types'
 
@@ -164,7 +165,7 @@ function CellDetailDialog({
           <span className="font-semibold">{Math.round(session.pct)}%</span>
           {' · '}
           <span className="font-semibold">{session.filledHours.toFixed(2)}h</span>
-          {' / 4h'}
+          {` / ${session.capacity}h giờ nhân công`}
         </div>
 
         {/* Order list */}
@@ -528,8 +529,18 @@ export function ProductionCapacityOverviewTab({
   refreshSignal: number
 }) {
   const { state, loadOpenOrders } = useProductionData(user)
+  const [capInput, setCapInput] = useState<Record<string, WorkshopPeoplePool>>({})
 
   useEffect(() => { loadOpenOrders() }, [loadOpenOrders, refreshSignal])
+
+  // Giờ nhân công theo xưởng (từ tab Nhân sự) → sức chứa ca. Lỗi/không quyền → {} (mặc định 4h/ca).
+  useEffect(() => {
+    let active = true
+    getProductionCapacityInput(getTodayLocal())
+      .then((res) => { if (active) setCapInput(res) })
+      .catch(() => { if (active) setCapInput({}) })
+    return () => { active = false }
+  }, [refreshSignal])
 
   const allOrders = useMemo(
     () => (state.initData?.orders ?? []) as Parameters<typeof buildDeadlineProductionPlan>[0],
@@ -546,9 +557,11 @@ export function ProductionCapacityOverviewTab({
     [allOrders, norms, normOverrides]
   )
 
+  const capMap = useMemo(() => new Map(Object.entries(capInput)), [capInput])
+
   const timeline = useMemo(
-    () => buildProductionCapacityTimeline(plan.rows, new Date(), PRODUCTION_OVERVIEW_WORKSHOPS),
-    [plan.rows]
+    () => buildProductionCapacityTimeline(plan.rows, new Date(), PRODUCTION_OVERVIEW_WORKSHOPS, capMap),
+    [plan.rows, capMap]
   )
 
   // Dialog state
@@ -562,7 +575,7 @@ export function ProductionCapacityOverviewTab({
         <SectionLabel>Tổng quan sản xuất</SectionLabel>
         <CapacityLegend />
         <p className="text-[11px] text-[#aeaeb2]">
-          % = mức tải mỗi ca (giờ SX còn lại / 4h). Rê chuột vào ô để xem số đơn, bấm ô để xem chi tiết, bấm tên xưởng để mở máy tính thời gian. Bong bóng &quot;CN +Xh&quot; trên ô chiều Thứ 7 = giờ tăng ca Chủ nhật.
+          % = giờ nhân công kế hoạch (giờ SX × số nhân sự định mức) / giờ nhân công của ca (số người × 4h, lấy từ tab Nhân sự). Rê chuột vào ô để xem số đơn, bấm ô để xem chi tiết, bấm tên xưởng để mở máy tính. Bong bóng &quot;CN +Xh&quot; trên ô chiều Thứ 7 = tăng ca Chủ nhật.
         </p>
       </div>
 
