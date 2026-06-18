@@ -4,6 +4,7 @@ import {
   buildProductionCapacityTimeline,
   capacityColor,
   SESSION_HOURS,
+  type WorkshopLaborCapacity,
 } from '@/lib/production/capacity'
 
 // now cố định: Thứ Hai 15-06-2026, 08:00 local.
@@ -21,6 +22,7 @@ function planRow(overrides: {
   deadlinetime?: string
   estimatedHours?: number | null
   products?: string
+  nwforce?: number
 }): DeadlineProductionPlanRow {
   const order = {
     pcode: overrides.pcode ?? 'LSX-1',
@@ -40,7 +42,7 @@ function planRow(overrides: {
   const norm: NormItem = {
     products: overrides.products ?? 'Tôn sóng',
     norm: 10,
-    nwforce: 1,
+    nwforce: overrides.nwforce ?? 1,
     workshop: 'DMC1',
     pspeed: 0,
   }
@@ -268,6 +270,62 @@ describe('buildProductionCapacityTimeline — danh sách xưởng cố định',
       ['DMC5'],
     )
     expect(timeline.map((r) => r.workshop)).toEqual(['DMC5'])
+  })
+})
+
+describe('buildProductionCapacityTimeline — giờ nhân công (nwforce + sức chứa nhân sự)', () => {
+  it('scales an order amount by nwforce (giờ nhân công = giờ SX × số nhân sự định mức)', () => {
+    // est 2h × nwforce 2 = 4 giờ nhân công; sức chứa mặc định 4/ca → đầy đúng 1 ca (deadline 17-06 chiều idx5).
+    const [row] = buildProductionCapacityTimeline(
+      [planRow({ deadlinedate: '2026-06-17', deadlinetime: '16:00', estimatedHours: 2, nwforce: 2 })],
+      NOW,
+    )
+    expect(row.sessions[5].filledHours).toBeCloseTo(4)
+    expect(row.sessions[5].pct).toBe(100)
+  })
+
+  it('uses workshop labor capacity (plan headcount × 4) for future days; % = filled / capacity', () => {
+    // Xưởng DMC1-CT có định biên 2 → sức chứa ngày tương lai = 8h/ca. Đơn 4h × nwforce 2 = 8 giờ NC.
+    const cap = new Map<string, WorkshopLaborCapacity>([
+      ['DMC1-CT', { planHeadcount: 2, todayMorning: 8, todayAfternoon: 8 }],
+    ])
+    const timeline = buildProductionCapacityTimeline(
+      [planRow({ workshop: 'DMC1', description: 'CT tôn', deadlinedate: '2026-06-17', deadlinetime: '16:00', estimatedHours: 4, nwforce: 2 })],
+      NOW,
+      ['DMC1-CT'],
+      cap,
+    )
+    const ct = timeline.find((r) => r.workshop === 'DMC1-CT')!
+    expect(ct.sessions[5].capacity).toBe(8)
+    expect(ct.sessions[5].filledHours).toBeCloseTo(8)
+    expect(ct.sessions[5].pct).toBe(100) // 8 / 8
+  })
+
+  it('reflects reduced personnel: same order fills a higher % when capacity drops', () => {
+    const order = { workshop: 'DMC1', description: 'CT tôn', deadlinedate: '2026-06-17', deadlinetime: '16:00', estimatedHours: 4, nwforce: 1 }
+    const big = new Map<string, WorkshopLaborCapacity>([['DMC1-CT', { planHeadcount: 2, todayMorning: 8, todayAfternoon: 8 }]])
+    const small = new Map<string, WorkshopLaborCapacity>([['DMC1-CT', { planHeadcount: 1, todayMorning: 4, todayAfternoon: 4 }]])
+    const a = buildProductionCapacityTimeline([planRow(order)], NOW, ['DMC1-CT'], big).find((r) => r.workshop === 'DMC1-CT')!
+    const b = buildProductionCapacityTimeline([planRow(order)], NOW, ['DMC1-CT'], small).find((r) => r.workshop === 'DMC1-CT')!
+    // 4 giờ NC: định biên 2 (cap 8) → 50%; định biên 1 (cap 4) → 100%.
+    expect(a.sessions[5].pct).toBe(50)
+    expect(b.sessions[5].pct).toBe(100)
+  })
+
+  it("uses today's actual labor-hours for the current day's sessions", () => {
+    // Hôm nay (15-06) ca chiều thực tế chỉ 4h (1 người); đơn deadline hôm nay chiều 4h×1 = 4 → 100%.
+    const cap = new Map<string, WorkshopLaborCapacity>([
+      ['DMC1-CT', { planHeadcount: 3, todayMorning: 4, todayAfternoon: 4 }],
+    ])
+    const timeline = buildProductionCapacityTimeline(
+      [planRow({ workshop: 'DMC1', description: 'CT tôn', deadlinedate: '2026-06-15', deadlinetime: '16:00', estimatedHours: 4, nwforce: 1 })],
+      NOW,
+      ['DMC1-CT'],
+      cap,
+    )
+    const ct = timeline.find((r) => r.workshop === 'DMC1-CT')!
+    expect(ct.sessions[1].capacity).toBe(4) // hôm nay chiều = todayAfternoon, không phải định biên 3×4
+    expect(ct.sessions[1].pct).toBe(100)
   })
 })
 
