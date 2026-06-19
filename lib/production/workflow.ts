@@ -302,16 +302,25 @@ function getDeadlinePlanNormMatchScore(order: OpenProductionOrder, norm: NormIte
   const product = normalizeDeadlinePlanText(norm.products)
   if (!description || !product) return 0
 
+  const productWords = product.split(' ').filter((word) => word.length > 1)
+  const descriptionWordList = description.split(' ').filter((word) => word.length > 1)
+
+  // 1) KHỚP CỤM TỪ — ưu tiên cao nhất. Tên định mức (cụm ≥2 từ có nghĩa) xuất hiện nguyên cụm trong
+  //    diễn giải; cụm dài/đặc hiệu hơn thắng (cộng độ dài). Vì vậy "Phụ kiện U,V" khớp đúng norm
+  //    "Phụ kiện U,V" thay vì bị family ép về "Phụ kiện ... kẽm".
+  if (description === product) return 1000
+  if (productWords.length >= 2 && description.includes(product)) return 600 + product.length
+  if (descriptionWordList.length >= 2 && product.includes(description)) return 500 + description.length
+
+  // 2) FAMILY / VIẾT TẮT (heuristic) — chỉ khi KHÔNG khớp cụm từ (vd 'pk' → phụ kiện, 'tcs' → tôn cán sóng).
   const familyScore = getDeadlinePlanNormFamilyScore(getDeadlinePlanNormFamily(order.description), norm.products)
-  if (familyScore > 0) return familyScore
+  if (familyScore > 0) return 100 + familyScore
 
-  if (description === product) return 4
-  if (description.includes(product)) return 3
-  if (product.includes(description)) return 2
-
-  const descriptionWords = new Set(description.split(' ').filter((word) => word.length > 1))
-  const sharedWords = product.split(' ').filter((word) => word.length > 1 && descriptionWords.has(word))
-  return sharedWords.length >= 2 ? 1 : 0
+  // 3) Bao hàm 1 từ chung / trùng ≥2 từ — yếu nhất.
+  if (description.includes(product) || product.includes(description)) return 20
+  const descriptionWords = new Set(descriptionWordList)
+  const sharedWords = productWords.filter((word) => descriptionWords.has(word))
+  return sharedWords.length >= 2 ? 10 : 0
 }
 
 function pickSecondHighestDeadlineNorm(matches: Array<{ norm: NormItem; score: number }>): NormItem {

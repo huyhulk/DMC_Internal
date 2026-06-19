@@ -556,9 +556,9 @@ describe('production workflow helpers', () => {
       norm({ products: 'Phụ kiện inox - kẽm', workshop: 'DMC1', norm: 100 }),
     ]
 
-    // Không có override: heuristic gán nhầm vào "Phụ kiện inox - kẽm" (100).
+    // Khớp cụm từ: diễn giải chứa nguyên cụm "pkk cùm" → heuristic khớp ĐÚNG "PKK - cùm" (không cần override).
     const withoutOverride = buildDeadlineProductionPlan(orders, norms)
-    expect(withoutOverride.rows[0].norm?.products).toBe('Phụ kiện inox - kẽm')
+    expect(withoutOverride.rows[0].norm?.products).toBe('PKK - cùm')
     expect(withoutOverride.rows[0].matchSource).toBe('heuristic')
 
     // Có override: khớp đúng "PKK - cùm" (650), nguồn = override.
@@ -582,6 +582,32 @@ describe('production workflow helpers', () => {
       openOrder({ pcode: 'CUM-2', workshop: 'DMC1', status: 'Chưa SX', description: 'cùm lẻ không phụ kiện', remainingQuantity: 100 }),
     ]
     expect(buildDeadlineProductionPlan(ordersNoMarker, norms, overridesGated).rows[0].matchSource).not.toBe('override')
+  })
+
+  it('matches by PHRASE first: "Phụ kiện U,V" picks the specific norm, not generic kẽm/family', () => {
+    const orders: OpenProductionOrder[] = [
+      openOrder({ pcode: 'UV-1', workshop: 'DMC1', status: 'Chưa SX', description: 'Phụ kiện U,V - khách A', remainingQuantity: 100 }),
+    ]
+    const norms: NormItem[] = [
+      norm({ products: 'Phụ kiện U,V', workshop: 'DMC1', norm: 50 }),
+      norm({ products: 'Phụ kiện tôn kẽm', workshop: 'DMC1', norm: 100 }),
+      norm({ products: 'Phụ kiện tôn trung bình', workshop: 'DMC1', norm: 80 }),
+    ]
+    const plan = buildDeadlineProductionPlan(orders, norms)
+    expect(plan.rows[0].norm?.products).toBe('Phụ kiện U,V')
+    expect(plan.rows[0].matchSource).toBe('heuristic')
+  })
+
+  it('falls back to family/abbreviation when no phrase matches (PK inox → Phụ kiện inox)', () => {
+    const orders: OpenProductionOrder[] = [
+      openOrder({ pcode: 'PKI-1', workshop: 'DMC1', status: 'Chưa SX', description: 'PK inox - khách B', remainingQuantity: 100 }),
+    ]
+    const norms: NormItem[] = [
+      norm({ products: 'Phụ kiện inox', workshop: 'DMC1', norm: 40 }),
+      norm({ products: 'Tôn cán 5-13 sóng', workshop: 'DMC1', norm: 10 }),
+    ]
+    const plan = buildDeadlineProductionPlan(orders, norms)
+    expect(plan.rows[0].norm?.products).toBe('Phụ kiện inox')
   })
 
   it('classifies deadlines into day-based urgency buckets', () => {
@@ -846,14 +872,15 @@ describe('production workflow helpers', () => {
       expectedHours: 2,
     },
     {
+      // Khớp cụm từ: "Tôn sàn deck" là cụm con của "Tôn sàn deck 50" → thắng (đặc hiệu hơn family deck).
       description: 'Tôn sàn deck',
       variants: [
         norm({ products: 'Tôn sàn deck 50', norm: 20, workshop: 'DMC1' }),
         norm({ products: 'Tôn deck 75', norm: 35, workshop: 'DMC1' }),
         norm({ products: 'Tôn deck 100', norm: 50, workshop: 'DMC1' }),
       ],
-      expectedNorm: 35,
-      expectedHours: 1.71,
+      expectedNorm: 20,
+      expectedHours: 3,
     },
     {
       description: 'Tôn kliplock seamlock',
@@ -921,24 +948,23 @@ describe('production workflow helpers', () => {
   })
 
   it('recalculates deadline estimated hours when norm values change', () => {
+    // "Tôn sàn deck" khớp cụm từ với "Tôn sàn deck 50"; đổi norm của chính nó → estimatedHours đổi theo.
     const orders = [openOrder({ description: 'Tôn sàn deck', remainingQuantity: 60 })]
     const originalPlan = buildDeadlineProductionPlan(orders, [
-      norm({ products: 'Tôn sàn deck 50', norm: 20, workshop: 'DMC1' }),
-      norm({ products: 'Tôn deck 75', norm: 30, workshop: 'DMC1' }),
-      norm({ products: 'Tôn deck 100', norm: 50, workshop: 'DMC1' }),
+      norm({ products: 'Tôn sàn deck 50', norm: 30, workshop: 'DMC1' }),
+      norm({ products: 'Tôn deck 75', norm: 50, workshop: 'DMC1' }),
     ])
     const updatedPlan = buildDeadlineProductionPlan(orders, [
-      norm({ products: 'Tôn sàn deck 50', norm: 20, workshop: 'DMC1' }),
-      norm({ products: 'Tôn deck 75', norm: 40, workshop: 'DMC1' }),
-      norm({ products: 'Tôn deck 100', norm: 50, workshop: 'DMC1' }),
+      norm({ products: 'Tôn sàn deck 50', norm: 40, workshop: 'DMC1' }),
+      norm({ products: 'Tôn deck 75', norm: 50, workshop: 'DMC1' }),
     ])
 
     expect(originalPlan.rows[0]).toMatchObject({
-      norm: expect.objectContaining({ norm: 30 }),
+      norm: expect.objectContaining({ products: 'Tôn sàn deck 50', norm: 30 }),
       estimatedHours: 2,
     })
     expect(updatedPlan.rows[0]).toMatchObject({
-      norm: expect.objectContaining({ norm: 40 }),
+      norm: expect.objectContaining({ products: 'Tôn sàn deck 50', norm: 40 }),
       estimatedHours: 1.5,
     })
   })
