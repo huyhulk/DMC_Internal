@@ -194,6 +194,14 @@ export const HR_DAILY_GROUP_LABELS: Record<HRDailyGroupKey, string> = {
   'DIEU-PHOI': 'Điều Phối',
 }
 
+export const HUMAN_RESOURCE_FACTORY_LABELS: Record<HumanResourceFactoryKey, string> = {
+  ...WORKSHOP_LABELS,
+  'PKT-SX': 'PKT-SX — Phòng kỹ thuật sản xuất',
+  'DIEU-PHOI': 'Điều Phối',
+  'CONG_TRINH': 'Công trình',
+  'Khác': 'Khác',
+}
+
 export interface HumanResource {
   id: number
   name: string

@@ -10,21 +10,10 @@ import {
   deleteHumanResource,
 } from '@/lib/actions/hr'
 import { getTodayLocal } from '@/lib/utils'
-import { HUMAN_RESOURCE_FACTORIES, type HumanResource } from '@/types'
+import { HUMAN_RESOURCE_FACTORIES, HUMAN_RESOURCE_FACTORY_LABELS, type HumanResource } from '@/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-// Nhãn hiển thị cho từng factory trong dropdown (bổ sung CONG_TRINH + phòng ban).
-const FACTORY_LABELS: Record<string, string> = {
-  DMC1: 'DMC1',
-  DMC3: 'DMC3',
-  DMC4: 'DMC4',
-  DMC5: 'DMC5',
-  CONG_TRINH: 'Công trình',
-  'PKT-SX': 'PKT-SX',
-  'DIEU-PHOI': 'Điều phối',
-  Khác: 'Khác',
-}
 
 interface FormData {
   name: string
@@ -344,7 +333,7 @@ export function HRAdminModal({ open, canEdit, onClose, onRefresh }: Props) {
                   className={cn(inputCls, 'cursor-pointer')}
                 >
                   {HUMAN_RESOURCE_FACTORIES.map((f) => (
-                    <option key={f} value={f}>{FACTORY_LABELS[f] ?? f}</option>
+                    <option key={f} value={f}>{HUMAN_RESOURCE_FACTORY_LABELS[f]}</option>
                   ))}
                 </select>
               </FormField>
